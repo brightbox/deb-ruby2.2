@@ -13,7 +13,7 @@ module Rake
     end
 
     # Polymorphically add a new element to the head of a list. The
-    # type of head node will be the same list type has the tail.
+    # type of head node will be the same list type as the tail.
     def conj(item)
       self.class.cons(item, self)
     end
@@ -80,7 +80,7 @@ module Rake
     #
     # When inheriting from the LinkedList class, you should implement
     # a type specific Empty class as well. Make sure you set the class
-    # instance variable @parent to the assocated list class (this
+    # instance variable @parent to the associated list class (this
     # allows conj, cons and make to work polymorphically).
     class EmptyLinkedList < LinkedList
       @parent = LinkedList

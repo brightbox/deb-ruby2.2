@@ -162,7 +162,7 @@ module Net
     CR   = "\015"
     LF   = "\012"
     EOL  = CR + LF
-    REVISION = '$Id: telnet.rb 35304 2012-04-11 21:20:51Z drbrain $'
+    REVISION = '$Id: telnet.rb 47298 2014-08-27 12:10:21Z hsbt $'
     # :startdoc:
 
     #
@@ -371,7 +371,7 @@ module Net
     # The socket the Telnet object is using.  Note that this object becomes
     # a delegate of the Telnet object, so normally you invoke its methods
     # directly on the Telnet object.
-    attr :sock
+    attr_reader :sock
 
     # Set telnet command interpretation on (+mode+ == true) or off
     # (+mode+ == false), or return the current value (+mode+ not

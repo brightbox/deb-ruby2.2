@@ -218,7 +218,6 @@ class TestParse < Test::Unit::TestCase
     def o.>(x); x; end
     def o./(x); x; end
 
-    a = nil
     assert_nothing_raised do
       o.instance_eval <<-END, __FILE__, __LINE__+1
         undef >, /
@@ -851,5 +850,25 @@ x = __ENCODING__
     end
     actual = e.backtrace.first[/\A#{Regexp.quote(__FILE__)}:(\d+):/o, 1].to_i
     assert_equal(expected, actual, bug5614)
+  end
+
+  def test_shadowing_variable
+    assert_warning(/shadowing outer local variable/) {eval("a=1; tap {|a|}")}
+    a = "\u{3042}"
+    assert_warning(/#{a}/o) {eval("#{a}=1; tap {|#{a}|}")}
+  end
+
+  def test_unused_variable
+    o = Object.new
+    assert_warning(/assigned but unused variable/) {o.instance_eval("def foo; a=1; nil; end")}
+    a = "\u{3042}"
+    assert_warning(/#{a}/) {o.instance_eval("def foo; #{a}=1; nil; end")}
+  end
+
+  def test_named_capture_conflict
+    a = 1
+    assert_warning(/named capture conflict/) {eval("a = 1; /(?<a>)/ =~ ''")}
+    a = "\u{3042}"
+    assert_warning(/#{a}/) {eval("#{a} = 1; /(?<#{a}>)/ =~ ''")}
   end
 end

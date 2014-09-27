@@ -1,6 +1,5 @@
 module Rake
 
-  ####################################################################
   # InvocationChain tracks the chain of task invocations to detect
   # circular dependencies.
   class InvocationChain < LinkedList
@@ -32,7 +31,7 @@ module Rake
     private
 
     def prefix
-      "#{tail.to_s} => "
+      "#{tail} => "
     end
 
     # Null object for an empty chain.

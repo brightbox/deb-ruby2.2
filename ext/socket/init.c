@@ -135,7 +135,7 @@ rsock_s_recvfrom(VALUE sock, int argc, VALUE *argv, enum sock_recv_type from)
     rb_obj_hide(str);
 
     while (rb_io_check_closed(fptr),
-	   rb_thread_wait_fd(arg.fd),
+	   rsock_maybe_wait_fd(arg.fd),
 	   (slen = BLOCKING_REGION_FD(recvfrom_blocking, &arg)) < 0) {
         if (!rb_io_wait_readable(fptr->fd)) {
             rb_sys_fail("recvfrom(2)");
@@ -249,37 +249,78 @@ rsock_s_recvfrom_nonblock(VALUE sock, int argc, VALUE *argv, enum sock_recv_type
     return rb_assoc_new(str, addr);
 }
 
+/* returns true if SOCK_CLOEXEC is supported */
+int rsock_detect_cloexec(int fd)
+{
+#ifdef SOCK_CLOEXEC
+    int flags = fcntl(fd, F_GETFD);
+
+    if (flags == -1)
+	rb_bug("rsock_detect_cloexec: fcntl(%d, F_GETFD) failed: %s", fd, strerror(errno));
+
+    if (flags & FD_CLOEXEC)
+	return 1;
+#endif
+    return 0;
+}
+
+#ifdef SOCK_CLOEXEC
 static int
 rsock_socket0(int domain, int type, int proto)
 {
     int ret;
+    static int cloexec_state = -1; /* <0: unknown, 0: ignored, >0: working */
 
-#ifdef SOCK_CLOEXEC
-    static int try_sock_cloexec = 1;
-    if (try_sock_cloexec) {
+    if (cloexec_state > 0) { /* common path, if SOCK_CLOEXEC is defined */
         ret = socket(domain, type|SOCK_CLOEXEC, proto);
-        if (ret == -1 && errno == EINVAL) {
+        if (ret >= 0) {
+            if (ret <= 2)
+                goto fix_cloexec;
+            goto update_max_fd;
+        }
+    }
+    else if (cloexec_state < 0) { /* usually runs once only for detection */
+        ret = socket(domain, type|SOCK_CLOEXEC, proto);
+        if (ret >= 0) {
+            cloexec_state = rsock_detect_cloexec(ret);
+            if (cloexec_state == 0 || ret <= 2)
+                goto fix_cloexec;
+            goto update_max_fd;
+        }
+        else if (ret == -1 && errno == EINVAL) {
             /* SOCK_CLOEXEC is available since Linux 2.6.27.  Linux 2.6.18 fails with EINVAL */
             ret = socket(domain, type, proto);
             if (ret != -1) {
-                try_sock_cloexec = 0;
+                cloexec_state = 0;
+                /* fall through to fix_cloexec */
             }
         }
     }
-    else {
+    else { /* cloexec_state == 0 */
         ret = socket(domain, type, proto);
     }
-#else
-    ret = socket(domain, type, proto);
-#endif
     if (ret == -1)
         return -1;
+fix_cloexec:
+    rb_maygvl_fd_fix_cloexec(ret);
+update_max_fd:
+    rb_update_max_fd(ret);
 
+    return ret;
+}
+#else /* !SOCK_CLOEXEC */
+static int
+rsock_socket0(int domain, int type, int proto)
+{
+    int ret = socket(domain, type, proto);
+
+    if (ret == -1)
+        return -1;
     rb_fd_fix_cloexec(ret);
 
     return ret;
-
 }
+#endif /* !SOCK_CLOEXEC */
 
 int
 rsock_socket(int domain, int type, int proto)
@@ -308,7 +349,7 @@ wait_connectable(int fd)
 
     for (;;) {
 	/*
-	 * Stevens book says, succuessful finish turn on RB_WAITFD_OUT and
+	 * Stevens book says, successful finish turn on RB_WAITFD_OUT and
 	 * failure finish turn on both RB_WAITFD_IN and RB_WAITFD_OUT.
 	 */
 	revents = rb_wait_for_single_fd(fd, RB_WAITFD_IN|RB_WAITFD_OUT, NULL);
@@ -579,7 +620,7 @@ rsock_s_accept(VALUE klass, int fd, struct sockaddr *sockaddr, socklen_t *len)
     arg.sockaddr = sockaddr;
     arg.len = len;
   retry:
-    rb_thread_wait_fd(fd);
+    rsock_maybe_wait_fd(fd);
     fd2 = (int)BLOCKING_REGION_FD(accept_blocking, &arg);
     if (fd2 < 0) {
 	switch (errno) {

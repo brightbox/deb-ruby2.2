@@ -19,6 +19,35 @@ extern "C" {
 #endif
 #endif
 
+/* likely */
+#if __GNUC__ >= 3
+#define LIKELY(x)   (__builtin_expect((x), 1))
+#define UNLIKELY(x) (__builtin_expect((x), 0))
+#else /* __GNUC__ >= 3 */
+#define LIKELY(x)   (x)
+#define UNLIKELY(x) (x)
+#endif /* __GNUC__ >= 3 */
+
+#ifndef __has_attribute
+# define __has_attribute(x) 0
+#endif
+
+#if __has_attribute(unused)
+#define UNINITIALIZED_VAR(x) x __attribute__((unused))
+#elif defined(__GNUC__) && __GNUC__ >= 3
+#define UNINITIALIZED_VAR(x) x = x
+#else
+#define UNINITIALIZED_VAR(x) x
+#endif
+
+#if __has_attribute(warn_unused_result)
+#define WARN_UNUSED_RESULT(x) x __attribute__((warn_unused_result))
+#elif defined(__GNUC__) && (__GNUC__ * 1000 + __GNUC_MINOR__) >= 3004
+#define WARN_UNUSED_RESULT(x) x __attribute__((warn_unused_result))
+#else
+#define WARN_UNUSED_RESULT(x) x
+#endif
+
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 # include <valgrind/memcheck.h>
 # ifndef VALGRIND_MAKE_MEM_DEFINED
@@ -284,6 +313,159 @@ struct method_table_wrapper {
     size_t serial;
 };
 
+#ifndef BDIGIT
+# if SIZEOF_INT*2 <= SIZEOF_LONG_LONG
+#  define BDIGIT unsigned int
+#  define SIZEOF_BDIGIT SIZEOF_INT
+#  define BDIGIT_DBL unsigned LONG_LONG
+#  define BDIGIT_DBL_SIGNED LONG_LONG
+#  define PRI_BDIGIT_PREFIX ""
+#  define PRI_BDIGIT_DBL_PREFIX PRI_LL_PREFIX
+# elif SIZEOF_INT*2 <= SIZEOF_LONG
+#  define BDIGIT unsigned int
+#  define SIZEOF_BDIGIT SIZEOF_INT
+#  define BDIGIT_DBL unsigned long
+#  define BDIGIT_DBL_SIGNED long
+#  define PRI_BDIGIT_PREFIX ""
+#  define PRI_BDIGIT_DBL_PREFIX "l"
+# elif SIZEOF_SHORT*2 <= SIZEOF_LONG
+#  define BDIGIT unsigned short
+#  define SIZEOF_BDIGIT SIZEOF_SHORT
+#  define BDIGIT_DBL unsigned long
+#  define BDIGIT_DBL_SIGNED long
+#  define PRI_BDIGIT_PREFIX "h"
+#  define PRI_BDIGIT_DBL_PREFIX "l"
+# else
+#  define BDIGIT unsigned short
+#  define SIZEOF_BDIGIT (SIZEOF_LONG/2)
+#  define SIZEOF_ACTUAL_BDIGIT SIZEOF_LONG
+#  define BDIGIT_DBL unsigned long
+#  define BDIGIT_DBL_SIGNED long
+#  define PRI_BDIGIT_PREFIX "h"
+#  define PRI_BDIGIT_DBL_PREFIX "l"
+# endif
+#endif
+#ifndef SIZEOF_ACTUAL_BDIGIT
+# define SIZEOF_ACTUAL_BDIGIT SIZEOF_BDIGIT
+#endif
+
+#ifdef PRI_BDIGIT_PREFIX
+# define PRIdBDIGIT PRI_BDIGIT_PREFIX"d"
+# define PRIiBDIGIT PRI_BDIGIT_PREFIX"i"
+# define PRIoBDIGIT PRI_BDIGIT_PREFIX"o"
+# define PRIuBDIGIT PRI_BDIGIT_PREFIX"u"
+# define PRIxBDIGIT PRI_BDIGIT_PREFIX"x"
+# define PRIXBDIGIT PRI_BDIGIT_PREFIX"X"
+#endif
+
+#ifdef PRI_BDIGIT_DBL_PREFIX
+# define PRIdBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"d"
+# define PRIiBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"i"
+# define PRIoBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"o"
+# define PRIuBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"u"
+# define PRIxBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"x"
+# define PRIXBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"X"
+#endif
+
+#define BIGNUM_EMBED_LEN_NUMBITS 3
+#ifndef BIGNUM_EMBED_LEN_MAX
+# if (SIZEOF_VALUE*3/SIZEOF_ACTUAL_BDIGIT) < (1 << BIGNUM_EMBED_LEN_NUMBITS)-1
+#   define BIGNUM_EMBED_LEN_MAX (SIZEOF_VALUE*3/SIZEOF_ACTUAL_BDIGIT)
+# else
+#   define BIGNUM_EMBED_LEN_MAX ((1 << BIGNUM_EMBED_LEN_NUMBITS)-1)
+# endif
+#endif
+
+struct RBignum {
+    struct RBasic basic;
+    union {
+        struct {
+            size_t len;
+            BDIGIT *digits;
+        } heap;
+        BDIGIT ary[BIGNUM_EMBED_LEN_MAX];
+    } as;
+};
+#define BIGNUM_SIGN_BIT FL_USER1
+/* sign: positive:1, negative:0 */
+#define BIGNUM_SIGN(b) ((RBASIC(b)->flags & BIGNUM_SIGN_BIT) != 0)
+#define BIGNUM_SET_SIGN(b,sign) \
+  ((sign) ? (RBASIC(b)->flags |= BIGNUM_SIGN_BIT) \
+          : (RBASIC(b)->flags &= ~BIGNUM_SIGN_BIT))
+#define BIGNUM_POSITIVE_P(b) BIGNUM_SIGN(b)
+#define BIGNUM_NEGATIVE_P(b) (!BIGNUM_SIGN(b))
+
+#define BIGNUM_EMBED_FLAG FL_USER2
+#define BIGNUM_EMBED_LEN_MASK (FL_USER5|FL_USER4|FL_USER3)
+#define BIGNUM_EMBED_LEN_SHIFT (FL_USHIFT+BIGNUM_EMBED_LEN_NUMBITS)
+#define BIGNUM_LEN(b) \
+    ((RBASIC(b)->flags & BIGNUM_EMBED_FLAG) ? \
+     (long)((RBASIC(b)->flags >> BIGNUM_EMBED_LEN_SHIFT) & \
+            (BIGNUM_EMBED_LEN_MASK >> BIGNUM_EMBED_LEN_SHIFT)) : \
+     RBIGNUM(b)->as.heap.len)
+/* LSB:BIGNUM_DIGITS(b)[0], MSB:BIGNUM_DIGITS(b)[BIGNUM_LEN(b)-1] */
+#define BIGNUM_DIGITS(b) \
+    ((RBASIC(b)->flags & BIGNUM_EMBED_FLAG) ? \
+     RBIGNUM(b)->as.ary : \
+     RBIGNUM(b)->as.heap.digits)
+#define BIGNUM_LENINT(b) rb_long2int(BIGNUM_LEN(b))
+
+#define RBIGNUM(obj) (R_CAST(RBignum)(obj))
+
+struct RRational {
+    struct RBasic basic;
+    const VALUE num;
+    const VALUE den;
+};
+
+#define RRATIONAL(obj) (R_CAST(RRational)(obj))
+
+struct RSymbol {
+    struct RBasic basic;
+    VALUE fstr;
+    ID type;
+};
+
+struct RFloat {
+    struct RBasic basic;
+    double float_value;
+};
+
+#define RFLOAT(obj)  (R_CAST(RFloat)(obj))
+
+struct RComplex {
+    struct RBasic basic;
+    const VALUE real;
+    const VALUE imag;
+};
+
+#define RCOMPLEX(obj) (R_CAST(RComplex)(obj))
+
+#ifdef RCOMPLEX_SET_REAL        /* shortcut macro for internal only */
+#undef RCOMPLEX_SET_REAL
+#undef RCOMPLEX_SET_REAL
+#define RCOMPLEX_SET_REAL(cmp, r) RB_OBJ_WRITE((cmp), &((struct RComplex *)(cmp))->real,(r))
+#define RCOMPLEX_SET_IMAG(cmp, i) RB_OBJ_WRITE((cmp), &((struct RComplex *)(cmp))->imag,(i))
+#endif
+
+struct RHash {
+    struct RBasic basic;
+    struct st_table *ntbl;      /* possibly 0 */
+    int iter_lev;
+    const VALUE ifnone;
+};
+
+#define RHASH(obj)   (R_CAST(RHash)(obj))
+
+#ifdef RHASH_ITER_LEV
+#undef RHASH_ITER_LEV
+#undef RHASH_IFNONE
+#undef RHASH_SIZE
+#define RHASH_ITER_LEV(h) (RHASH(h)->iter_lev)
+#define RHASH_IFNONE(h) (RHASH(h)->ifnone)
+#define RHASH_SIZE(h) (RHASH(h)->ntbl ? (st_index_t)RHASH(h)->ntbl->num_entries : 0)
+#endif
+
 /* class.c */
 void rb_class_subclass_add(VALUE super, VALUE klass);
 void rb_class_remove_from_super_subclasses(VALUE);
@@ -329,9 +511,10 @@ RCLASS_SET_SUPER(VALUE klass, VALUE super)
 struct vtm; /* defined by timev.h */
 
 /* array.c */
-VALUE rb_ary_last(int, VALUE *, VALUE);
+VALUE rb_ary_last(int, const VALUE *, VALUE);
 void rb_ary_set_len(VALUE, long);
 void rb_ary_delete_same(VALUE, VALUE);
+VALUE rb_ary_tmp_new_fill(long capa);
 
 /* bignum.c */
 VALUE rb_big_fdiv(VALUE x, VALUE y);
@@ -344,10 +527,10 @@ void rb_class_foreach_subclass(VALUE klass, void(*f)(VALUE));
 void rb_class_detach_subclasses(VALUE);
 void rb_class_detach_module_subclasses(VALUE);
 void rb_class_remove_from_module_subclasses(VALUE);
-VALUE rb_obj_methods(int argc, VALUE *argv, VALUE obj);
-VALUE rb_obj_protected_methods(int argc, VALUE *argv, VALUE obj);
-VALUE rb_obj_private_methods(int argc, VALUE *argv, VALUE obj);
-VALUE rb_obj_public_methods(int argc, VALUE *argv, VALUE obj);
+VALUE rb_obj_methods(int argc, const VALUE *argv, VALUE obj);
+VALUE rb_obj_protected_methods(int argc, const VALUE *argv, VALUE obj);
+VALUE rb_obj_private_methods(int argc, const VALUE *argv, VALUE obj);
+VALUE rb_obj_public_methods(int argc, const VALUE *argv, VALUE obj);
 int rb_obj_basic_to_s_p(VALUE);
 VALUE rb_special_singleton_class(VALUE);
 VALUE rb_singleton_class_clone_and_attach(VALUE obj, VALUE attach);
@@ -456,7 +639,11 @@ void Init_heap(void);
 void *ruby_mimmalloc(size_t size);
 void ruby_mimfree(void *ptr);
 void rb_objspace_set_event_hook(const rb_event_flag_t event);
-void rb_gc_writebarrier_remember_promoted(VALUE obj);
+#if USE_RGENGC
+void rb_gc_writebarrier_remember(VALUE obj);
+#else
+#define rb_gc_writebarrier_remember(obj) 0
+#endif
 void ruby_gc_set_params(int safe_level);
 
 #if defined(HAVE_MALLOC_USABLE_SIZE) || defined(HAVE_MALLOC_SIZE) || defined(_WIN32)
@@ -513,10 +700,12 @@ VALUE rb_math_cos(VALUE);
 VALUE rb_math_cosh(VALUE);
 VALUE rb_math_exp(VALUE);
 VALUE rb_math_hypot(VALUE, VALUE);
-VALUE rb_math_log(int argc, VALUE *argv);
+VALUE rb_math_log(int argc, const VALUE *argv);
 VALUE rb_math_sin(VALUE);
 VALUE rb_math_sinh(VALUE);
+#if 0
 VALUE rb_math_sqrt(VALUE);
+#endif
 
 /* newline.c */
 void Init_newline(void);
@@ -612,6 +801,9 @@ struct RBasicRaw {
 } while (0)
 
 /* parse.y */
+#ifndef USE_SYMBOL_GC
+#define USE_SYMBOL_GC 1
+#endif
 VALUE rb_parser_get_yydebug(VALUE);
 VALUE rb_parser_set_yydebug(VALUE, VALUE);
 int rb_is_const_name(VALUE name);
@@ -622,13 +814,16 @@ int rb_is_attrset_name(VALUE name);
 int rb_is_local_name(VALUE name);
 int rb_is_method_name(VALUE name);
 int rb_is_junk_name(VALUE name);
-void rb_gc_mark_parser(void);
-void rb_gc_mark_symbols(int full_mark);
+ID rb_make_internal_id(void);
+void rb_gc_free_dsymbol(VALUE);
+VALUE rb_str_dynamic_intern(VALUE);
+ID rb_id_attrget(ID id);
 
 /* proc.c */
 VALUE rb_proc_location(VALUE self);
 st_index_t rb_hash_proc(st_index_t hash, VALUE proc);
 int rb_block_arity(void);
+VALUE rb_block_clear_env_self(VALUE proc);
 
 /* process.c */
 #define RB_MAX_GROUPS (65536)
@@ -692,6 +887,8 @@ VALUE rb_rational_reciprocal(VALUE x);
 /* re.c */
 VALUE rb_reg_compile(VALUE str, int options, const char *sourcefile, int sourceline);
 VALUE rb_reg_check_preprocess(VALUE);
+long rb_reg_search0(VALUE, VALUE, long, int, int);
+void rb_backref_set_string(VALUE string, long pos, long len);
 
 /* signal.c */
 int rb_get_next_signal(void);
@@ -706,7 +903,9 @@ size_t rb_strftime(char *s, size_t maxsize, const char *format, rb_encoding *enc
 #endif
 
 /* string.c */
+void Init_frozen_strings(void);
 VALUE rb_fstring(VALUE);
+VALUE rb_fstring_new(const char *ptr, long len);
 int rb_str_buf_cat_escaped_char(VALUE result, unsigned int c, int unicode_p);
 int rb_str_symname_p(VALUE);
 VALUE rb_str_quote_unprintable(VALUE);
@@ -718,14 +917,10 @@ VALUE rb_str_locktmp_ensure(VALUE str, VALUE (*func)(VALUE), VALUE arg);
 #ifdef RUBY_ENCODING_H
 VALUE rb_external_str_with_enc(VALUE str, rb_encoding *eenc);
 #endif
-#define STR_NOEMBED FL_USER1
-#define STR_SHARED  FL_USER2 /* = ELTS_SHARED */
-#define STR_ASSOC   FL_USER3
-#define STR_SHARED_P(s) FL_ALL((s), STR_NOEMBED|ELTS_SHARED)
-#define STR_ASSOC_P(s)  FL_ALL((s), STR_NOEMBED|STR_ASSOC)
-#define STR_NOCAPA  (STR_NOEMBED|ELTS_SHARED|STR_ASSOC)
-#define STR_NOCAPA_P(s) (FL_TEST((s),STR_NOEMBED) && FL_ANY((s),ELTS_SHARED|STR_ASSOC))
+#define STR_NOEMBED      FL_USER1
+#define STR_SHARED       FL_USER2 /* = ELTS_SHARED */
 #define STR_EMBED_P(str) (!FL_TEST((str), STR_NOEMBED))
+#define STR_SHARED_P(s)  FL_ALL((s), STR_NOEMBED|ELTS_SHARED)
 #define is_ascii_string(str) (rb_enc_str_coderange(str) == ENC_CODERANGE_7BIT)
 #define is_broken_string(str) (rb_enc_str_coderange(str) == ENC_CODERANGE_BROKEN)
 
@@ -760,6 +955,7 @@ rb_serial_t rb_next_class_serial(void);
 VALUE rb_obj_is_thread(VALUE obj);
 void rb_vm_mark(void *ptr);
 void Init_BareVM(void);
+void Init_vm_objects(void);
 VALUE rb_vm_top_self(void);
 void rb_thread_recycle_stack_release(VALUE *);
 void rb_vm_change_state(void);
@@ -770,7 +966,6 @@ VALUE rb_sourcefilename(void);
 void rb_vm_pop_cfunc_frame(void);
 
 /* vm_dump.c */
-void rb_vm_bugreport(void);
 void rb_print_backtrace(void);
 
 /* vm_eval.c */
@@ -796,8 +991,8 @@ void Init_prelude(void);
 
 /* vm_backtrace.c */
 void Init_vm_backtrace(void);
-VALUE rb_vm_thread_backtrace(int argc, VALUE *argv, VALUE thval);
-VALUE rb_vm_thread_backtrace_locations(int argc, VALUE *argv, VALUE thval);
+VALUE rb_vm_thread_backtrace(int argc, const VALUE *argv, VALUE thval);
+VALUE rb_vm_thread_backtrace_locations(int argc, const VALUE *argv, VALUE thval);
 
 VALUE rb_make_backtrace(void);
 void rb_backtrace_print_as_bugreport(void);
@@ -849,9 +1044,9 @@ VALUE rb_int_positive_pow(long x, unsigned long y);
 /* process.c */
 int rb_exec_async_signal_safe(const struct rb_execarg *e, char *errmsg, size_t errmsg_buflen);
 rb_pid_t rb_fork_async_signal_safe(int *status, int (*chfunc)(void*, char *, size_t), void *charg, VALUE fds, char *errmsg, size_t errmsg_buflen);
-VALUE rb_execarg_new(int argc, VALUE *argv, int accept_shell);
+VALUE rb_execarg_new(int argc, const VALUE *argv, int accept_shell);
 struct rb_execarg *rb_execarg_get(VALUE execarg_obj); /* dangerous.  needs GC guard. */
-VALUE rb_execarg_init(int argc, VALUE *argv, int accept_shell, VALUE execarg_obj);
+VALUE rb_execarg_init(int argc, const VALUE *argv, int accept_shell, VALUE execarg_obj);
 int rb_execarg_addopt(VALUE execarg_obj, VALUE key, VALUE val);
 void rb_execarg_fixup(VALUE execarg_obj);
 int rb_execarg_run_options(const struct rb_execarg *e, struct rb_execarg *s, char* errmsg, size_t errmsg_buflen);
@@ -862,6 +1057,12 @@ void rb_execarg_setenv(VALUE execarg_obj, VALUE env);
 VALUE rb_gcd_normal(VALUE self, VALUE other);
 #if defined(HAVE_LIBGMP) && defined(HAVE_GMP_H)
 VALUE rb_gcd_gmp(VALUE x, VALUE y);
+#endif
+
+/* string.c */
+#ifdef RUBY_ENCODING_H
+/* internal use */
+VALUE rb_setup_fake_str(struct RString *fake_str, const char *name, long len, rb_encoding *enc);
 #endif
 
 /* util.c */
@@ -879,6 +1080,7 @@ st_table *rb_st_copy(VALUE obj, struct st_table *orig_tbl);
 size_t rb_obj_memsize_of(VALUE);
 #define RB_OBJ_GC_FLAGS_MAX 5
 size_t rb_obj_gc_flags(VALUE, ID[], size_t);
+void rb_gc_mark_values(long n, const VALUE *values);
 
 RUBY_SYMBOL_EXPORT_END
 

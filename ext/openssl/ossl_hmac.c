@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_hmac.c 42416 2013-08-06 23:32:42Z zzak $
+ * $Id: ossl_hmac.c 46974 2014-07-27 19:37:10Z zzak $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -359,6 +359,6 @@ Init_ossl_hmac()
 void
 Init_ossl_hmac()
 {
-    rb_warning("HMAC will NOT be avaible: OpenSSL is compiled without HMAC.");
+    rb_warning("HMAC is not available: OpenSSL is compiled without HMAC.");
 }
 #endif /* NO_HMAC */

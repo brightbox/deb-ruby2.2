@@ -1,4 +1,4 @@
-/* $Id: md5ossl.h 25189 2009-10-02 12:04:37Z akr $ */
+/* $Id: md5ossl.h 46829 2014-07-15 15:43:03Z nobu $ */
 
 #ifndef MD5OSSL_H_INCLUDED
 #define MD5OSSL_H_INCLUDED

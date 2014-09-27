@@ -1,5 +1,5 @@
 /*
-    $Id: strscan.c 44903 2014-02-10 11:45:14Z naruse $
+    $Id: strscan.c 47044 2014-08-03 01:56:31Z nobu $
 
     Copyright (c) 1999-2006 Minero Aoki
 
@@ -199,8 +199,7 @@ strscan_s_allocate(VALUE klass)
 {
     struct strscanner *p;
 
-    p = ALLOC(struct strscanner);
-    MEMZERO(p, struct strscanner, 1);
+    p = ZALLOC(struct strscanner);
     CLEAR_MATCH_STATUS(p);
     onig_region_init(&(p->regs));
     p->str = Qnil;
@@ -977,7 +976,7 @@ strscan_matched_size(VALUE self)
 }
 
 static int
-name_to_backref_number(struct re_registers *regs, VALUE regexp, const char* name, const char* name_end)
+name_to_backref_number(struct re_registers *regs, VALUE regexp, const char* name, const char* name_end, rb_encoding *enc)
 {
     int num;
 
@@ -987,9 +986,8 @@ name_to_backref_number(struct re_registers *regs, VALUE regexp, const char* name
 	return num;
     }
     else {
-	VALUE s = rb_str_new(name, (long )(name_end - name));
-	rb_raise(rb_eIndexError, "undefined group name reference: %s",
-				 StringValuePtr(s));
+	rb_enc_raise(enc, rb_eIndexError, "undefined group name reference: %.*s",
+					  rb_long2int(name_end - name), name);
     }
 
     UNREACHABLE;
@@ -1033,13 +1031,11 @@ strscan_aref(VALUE self, VALUE idx)
 
     switch (TYPE(idx)) {
         case T_SYMBOL:
-            name = rb_id2name(SYM2ID(idx));
-            goto name_to_backref;
-            break;
+            idx = rb_sym2str(idx);
+            /* fall through */
         case T_STRING:
-            name = StringValuePtr(idx);
-        name_to_backref:
-	    i = name_to_backref_number(&(p->regs), p->regex, name, name + strlen(name));
+            RSTRING_GETMEM(idx, name, i);
+            i = name_to_backref_number(&(p->regs), p->regex, name, name + i, rb_enc_get(idx));
             break;
         default:
             i = NUM2LONG(idx);
@@ -1138,7 +1134,6 @@ strscan_restsize(VALUE self)
 }
 
 #define INSPECT_LENGTH 5
-#define BUFSIZE 256
 
 /*
  * Returns a string that represents the StringScanner object, showing:
@@ -1343,7 +1338,7 @@ Init_strscan()
     tmp = rb_str_new2(STRSCAN_VERSION);
     rb_obj_freeze(tmp);
     rb_const_set(StringScanner, rb_intern("Version"), tmp);
-    tmp = rb_str_new2("$Id: strscan.c 44903 2014-02-10 11:45:14Z naruse $");
+    tmp = rb_str_new2("$Id: strscan.c 47044 2014-08-03 01:56:31Z nobu $");
     rb_obj_freeze(tmp);
     rb_const_set(StringScanner, rb_intern("Id"), tmp);
 

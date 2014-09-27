@@ -129,17 +129,21 @@ LONG WINAPI rb_w32_stack_overflow_handler(struct _EXCEPTION_POINTERS *);
   _th->tag = _tag.prev; \
 } while (0)
 
-#define TH_POP_TAG2() \
+#define TH_TMPPOP_TAG() \
   _th->tag = _tag.prev
 
-#define TH_PUSH_TAG2() (_th->tag = &_tag, 0)
-
-#define TH_TMPPOP_TAG() TH_POP_TAG2()
-
-#define TH_REPUSH_TAG() TH_PUSH_TAG2()
+#define TH_REPUSH_TAG() (void)(_th->tag = &_tag)
 
 #define PUSH_TAG() TH_PUSH_TAG(GET_THREAD())
 #define POP_TAG()      TH_POP_TAG()
+
+#if defined __GNUC__ && __GNUC__ == 4 && (__GNUC_MINOR__ >= 6 && __GNUC_MINOR__ <= 8)
+# define VAR_FROM_MEMORY(var) __extension__(*(__typeof__(var) volatile *)&(var))
+# define VAR_INITIALIZED(var) ((var) = VAR_FROM_MEMORY(var))
+#else
+# define VAR_FROM_MEMORY(var) (var)
+# define VAR_INITIALIZED(var) ((void)&(var))
+#endif
 
 /* clear th->state, and return the value */
 static inline int
@@ -163,7 +167,7 @@ rb_threadptr_tag_jump(rb_thread_t *th, int st)
   [ISO/IEC 9899:1999] 7.13.1.1
 */
 #define TH_EXEC_TAG() \
-    (ruby_setjmp(_tag.buf) ? rb_threadptr_tag_state(_th) : TH_PUSH_TAG2())
+    (ruby_setjmp(_tag.buf) ? rb_threadptr_tag_state(VAR_FROM_MEMORY(_th)) : (TH_REPUSH_TAG(), 0))
 
 #define EXEC_TAG() \
   TH_EXEC_TAG()
@@ -225,8 +229,8 @@ int rb_threadptr_reset_raised(rb_thread_t *th);
 #define rb_thread_raised_p(th, f)     (((th)->raised_flag & (f)) != 0)
 #define rb_thread_raised_clear(th)    ((th)->raised_flag = 0)
 
-VALUE rb_f_eval(int argc, VALUE *argv, VALUE self);
-VALUE rb_make_exception(int argc, VALUE *argv);
+VALUE rb_f_eval(int argc, const VALUE *argv, VALUE self);
+VALUE rb_make_exception(int argc, const VALUE *argv);
 
 NORETURN(void rb_method_name_error(VALUE, VALUE));
 
@@ -234,9 +238,10 @@ NORETURN(void rb_fiber_start(void));
 
 NORETURN(void rb_print_undef(VALUE, ID, int));
 NORETURN(void rb_print_undef_str(VALUE, VALUE));
+NORETURN(void rb_print_inaccessible(VALUE, ID, int));
 NORETURN(void rb_vm_localjump_error(const char *,VALUE, int));
 NORETURN(void rb_vm_jump_tag_but_local_jump(int));
-NORETURN(void rb_raise_method_missing(rb_thread_t *th, int argc, VALUE *argv,
+NORETURN(void rb_raise_method_missing(rb_thread_t *th, int argc, const VALUE *argv,
 				      VALUE obj, int call_status));
 
 VALUE rb_vm_make_jump_tag_but_local_jump(int state, VALUE val);

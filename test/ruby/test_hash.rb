@@ -215,6 +215,20 @@ class TestHash < Test::Unit::TestCase
     assert_equal(256,     h[z])
   end
 
+  def test_AREF_fstring_key
+    h = {"abc" => 1}
+    before = GC.stat(:total_allocated_objects)
+    5.times{ h["abc"] }
+    assert_equal before, GC.stat(:total_allocated_objects)
+  end
+
+  def test_ASET_fstring_key
+    a, b = {}, {}
+    assert_equal 1, a["abc"] = 1
+    assert_equal 1, b["abc"] = 1
+    assert_same a.keys[0], b.keys[0]
+  end
+
   def test_NEWHASH_fstring_key
     a = {"ABC" => :t}
     b = {"ABC" => :t}
@@ -564,19 +578,6 @@ class TestHash < Test::Unit::TestCase
     assert_equal(h3, h.reject {|k,v| v })
     assert_equal(base, h)
 
-    unless RUBY_VERSION >= "2.2.0"
-      # [ruby-core:59154] [Bug #9223]
-      if @cls == Hash
-        assert_empty(EnvUtil.verbose_warning {h.reject {false}})
-        bug9275 = '[ruby-core:59254] [Bug #9275]'
-        c = Class.new(Hash)
-        assert_empty(EnvUtil.verbose_warning {c.new.reject {false}}, bug9275)
-      else
-        assert_match(/extra states/, EnvUtil.verbose_warning {h.reject {false}})
-      end
-      return
-    end
-
     h.instance_variable_set(:@foo, :foo)
     h.default = 42
     h.taint
@@ -805,7 +806,7 @@ class TestHash < Test::Unit::TestCase
     assert_equal("foobarbaz", h.default_proc.call("foo", "bar"))
     assert_nil(h.default_proc = nil)
     assert_nil(h.default_proc)
-    h.default_proc = ->(h, k){ true }
+    h.default_proc = ->(_,_){ true }
     assert_equal(true, h[:nope])
     h = @cls[]
     assert_nil(h.default_proc)
@@ -965,7 +966,7 @@ class TestHash < Test::Unit::TestCase
     h = @cls[]
     h.compare_by_identity
     h["a"] = 1
-    h["a"] = 2
+    h["a".dup] = 2
     assert_equal(["a",1], h.assoc("a"))
   end
 
@@ -1030,7 +1031,7 @@ class TestHash < Test::Unit::TestCase
     assert_nothing_raised(RuntimeError, bug9105) do
       h=@cls[]
       cnt=0
-      c = callcc {|c|c}
+      c = callcc {|cc|cc}
       h[cnt] = true
       h.each{|i|
         cnt+=1
@@ -1218,6 +1219,8 @@ class TestHash < Test::Unit::TestCase
   end
 
   def test_exception_in_rehash
+    return unless @cls == Hash
+
     bug9187 = '[ruby-core:58728] [Bug #9187]'
 
     prepare = <<-EOS
@@ -1232,10 +1235,10 @@ class TestHash < Test::Unit::TestCase
         return 0
       end
     end
+    h = {Foo.new => true}
     EOS
 
     code = <<-EOS
-    h = {Foo.new => true}
     10_0000.times do
       h.rehash rescue nil
     end

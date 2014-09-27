@@ -1,5 +1,4 @@
 require 'socket'
-require 'fcntl'
 require 'timeout'
 require 'thread'
 
@@ -750,7 +749,6 @@ class Resolv
               next # The kernel doesn't support the address family.
             end
             sock.do_not_reverse_lookup = true
-            sock.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC) if defined? Fcntl::F_SETFD
             DNS.bind_random_port(sock, bind_host)
             @socks << sock
             @socks_hash[bind_host] = sock
@@ -804,7 +802,6 @@ class Resolv
           sock = UDPSocket.new(is_ipv6 ? Socket::AF_INET6 : Socket::AF_INET)
           @socks = [sock]
           sock.do_not_reverse_lookup = true
-          sock.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC) if defined? Fcntl::F_SETFD
           DNS.bind_random_port(sock, is_ipv6 ? "::" : "0.0.0.0")
           sock.connect(host, port)
         end
@@ -862,7 +859,6 @@ class Resolv
           @port = port
           sock = TCPSocket.new(@host, @port)
           @socks = [sock]
-          sock.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC) if defined? Fcntl::F_SETFD
           @senders = {}
         end
 
@@ -1179,7 +1175,7 @@ class Resolv
         end
 
         def inspect
-          return "#<#{self.class} #{self.to_s}>"
+          return "#<#{self.class} #{self}>"
         end
 
         def ==(other)
@@ -1224,7 +1220,7 @@ class Resolv
       end
 
       def inspect # :nodoc:
-        "#<#{self.class}: #{self.to_s}#{@absolute ? '.' : ''}>"
+        "#<#{self.class}: #{self}#{@absolute ? '.' : ''}>"
       end
 
       ##
@@ -1578,30 +1574,33 @@ class Resolv
           return Name.new(self.get_labels)
         end
 
-        def get_labels(limit=nil)
-          limit = @index if !limit || @index < limit
+        def get_labels
+          prev_index = @index
+          save_index = nil
           d = []
           while true
             raise DecodeError.new("limit exceeded") if @limit <= @index
             case @data[@index].ord
             when 0
               @index += 1
+              if save_index
+                @index = save_index
+              end
               return d
             when 192..255
               idx = self.get_unpack('n')[0] & 0x3fff
-              if limit <= idx
+              if prev_index <= idx
                 raise DecodeError.new("non-backward name pointer")
               end
-              save_index = @index
+              prev_index = idx
+              if !save_index
+                save_index = @index
+              end
               @index = idx
-              d += self.get_labels(limit)
-              @index = save_index
-              return d
             else
               d << self.get_label
             end
           end
-          return d
         end
 
         def get_label
@@ -2347,7 +2346,7 @@ class Resolv
     end
 
     def inspect # :nodoc:
-      return "#<#{self.class} #{self.to_s}>"
+      return "#<#{self.class} #{self}>"
     end
 
     ##
@@ -2490,7 +2489,7 @@ class Resolv
     end
 
     def inspect # :nodoc:
-      return "#<#{self.class} #{self.to_s}>"
+      return "#<#{self.class} #{self}>"
     end
 
     ##
@@ -2640,7 +2639,7 @@ class Resolv
       end
 
       def inspect # :nodoc:
-        return "#<#{self.class} #{self.to_s}>"
+        return "#<#{self.class} #{self}>"
       end
 
       def ==(other) # :nodoc:
@@ -2729,7 +2728,7 @@ class Resolv
       end
 
       def inspect # :nodoc:
-        return "#<#{self.class} #{self.to_s}>"
+        return "#<#{self.class} #{self}>"
       end
 
       def ==(other) # :nodoc:
@@ -2791,7 +2790,7 @@ class Resolv
       end
 
       def inspect # :nodoc:
-        return "#<#{self.class} #{self.to_s}>"
+        return "#<#{self.class} #{self}>"
       end
 
       def ==(other) # :nodoc:

@@ -2,7 +2,7 @@
 
   intern.h -
 
-  $Author: nobu $
+  $Author: shyouhei $
   created at: Thu Jun 10 14:22:17 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -56,7 +56,7 @@ void rb_ary_free(VALUE);
 void rb_ary_modify(VALUE);
 VALUE rb_ary_freeze(VALUE);
 VALUE rb_ary_shared_with_p(VALUE, VALUE);
-VALUE rb_ary_aref(int, VALUE*, VALUE);
+VALUE rb_ary_aref(int, const VALUE*, VALUE);
 VALUE rb_ary_subseq(VALUE, long, long);
 void rb_ary_store(VALUE, long, VALUE);
 VALUE rb_ary_dup(VALUE);
@@ -85,35 +85,31 @@ VALUE rb_ary_rassoc(VALUE, VALUE);
 VALUE rb_ary_includes(VALUE, VALUE);
 VALUE rb_ary_cmp(VALUE, VALUE);
 VALUE rb_ary_replace(VALUE copy, VALUE orig);
-VALUE rb_get_values_at(VALUE, long, int, VALUE*, VALUE(*)(VALUE,long));
+VALUE rb_get_values_at(VALUE, long, int, const VALUE*, VALUE(*)(VALUE,long));
 VALUE rb_ary_resize(VALUE ary, long len);
 #define rb_ary_new2 rb_ary_new_capa
 #define rb_ary_new3 rb_ary_new_from_args
 #define rb_ary_new4 rb_ary_new_from_values
 /* bignum.c */
-VALUE rb_big_new(long, int);
+VALUE rb_big_new(size_t, int);
 int rb_bigzero_p(VALUE x);
 VALUE rb_big_clone(VALUE);
 void rb_big_2comp(VALUE);
 VALUE rb_big_norm(VALUE);
-void rb_big_resize(VALUE big, long len);
+void rb_big_resize(VALUE big, size_t len);
 VALUE rb_cstr_to_inum(const char*, int, int);
 VALUE rb_str_to_inum(VALUE, int, int);
 VALUE rb_cstr2inum(const char*, int);
 VALUE rb_str2inum(VALUE, int);
 VALUE rb_big2str(VALUE, int);
-DEPRECATED(VALUE rb_big2str0(VALUE, int, int));
-SIGNED_VALUE rb_big2long(VALUE);
+long rb_big2long(VALUE);
 #define rb_big2int(x) rb_big2long(x)
-VALUE rb_big2ulong(VALUE);
+unsigned long rb_big2ulong(VALUE);
 #define rb_big2uint(x) rb_big2ulong(x)
-DEPRECATED(VALUE rb_big2ulong_pack(VALUE x));
 #if HAVE_LONG_LONG
 LONG_LONG rb_big2ll(VALUE);
 unsigned LONG_LONG rb_big2ull(VALUE);
 #endif  /* HAVE_LONG_LONG */
-DEPRECATED(void rb_quad_pack(char*,VALUE));
-DEPRECATED(VALUE rb_quad_unpack(const char*,int));
 void rb_big_pack(VALUE val, unsigned long *buf, long num_longs);
 VALUE rb_big_unpack(unsigned long *buf, long num_longs);
 int rb_uv_to_utf8(char[6],unsigned long);
@@ -172,6 +168,8 @@ VALUE rb_rational_new(VALUE, VALUE);
 VALUE rb_Rational(VALUE, VALUE);
 #define rb_Rational1(x) rb_Rational((x), INT2FIX(1))
 #define rb_Rational2(x,y) rb_Rational((x), (y))
+VALUE rb_rational_num(VALUE rat);
+VALUE rb_rational_den(VALUE rat);
 VALUE rb_flt_rationalize_with_prec(VALUE, VALUE);
 VALUE rb_flt_rationalize(VALUE);
 /* complex.c */
@@ -185,6 +183,8 @@ VALUE rb_complex_polar(VALUE, VALUE);
 VALUE rb_Complex(VALUE, VALUE);
 #define rb_Complex1(x) rb_Complex((x), INT2FIX(0))
 #define rb_Complex2(x,y) rb_Complex((x), (y))
+DEPRECATED(VALUE rb_complex_set_real(VALUE, VALUE));
+DEPRECATED(VALUE rb_complex_set_imag(VALUE, VALUE));
 /* class.c */
 VALUE rb_class_boot(VALUE);
 VALUE rb_class_new(VALUE);
@@ -203,11 +203,11 @@ VALUE rb_include_class_new(VALUE, VALUE);
 VALUE rb_mod_included_modules(VALUE);
 VALUE rb_mod_include_p(VALUE, VALUE);
 VALUE rb_mod_ancestors(VALUE);
-VALUE rb_class_instance_methods(int, VALUE*, VALUE);
-VALUE rb_class_public_instance_methods(int, VALUE*, VALUE);
-VALUE rb_class_protected_instance_methods(int, VALUE*, VALUE);
-VALUE rb_class_private_instance_methods(int, VALUE*, VALUE);
-VALUE rb_obj_singleton_methods(int, VALUE*, VALUE);
+VALUE rb_class_instance_methods(int, const VALUE*, VALUE);
+VALUE rb_class_public_instance_methods(int, const VALUE*, VALUE);
+VALUE rb_class_protected_instance_methods(int, const VALUE*, VALUE);
+VALUE rb_class_private_instance_methods(int, const VALUE*, VALUE);
+VALUE rb_obj_singleton_methods(int, const VALUE*, VALUE);
 void rb_define_method_id(VALUE, ID, VALUE (*)(ANYARGS), int);
 void rb_frozen_class_p(VALUE);
 void rb_undef(VALUE, ID);
@@ -220,16 +220,16 @@ int rb_cmpint(VALUE, VALUE, VALUE);
 NORETURN(void rb_cmperr(VALUE, VALUE));
 /* cont.c */
 VALUE rb_fiber_new(VALUE (*)(ANYARGS), VALUE);
-VALUE rb_fiber_resume(VALUE fib, int argc, VALUE *args);
-VALUE rb_fiber_yield(int argc, VALUE *args);
+VALUE rb_fiber_resume(VALUE fib, int argc, const VALUE *argv);
+VALUE rb_fiber_yield(int argc, const VALUE *argv);
 VALUE rb_fiber_current(void);
 VALUE rb_fiber_alive_p(VALUE);
 /* enum.c */
 VALUE rb_enum_values_pack(int, const VALUE*);
 /* enumerator.c */
-VALUE rb_enumeratorize(VALUE, VALUE, int, VALUE *);
+VALUE rb_enumeratorize(VALUE, VALUE, int, const VALUE *);
 typedef VALUE rb_enumerator_size_func(VALUE, VALUE, VALUE);
-VALUE rb_enumeratorize_with_size(VALUE, VALUE, int, VALUE *, rb_enumerator_size_func *);
+VALUE rb_enumeratorize_with_size(VALUE, VALUE, int, const VALUE *, rb_enumerator_size_func *);
 #ifndef RUBY_EXPORT
 #define rb_enumeratorize_with_size(obj, id, argc, argv, size_fn) \
     rb_enumeratorize_with_size(obj, id, argc, argv, (rb_enumerator_size_func *)(size_fn))
@@ -364,8 +364,8 @@ typedef fd_set rb_fdset_t;
 
 NORETURN(void rb_exc_raise(VALUE));
 NORETURN(void rb_exc_fatal(VALUE));
-VALUE rb_f_exit(int,VALUE*);
-VALUE rb_f_abort(int,VALUE*);
+VALUE rb_f_exit(int, const VALUE*);
+VALUE rb_f_abort(int, const VALUE*);
 void rb_remove_method(VALUE, const char*);
 void rb_remove_method_id(VALUE, ID);
 #define rb_disable_super(klass, name) ((void)0)
@@ -385,15 +385,15 @@ int rb_method_basic_definition_p(VALUE, ID);
 VALUE rb_eval_cmd(VALUE, VALUE, int);
 int rb_obj_respond_to(VALUE, ID, int);
 int rb_respond_to(VALUE, ID);
-VALUE rb_f_notimplement(int argc, VALUE *argv, VALUE obj);
+VALUE rb_f_notimplement(int argc, const VALUE *argv, VALUE obj);
 void rb_interrupt(void);
 VALUE rb_apply(VALUE, ID, VALUE);
 void rb_backtrace(void);
 ID rb_frame_this_func(void);
-VALUE rb_obj_instance_eval(int, VALUE*, VALUE);
-VALUE rb_obj_instance_exec(int, VALUE*, VALUE);
-VALUE rb_mod_module_eval(int, VALUE*, VALUE);
-VALUE rb_mod_module_exec(int, VALUE*, VALUE);
+VALUE rb_obj_instance_eval(int, const VALUE*, VALUE);
+VALUE rb_obj_instance_exec(int, const VALUE*, VALUE);
+VALUE rb_mod_module_eval(int, const VALUE*, VALUE);
+VALUE rb_mod_module_exec(int, const VALUE*, VALUE);
 void rb_load(VALUE, int);
 void rb_load_protect(VALUE, int, int*);
 NORETURN(void rb_jump_tag(int));
@@ -402,8 +402,8 @@ int rb_feature_provided(const char *, const char **);
 void rb_provide(const char*);
 VALUE rb_f_require(VALUE, VALUE);
 VALUE rb_require_safe(VALUE, int);
-void rb_obj_call_init(VALUE, int, VALUE*);
-VALUE rb_class_new_instance(int, VALUE*, VALUE);
+void rb_obj_call_init(VALUE, int, const VALUE*);
+VALUE rb_class_new_instance(int, const VALUE*, VALUE);
 VALUE rb_block_proc(void);
 VALUE rb_block_lambda(void);
 VALUE rb_proc_new(VALUE (*)(ANYARGS/* VALUE yieldarg[, VALUE procarg] */), VALUE);
@@ -415,8 +415,8 @@ VALUE rb_proc_lambda_p(VALUE);
 VALUE rb_binding_new(void);
 VALUE rb_obj_method(VALUE, VALUE);
 VALUE rb_obj_is_method(VALUE);
-VALUE rb_method_call(int, VALUE*, VALUE);
-VALUE rb_method_call_with_block(int, VALUE *, VALUE, VALUE);
+VALUE rb_method_call(int, const VALUE*, VALUE);
+VALUE rb_method_call_with_block(int, const VALUE *, VALUE, VALUE);
 int rb_mod_method_arity(VALUE, ID);
 int rb_obj_method_arity(VALUE, ID);
 VALUE rb_protect(VALUE (*)(VALUE), VALUE, int*);
@@ -427,7 +427,6 @@ void rb_thread_wait_fd(int);
 int rb_thread_fd_writable(int);
 void rb_thread_fd_close(int);
 int rb_thread_alone(void);
-DEPRECATED(void rb_thread_polling(void));
 void rb_thread_sleep(int);
 void rb_thread_sleep_forever(void);
 void rb_thread_sleep_deadly(void);
@@ -437,7 +436,6 @@ VALUE rb_thread_wakeup_alive(VALUE);
 VALUE rb_thread_run(VALUE);
 VALUE rb_thread_kill(VALUE);
 VALUE rb_thread_create(VALUE (*)(ANYARGS), void*);
-DEPRECATED(int rb_thread_select(int, fd_set *, fd_set *, fd_set *, struct timeval *));
 int rb_thread_fd_select(int, rb_fdset_t *, rb_fdset_t *, rb_fdset_t *, struct timeval *);
 void rb_thread_wait_for(struct timeval);
 VALUE rb_thread_current(void);
@@ -453,9 +451,9 @@ VALUE rb_exec_recursive_paired_outer(VALUE(*)(VALUE, VALUE, int),VALUE,VALUE,VAL
 /* dir.c */
 VALUE rb_dir_getwd(void);
 /* file.c */
-VALUE rb_file_s_expand_path(int, VALUE *);
+VALUE rb_file_s_expand_path(int, const VALUE *);
 VALUE rb_file_expand_path(VALUE, VALUE);
-VALUE rb_file_s_absolute_path(int, VALUE *);
+VALUE rb_file_s_absolute_path(int, const VALUE *);
 VALUE rb_file_absolute_path(VALUE, VALUE);
 VALUE rb_file_dirname(VALUE fname);
 int rb_find_file_ext_safe(VALUE*, const char* const*, int);
@@ -468,7 +466,7 @@ int rb_is_absolute_path(const char *);
 /* gc.c */
 NORETURN(void rb_memerror(void));
 int rb_during_gc(void);
-void rb_gc_mark_locations(VALUE*, VALUE*);
+void rb_gc_mark_locations(const VALUE*, const VALUE*);
 void rb_mark_tbl(struct st_table*);
 void rb_mark_set(struct st_table*);
 void rb_mark_hash(struct st_table*);
@@ -482,7 +480,6 @@ void rb_gc_call_finalizer_at_exit(void);
 VALUE rb_gc_enable(void);
 VALUE rb_gc_disable(void);
 VALUE rb_gc_start(void);
-DEPRECATED(void rb_gc_set_params(void));
 VALUE rb_define_finalizer(VALUE, VALUE);
 VALUE rb_undefine_finalizer(VALUE);
 size_t rb_gc_count(void);
@@ -511,6 +508,9 @@ struct st_table *rb_hash_tbl(VALUE);
 int rb_path_check(const char*);
 int rb_env_path_tainted(void);
 VALUE rb_env_clear(void);
+VALUE rb_hash_size(VALUE);
+DEPRECATED(int rb_hash_iter_lev(VALUE));
+DEPRECATED(VALUE rb_hash_ifnone(VALUE));
 /* io.c */
 #define rb_defout rb_stdout
 RUBY_EXTERN VALUE rb_fs;
@@ -529,9 +529,9 @@ VALUE rb_io_eof(VALUE);
 VALUE rb_io_binmode(VALUE);
 VALUE rb_io_ascii8bit_binmode(VALUE);
 VALUE rb_io_addstr(VALUE, VALUE);
-VALUE rb_io_printf(int, VALUE*, VALUE);
-VALUE rb_io_print(int, VALUE*, VALUE);
-VALUE rb_io_puts(int, VALUE*, VALUE);
+VALUE rb_io_printf(int, const VALUE*, VALUE);
+VALUE rb_io_print(int, const VALUE*, VALUE);
+VALUE rb_io_puts(int, const VALUE*, VALUE);
 VALUE rb_io_fdopen(int, int, const char*);
 VALUE rb_io_get_io(VALUE);
 VALUE rb_file_open(const char*, const char*);
@@ -623,25 +623,12 @@ VALUE rb_sym_all_symbols(void);
 /* process.c */
 void rb_last_status_set(int status, rb_pid_t pid);
 VALUE rb_last_status_get(void);
-struct rb_exec_arg {
-    VALUE execarg_obj;
-};
-DEPRECATED(int rb_proc_exec_n(int, VALUE*, const char*));
 int rb_proc_exec(const char*);
-DEPRECATED(VALUE rb_exec_arg_init(int argc, VALUE *argv, int accept_shell, struct rb_exec_arg *e));
-DEPRECATED(int rb_exec_arg_addopt(struct rb_exec_arg *e, VALUE key, VALUE val));
-DEPRECATED(void rb_exec_arg_fixup(struct rb_exec_arg *e));
-DEPRECATED(int rb_run_exec_options(const struct rb_exec_arg *e, struct rb_exec_arg *s));
-DEPRECATED(int rb_run_exec_options_err(const struct rb_exec_arg *e, struct rb_exec_arg *s, char*, size_t));
-DEPRECATED(int rb_exec(const struct rb_exec_arg*));
-DEPRECATED(int rb_exec_err(const struct rb_exec_arg*, char*, size_t));
-DEPRECATED(rb_pid_t rb_fork(int*, int (*)(void*), void*, VALUE));
-DEPRECATED(rb_pid_t rb_fork_err(int*, int (*)(void*, char*, size_t), void*, VALUE, char*, size_t));
-VALUE rb_f_exec(int,VALUE*);
+VALUE rb_f_exec(int, const VALUE*);
 rb_pid_t rb_waitpid(rb_pid_t pid, int *status, int flags);
 void rb_syswait(rb_pid_t pid);
-rb_pid_t rb_spawn(int, VALUE*);
-rb_pid_t rb_spawn_err(int, VALUE*, char*, size_t);
+rb_pid_t rb_spawn(int, const VALUE*);
+rb_pid_t rb_spawn_err(int, const VALUE*, char*, size_t);
 VALUE rb_proc_times(VALUE);
 VALUE rb_detach_process(rb_pid_t pid);
 /* range.c */
@@ -684,7 +671,7 @@ VALUE rb_get_argv(void);
 void *rb_load_file(const char*);
 void *rb_load_file_str(VALUE);
 /* signal.c */
-VALUE rb_f_kill(int, VALUE*);
+VALUE rb_f_kill(int, const VALUE*);
 #ifdef POSIX_SIGNAL
 #define posix_signal ruby_posix_signal
 RETSIGTYPE (*posix_signal(int, RETSIGTYPE (*)(int)))(int);
@@ -747,6 +734,7 @@ VALUE rb_str_freeze(VALUE);
 void rb_str_set_len(VALUE, long);
 VALUE rb_str_resize(VALUE, long);
 VALUE rb_str_cat(VALUE, const char*, long);
+VALUE rb_str_cat_cstr(VALUE, const char*);
 VALUE rb_str_cat2(VALUE, const char*);
 VALUE rb_str_append(VALUE, VALUE);
 VALUE rb_str_concat(VALUE, VALUE);
@@ -769,8 +757,8 @@ VALUE rb_str_replace(VALUE, VALUE);
 VALUE rb_str_inspect(VALUE);
 VALUE rb_str_dump(VALUE);
 VALUE rb_str_split(VALUE, const char*);
-void rb_str_associate(VALUE, VALUE);
-VALUE rb_str_associated(VALUE);
+DEPRECATED(void rb_str_associate(VALUE, VALUE));
+DEPRECATED(VALUE rb_str_associated(VALUE));
 void rb_str_setter(VALUE, ID, VALUE*);
 VALUE rb_str_intern(VALUE);
 VALUE rb_sym_to_s(VALUE);
@@ -818,17 +806,11 @@ VALUE rb_str_scrub(VALUE, VALUE);
 		       (str), (long)strlen(str)) : \
 	rb_str_buf_new_cstr(str);		\
 })
-#define rb_str_buf_cat2(str, ptr) __extension__ ( \
-{						\
-    (__builtin_constant_p(ptr)) ?	        \
-	rb_str_buf_cat((str), (ptr), (long)strlen(ptr)) : \
-	rb_str_buf_cat2((str), (ptr));		\
-})
-#define rb_str_cat2(str, ptr) __extension__ (	\
+#define rb_str_cat_cstr(str, ptr) __extension__ ( \
 {						\
     (__builtin_constant_p(ptr)) ?	        \
 	rb_str_cat((str), (ptr), (long)strlen(ptr)) : \
-	rb_str_cat2((str), (ptr));			\
+	rb_str_cat_cstr((str), (ptr));		\
 })
 #define rb_exc_new_cstr(klass, ptr) __extension__ ( \
 {						\
@@ -844,6 +826,9 @@ VALUE rb_str_scrub(VALUE, VALUE);
 #define rb_tainted_str_new2 rb_tainted_str_new_cstr
 #define rb_str_buf_new2 rb_str_buf_new_cstr
 #define rb_usascii_str_new2 rb_usascii_str_new_cstr
+#define rb_str_buf_cat rb_str_cat
+#define rb_str_buf_cat2 rb_str_cat_cstr
+#define rb_str_cat2 rb_str_cat_cstr
 /* struct.c */
 VALUE rb_struct_new(VALUE, ...);
 VALUE rb_struct_define(const char*, ...);
@@ -853,7 +838,6 @@ VALUE rb_struct_initialize(VALUE, VALUE);
 VALUE rb_struct_aref(VALUE, VALUE);
 VALUE rb_struct_aset(VALUE, VALUE, VALUE);
 VALUE rb_struct_getmember(VALUE, ID);
-DEPRECATED(VALUE rb_struct_iv_get(VALUE, const char*));
 VALUE rb_struct_s_members(VALUE);
 VALUE rb_struct_members(VALUE);
 VALUE rb_struct_alloc_noinit(VALUE);
@@ -866,9 +850,6 @@ typedef VALUE rb_blocking_function_t(void *);
 void rb_thread_check_ints(void);
 int rb_thread_interrupted(VALUE thval);
 
-/* Use rb_thread_call_without_gvl family instead. */
-DEPRECATED(VALUE rb_thread_blocking_region(rb_blocking_function_t *func, void *data1,
-					   rb_unblock_function_t *ubf, void *data2));
 #define RUBY_UBF_IO ((rb_unblock_function_t *)-1)
 #define RUBY_UBF_PROCESS ((rb_unblock_function_t *)-1)
 VALUE rb_mutex_new(void);
@@ -898,8 +879,8 @@ VALUE rb_class_name(VALUE);
 void rb_autoload(VALUE, ID, const char*);
 VALUE rb_autoload_load(VALUE, ID);
 VALUE rb_autoload_p(VALUE, ID);
-VALUE rb_f_trace_var(int, VALUE*);
-VALUE rb_f_untrace_var(int, VALUE*);
+VALUE rb_f_trace_var(int, const VALUE*);
+VALUE rb_f_untrace_var(int, const VALUE*);
 VALUE rb_f_global_variables(void);
 void rb_alias_variable(ID, ID);
 struct st_table* rb_generic_ivar_table(VALUE);
@@ -916,7 +897,7 @@ VALUE rb_obj_remove_instance_variable(VALUE, VALUE);
 void *rb_mod_const_at(VALUE, void*);
 void *rb_mod_const_of(VALUE, void*);
 VALUE rb_const_list(void*);
-VALUE rb_mod_constants(int, VALUE *, VALUE);
+VALUE rb_mod_constants(int, const VALUE *, VALUE);
 VALUE rb_mod_remove_const(VALUE, VALUE);
 int rb_const_defined(VALUE, ID);
 int rb_const_defined_at(VALUE, ID);
@@ -933,7 +914,7 @@ VALUE rb_cvar_get(VALUE, ID);
 void rb_cv_set(VALUE, const char*, VALUE);
 VALUE rb_cv_get(VALUE, const char*);
 void rb_define_class_variable(VALUE, const char*, VALUE);
-VALUE rb_mod_class_variables(int, VALUE*, VALUE);
+VALUE rb_mod_class_variables(int, const VALUE*, VALUE);
 VALUE rb_mod_remove_cvar(VALUE, VALUE);
 
 ID rb_frame_callee(void);
@@ -941,7 +922,11 @@ VALUE rb_str_succ(VALUE);
 VALUE rb_time_succ(VALUE);
 int rb_frame_method_id_and_class(ID *idp, VALUE *klassp);
 VALUE rb_make_backtrace(void);
-VALUE rb_make_exception(int, VALUE*);
+VALUE rb_make_exception(int, const VALUE*);
+
+/* deprecated */
+DEPRECATED(void rb_frame_pop(void));
+
 
 /* deprecated */
 DEPRECATED(void rb_frame_pop(void));

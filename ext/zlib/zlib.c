@@ -3,7 +3,7 @@
  *
  *   Copyright (C) UENO Katsuhiro 2000-2003
  *
- * $Id: zlib.c 45128 2014-02-22 09:53:35Z naruse $
+ * $Id: zlib.c 47613 2014-09-17 07:26:12Z normal $
  */
 
 #include <ruby.h>
@@ -26,9 +26,6 @@
 #endif
 
 #define RUBY_ZLIB_VERSION  "0.6.0"
-
-
-#define OBJ_IS_FREED(val)  (RBASIC(val)->flags == 0)
 
 #ifndef GZIP_SUPPORT
 #define GZIP_SUPPORT  1
@@ -429,7 +426,14 @@ do_checksum(argc, argv, func)
  * +adler+. If +string+ is omitted, it returns the Adler-32 initial value. If
  * +adler+ is omitted, it assumes that the initial value is given to +adler+.
  *
- * FIXME: expression.
+ * Example usage:
+ *
+ *   require "zlib"
+ *
+ *   data = "foo"
+ *   puts "Adler32 checksum: #{Zlib.adler32(data).to_s(16)}"
+ *   #=> Adler32 checksum: 2820145
+ *
  */
 static VALUE
 rb_zlib_adler32(int argc, VALUE *argv, VALUE klass)
@@ -580,7 +584,7 @@ struct zstream_run_args {
 static voidpf
 zlib_mem_alloc(voidpf opaque, uInt items, uInt size)
 {
-    voidpf p = xmalloc(items * size);
+    voidpf p = xmalloc2(items, size);
     /* zlib FAQ: Valgrind (or some similar memory access checker) says that
        deflate is performing a conditional jump that depends on an
        uninitialized value.  Isn't that a bug?
@@ -807,8 +811,7 @@ zstream_shift_buffer(struct zstream *z, long len)
 	return zstream_detach_buffer(z);
     }
 
-    dst = rb_str_subseq(z->buf, 0, len);
-    rb_obj_reveal(dst, rb_cString);
+    dst = rb_str_new(RSTRING_PTR(z->buf), len);
     z->buf_filled -= len;
     memmove(RSTRING_PTR(z->buf), RSTRING_PTR(z->buf) + len,
 	    z->buf_filled);
@@ -1460,13 +1463,15 @@ rb_deflate_s_allocate(VALUE klass)
  * the default value of that argument is used.
  *
  * The +level+ sets the compression level for the deflate stream between 0 (no
- * compression) and 9 (best compression. The following constants have been
+ * compression) and 9 (best compression). The following constants have been
  * defined to make code more readable:
  *
- * * Zlib::NO_COMPRESSION = 0
- * * Zlib::BEST_SPEED = 1
- * * Zlib::DEFAULT_COMPRESSION = 6
- * * Zlib::BEST_COMPRESSION = 9
+ * * Zlib::DEFAULT_COMPRESSION
+ * * Zlib::NO_COMPRESSION
+ * * Zlib::BEST_SPEED
+ * * Zlib::BEST_COMPRESSION
+ *
+ * See http://www.zlib.net/manual.html#Constants for further information.
  *
  * The +window_bits+ sets the size of the history buffer and should be between
  * 8 and 15.  Larger values of this parameter result in better compression at
@@ -1588,7 +1593,7 @@ deflate_run(VALUE args)
  *
  * Compresses the given +string+. Valid values of level are
  * Zlib::NO_COMPRESSION, Zlib::BEST_SPEED, Zlib::BEST_COMPRESSION,
- * Zlib::DEFAULT_COMPRESSION, or an integer from 0 to 9 (the default is 6).
+ * Zlib::DEFAULT_COMPRESSION, or an integer from 0 to 9.
  *
  * This method is almost equivalent to the following code:
  *

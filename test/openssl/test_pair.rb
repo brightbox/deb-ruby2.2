@@ -83,16 +83,22 @@ end
 module OpenSSL::TestEOF1M
   def open_file(content)
     s1, s2 = ssl_pair
-    Thread.new { s2 << content; s2.close }
+    th = Thread.new { s2 << content; s2.close }
     yield s1
+  ensure
+    th.join
+    s1.close
   end
 end
 
 module OpenSSL::TestEOF2M
   def open_file(content)
     s1, s2 = ssl_pair
-    Thread.new { s1 << content; s1.close }
+    th = Thread.new { s1 << content; s1.close }
     yield s2
+  ensure
+    th.join
+    s2.close
   end
 end
 
@@ -108,9 +114,13 @@ module OpenSSL::TestPairM
     ssl_pair {|s1, s2|
       s2.write "a\nbcd"
       assert_equal("a\n", s1.gets)
-      assert_equal("bcd", s1.readpartial(10))
+      result = ""
+      result << s1.readpartial(10) until result.length == 3
+      assert_equal("bcd", result)
       s2.write "efg"
-      assert_equal("efg", s1.readpartial(10))
+      result = ""
+      result << s1.readpartial(10) until result.length == 3
+      assert_equal("efg", result)
       s2.close
       assert_raise(EOFError) { s1.readpartial(10) }
       assert_raise(EOFError) { s1.readpartial(10) }
@@ -261,19 +271,24 @@ module OpenSSL::TestPairM
     }
   end
 
-  def test_connect_accept_nonblock
+  def tcp_pair
     host = "127.0.0.1"
-    port = 0
-    ctx = OpenSSL::SSL::SSLContext.new()
-    ctx.ciphers = "ADH"
-    ctx.tmp_dh_callback = proc { OpenSSL::TestUtils::TEST_KEY_DH1024 }
-    serv = TCPServer.new(host, port)
-
+    serv = TCPServer.new(host, 0)
     port = serv.connect_address.ip_port
-
     sock1 = TCPSocket.new(host, port)
     sock2 = serv.accept
     serv.close
+    [sock1, sock2]
+  ensure
+    serv.close if serv && !serv.closed?
+  end
+
+  def test_connect_accept_nonblock
+    ctx = OpenSSL::SSL::SSLContext.new()
+    ctx.ciphers = "ADH"
+    ctx.tmp_dh_callback = proc { OpenSSL::TestUtils::TEST_KEY_DH1024 }
+
+    sock1, sock2 = tcp_pair
 
     th = Thread.new {
       s2 = OpenSSL::SSL::SSLSocket.new(sock2, ctx)
@@ -312,9 +327,9 @@ module OpenSSL::TestPairM
     s1.print "a\ndef"
     assert_equal("a\n", s2.gets)
   ensure
+    th.join
     s1.close if s1 && !s1.closed?
     s2.close if s2 && !s2.closed?
-    serv.close if serv && !serv.closed?
     sock1.close if sock1 && !sock1.closed?
     sock2.close if sock2 && !sock2.closed?
   end

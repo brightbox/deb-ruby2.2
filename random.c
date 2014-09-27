@@ -2,7 +2,7 @@
 
   random.c -
 
-  $Author: akr $
+  $Author: nobu $
   created at: Fri Dec 24 16:39:21 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -474,14 +474,14 @@ fill_random_seed(uint32_t seed[DEFAULT_SEED_CNT])
 
     gettimeofday(&tv, 0);
     seed[0] ^= tv.tv_usec;
-    seed[1] ^= (unsigned int)tv.tv_sec;
+    seed[1] ^= (uint32_t)tv.tv_sec;
 #if SIZEOF_TIME_T > SIZEOF_INT
-    seed[0] ^= (unsigned int)((time_t)tv.tv_sec >> SIZEOF_INT * CHAR_BIT);
+    seed[0] ^= (uint32_t)((time_t)tv.tv_sec >> SIZEOF_INT * CHAR_BIT);
 #endif
     seed[2] ^= getpid() ^ (n++ << 16);
-    seed[3] ^= (unsigned int)(VALUE)&seed;
+    seed[3] ^= (uint32_t)(VALUE)&seed;
 #if SIZEOF_VOIDP > SIZEOF_INT
-    seed[2] ^= (unsigned int)((VALUE)&seed >> SIZEOF_INT * CHAR_BIT);
+    seed[2] ^= (uint32_t)((VALUE)&seed >> SIZEOF_INT * CHAR_BIT);
 #endif
 }
 
@@ -938,7 +938,7 @@ rand_int(struct MT *mt, VALUE vmax, int restrictive)
     else {
 	VALUE ret;
 	if (rb_bigzero_p(vmax)) return Qnil;
-	if (!RBIGNUM_SIGN(vmax)) {
+	if (!BIGNUM_SIGN(vmax)) {
 	    if (restrictive) return Qnil;
             vmax = rb_big_uminus(vmax);
 	}
@@ -985,7 +985,7 @@ rand_range(struct MT* mt, VALUE range)
 		v = ULONG2NUM(r);
 	    }
 	}
-	else if (BUILTIN_TYPE(vmax) == T_BIGNUM && RBIGNUM_SIGN(vmax) && !rb_bigzero_p(vmax)) {
+	else if (BUILTIN_TYPE(vmax) == T_BIGNUM && BIGNUM_SIGN(vmax) && !rb_bigzero_p(vmax)) {
 	    vmax = excl ? rb_big_minus(vmax, INT2FIX(1)) : rb_big_norm(vmax);
 	    if (FIXNUM_P(vmax)) {
 		excl = 0;
@@ -1352,7 +1352,7 @@ rb_reset_random_seed(void)
  */
 
 void
-Init_Random(void)
+InitVM_Random(void)
 {
     Init_RandomSeed2();
     rb_define_global_function("srand", rb_f_srand, -1);
@@ -1383,7 +1383,14 @@ Init_Random(void)
     rb_define_singleton_method(rb_cRandom, "new_seed", random_seed, 0);
     rb_define_private_method(CLASS_OF(rb_cRandom), "state", random_s_state, 0);
     rb_define_private_method(CLASS_OF(rb_cRandom), "left", random_s_left, 0);
+}
 
+#undef rb_intern
+void
+Init_Random(void)
+{
     id_rand = rb_intern("rand");
     id_bytes = rb_intern("bytes");
+
+    InitVM(Random);
 }

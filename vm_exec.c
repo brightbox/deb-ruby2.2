@@ -3,7 +3,7 @@
 
   vm_exec.c -
 
-  $Author: ko1 $
+  $Author: hsbt $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -23,6 +23,9 @@ static void vm_analysis_insn(int insn);
 
 #elif defined(__GNUC__) && defined(__i386__)
 #define DECL_SC_REG(type, r, reg) register type reg_##r __asm__("e" reg)
+
+#elif defined(__GNUC__) && defined(__powerpc64__)
+#define DECL_SC_REG(type, r, reg) register type reg_##r __asm__("r" reg)
 
 #else
 #define DECL_SC_REG(type, r, reg) register type reg_##r
@@ -47,7 +50,7 @@ vm_exec_core(rb_thread_t *th, VALUE initial)
 
 #if OPT_STACK_CACHING
 #if 0
-#elif __GNUC__ && __x86_64__
+#elif __GNUC__ && __x86_64__ && !defined(__native_client__)
     DECL_SC_REG(VALUE, a, "12");
     DECL_SC_REG(VALUE, b, "13");
 #else
@@ -62,6 +65,15 @@ vm_exec_core(rb_thread_t *th, VALUE initial)
 #define USE_MACHINE_REGS 1
 
 #elif defined(__GNUC__) && defined(__x86_64__)
+    DECL_SC_REG(VALUE *, pc, "14");
+# if defined(__native_client__)
+    DECL_SC_REG(rb_control_frame_t *, cfp, "13");
+# else
+    DECL_SC_REG(rb_control_frame_t *, cfp, "15");
+# endif
+#define USE_MACHINE_REGS 1
+
+#elif defined(__GNUC__) && defined(__powerpc64__)
     DECL_SC_REG(VALUE *, pc, "14");
     DECL_SC_REG(rb_control_frame_t *, cfp, "15");
 #define USE_MACHINE_REGS 1

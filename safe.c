@@ -2,7 +2,7 @@
 
   safe.c -
 
-  $Author: nobu $
+  $Author: akr $
   created at: Tue Sep 23 09:44:32 JST 2008
 
   Copyright (C) 2008 Yukihiro Matsumoto
@@ -123,16 +123,6 @@ rb_check_safe_obj(VALUE x)
 {
     if (rb_safe_level() > 0 && OBJ_TAINTED(x)) {
 	rb_insecure_operation();
-    }
-}
-
-void
-rb_check_safe_str(VALUE x)
-{
-    rb_check_safe_obj(x);
-    if (!RB_TYPE_P(x, T_STRING)) {
-	rb_raise(rb_eTypeError, "wrong argument type %s (expected String)",
-		 rb_obj_classname(x));
     }
 }
 

@@ -2,7 +2,7 @@
 
   numeric.c -
 
-  $Author: nobu $
+  $Author: ko1 $
   created at: Fri Aug 13 18:33:09 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -109,7 +109,10 @@ static VALUE fix_uminus(VALUE num);
 static VALUE fix_mul(VALUE x, VALUE y);
 static VALUE int_pow(long x, unsigned long y);
 
-static ID id_coerce, id_to_i, id_eq, id_div, id_cmp;
+static ID id_coerce, id_div;
+#define id_to_i idTo_i
+#define id_eq  idEq
+#define id_cmp idCmp
 
 VALUE rb_cNumeric;
 VALUE rb_cFloat;
@@ -145,7 +148,7 @@ rb_num_to_uint(VALUE val, unsigned int *ret)
     }
 
     if (RB_TYPE_P(val, T_BIGNUM)) {
-	if (RBIGNUM_NEGATIVE_P(val)) return NUMERR_NEGATIVE;
+	if (BIGNUM_NEGATIVE_P(val)) return NUMERR_NEGATIVE;
 #if SIZEOF_INT < SIZEOF_LONG
 	/* long is 64bit */
 	return NUMERR_TOOLARGE;
@@ -172,7 +175,7 @@ positive_int_p(VALUE num)
     }
     else if (RB_TYPE_P(num, T_BIGNUM)) {
 	if (method_basic_p(rb_cBignum))
-	    return RBIGNUM_POSITIVE_P(num);
+	    return BIGNUM_POSITIVE_P(num);
     }
     return RTEST(rb_funcall(num, mid, 1, INT2FIX(0)));
 }
@@ -188,7 +191,7 @@ negative_int_p(VALUE num)
     }
     else if (RB_TYPE_P(num, T_BIGNUM)) {
 	if (method_basic_p(rb_cBignum))
-	    return RBIGNUM_NEGATIVE_P(num);
+	    return BIGNUM_NEGATIVE_P(num);
     }
     return RTEST(rb_funcall(num, mid, 1, INT2FIX(0)));
 }
@@ -248,6 +251,12 @@ coerce_rescue(VALUE *x)
     return Qnil;		/* dummy */
 }
 
+static VALUE
+coerce_rescue_quiet(VALUE *x)
+{
+    return Qundef;
+}
+
 static int
 do_coerce(VALUE *x, VALUE *y, int err)
 {
@@ -263,10 +272,18 @@ do_coerce(VALUE *x, VALUE *y, int err)
 	return FALSE;
     }
 
-    ary = rb_rescue(coerce_body, (VALUE)a, err ? coerce_rescue : 0, (VALUE)a);
+    ary = rb_rescue(coerce_body, (VALUE)a, err ? coerce_rescue : coerce_rescue_quiet, (VALUE)a);
+    if (ary == Qundef) {
+	rb_warn("Numerical comparison operators will no more rescue exceptions of #coerce");
+	rb_warn("in the next release. Return nil in #coerce if the coercion is impossible.");
+	return FALSE;
+    }
     if (!RB_TYPE_P(ary, T_ARRAY) || RARRAY_LEN(ary) != 2) {
 	if (err) {
 	    rb_raise(rb_eTypeError, "coerce must return [x, y]");
+	} else if (!NIL_P(ary)) {
+	    rb_warn("Bad return value for #coerce, called by numerical comparison operators.");
+	    rb_warn("#coerce must return [x, y]. The next release will raise an error for this.");
 	}
 	return FALSE;
     }
@@ -317,9 +334,9 @@ num_sadded(VALUE x, VALUE name)
     /* ruby_frame = ruby_frame->prev; */ /* pop frame for "singleton_method_added" */
     rb_remove_method_id(rb_singleton_class(x), mid);
     rb_raise(rb_eTypeError,
-	     "can't define singleton method \"%s\" for %s",
-	     rb_id2name(mid),
-	     rb_obj_classname(x));
+	     "can't define singleton method \"%"PRIsVALUE"\" for %"PRIsVALUE,
+	     rb_id2str(mid),
+	     rb_obj_class(x));
 
     UNREACHABLE;
 }
@@ -332,7 +349,7 @@ num_sadded(VALUE x, VALUE name)
 static VALUE
 num_init_copy(VALUE x, VALUE y)
 {
-    rb_raise(rb_eTypeError, "can't copy %s", rb_obj_classname(x));
+    rb_raise(rb_eTypeError, "can't copy %"PRIsVALUE, rb_obj_class(x));
 
     UNREACHABLE;
 }
@@ -873,6 +890,12 @@ flodivmod(double x, double y, double *divp, double *modp)
 {
     double div, mod;
 
+    if (isnan(y)) {
+	/* y is NaN so all results are NaN */
+	if (modp) *modp = y;
+	if (divp) *divp = y;
+	return;
+    }
     if (y == 0.0) rb_num_zerodiv();
     if ((x == 0.0) || (isinf(y) && !isinf(x)))
         mod = x;
@@ -886,7 +909,7 @@ flodivmod(double x, double y, double *divp, double *modp)
 	mod = x - z * y;
 #endif
     }
-    if (isinf(x) && !isinf(y) && !isnan(y))
+    if (isinf(x) && !isinf(y))
 	div = x;
     else
 	div = (x - mod) / y;
@@ -1105,6 +1128,8 @@ flo_eq(VALUE x, VALUE y)
  *   float.hash  ->  integer
  *
  * Returns a hash code for this float.
+ *
+ * See also Object#hash.
  */
 
 static VALUE
@@ -1463,7 +1488,7 @@ flo_is_finite_p(VALUE num)
 {
     double value = RFLOAT_VALUE(num);
 
-#if HAVE_ISFINITE
+#ifdef HAVE_ISFINITE
     if (!isfinite(value))
 	return Qfalse;
 #else
@@ -1472,6 +1497,119 @@ flo_is_finite_p(VALUE num)
 #endif
 
     return Qtrue;
+}
+
+/*
+ *  call-seq:
+ *     float.next_float  ->  float
+ *
+ *  Returns the next representable floating-point number.
+ *
+ *  Float::MAX.next_float and Float::INFINITY.next_float is Float::INFINITY.
+ *
+ *  Float::NAN.next_float is Float::NAN.
+ *
+ *  For example:
+ *
+ *    p 0.01.next_float  #=> 0.010000000000000002
+ *    p 1.0.next_float   #=> 1.0000000000000002
+ *    p 100.0.next_float #=> 100.00000000000001
+ *
+ *    p 0.01.next_float - 0.01   #=> 1.734723475976807e-18
+ *    p 1.0.next_float - 1.0     #=> 2.220446049250313e-16
+ *    p 100.0.next_float - 100.0 #=> 1.4210854715202004e-14
+ *
+ *    f = 0.01; 20.times { printf "%-20a %s\n", f, f.to_s; f = f.next_float }
+ *    #=> 0x1.47ae147ae147bp-7 0.01
+ *    #   0x1.47ae147ae147cp-7 0.010000000000000002
+ *    #   0x1.47ae147ae147dp-7 0.010000000000000004
+ *    #   0x1.47ae147ae147ep-7 0.010000000000000005
+ *    #   0x1.47ae147ae147fp-7 0.010000000000000007
+ *    #   0x1.47ae147ae148p-7  0.010000000000000009
+ *    #   0x1.47ae147ae1481p-7 0.01000000000000001
+ *    #   0x1.47ae147ae1482p-7 0.010000000000000012
+ *    #   0x1.47ae147ae1483p-7 0.010000000000000014
+ *    #   0x1.47ae147ae1484p-7 0.010000000000000016
+ *    #   0x1.47ae147ae1485p-7 0.010000000000000018
+ *    #   0x1.47ae147ae1486p-7 0.01000000000000002
+ *    #   0x1.47ae147ae1487p-7 0.010000000000000021
+ *    #   0x1.47ae147ae1488p-7 0.010000000000000023
+ *    #   0x1.47ae147ae1489p-7 0.010000000000000024
+ *    #   0x1.47ae147ae148ap-7 0.010000000000000026
+ *    #   0x1.47ae147ae148bp-7 0.010000000000000028
+ *    #   0x1.47ae147ae148cp-7 0.01000000000000003
+ *    #   0x1.47ae147ae148dp-7 0.010000000000000031
+ *    #   0x1.47ae147ae148ep-7 0.010000000000000033
+ *
+ *    f = 0.0
+ *    100.times { f += 0.1 }
+ *    p f                            #=> 9.99999999999998       # should be 10.0 in the ideal world.
+ *    p 10-f                         #=> 1.9539925233402755e-14 # the floating-point error.
+ *    p(10.0.next_float-10)          #=> 1.7763568394002505e-15 # 1 ulp (units in the last place).
+ *    p((10-f)/(10.0.next_float-10)) #=> 11.0                   # the error is 11 ulp.
+ *    p((10-f)/(10*Float::EPSILON))  #=> 8.8                    # approximation of the above.
+ *    p "%a" % f                     #=> "0x1.3fffffffffff5p+3" # the last hex digit is 5.  16 - 5 = 11 ulp.
+ *
+ */
+static VALUE
+flo_next_float(VALUE vx)
+{
+    double x, y;
+    x = NUM2DBL(vx);
+    y = nextafter(x, INFINITY);
+    return DBL2NUM(y);
+}
+
+/*
+ *  call-seq:
+ *     float.prev_float  ->  float
+ *
+ *  Returns the previous representable floatint-point number.
+ *
+ *  (-Float::MAX).prev_float and (-Float::INFINITY).prev_float is -Float::INFINITY.
+ *
+ *  Float::NAN.prev_float is Float::NAN.
+ *
+ *  For example:
+ *
+ *    p 0.01.prev_float  #=> 0.009999999999999998
+ *    p 1.0.prev_float   #=> 0.9999999999999999
+ *    p 100.0.prev_float #=> 99.99999999999999
+ *
+ *    p 0.01 - 0.01.prev_float   #=> 1.734723475976807e-18
+ *    p 1.0 - 1.0.prev_float     #=> 1.1102230246251565e-16
+ *    p 100.0 - 100.0.prev_float #=> 1.4210854715202004e-14
+ *
+ *    f = 0.01; 20.times { printf "%-20a %s\n", f, f.to_s; f = f.prev_float }
+ *    #=> 0x1.47ae147ae147bp-7 0.01
+ *    #   0x1.47ae147ae147ap-7 0.009999999999999998
+ *    #   0x1.47ae147ae1479p-7 0.009999999999999997
+ *    #   0x1.47ae147ae1478p-7 0.009999999999999995
+ *    #   0x1.47ae147ae1477p-7 0.009999999999999993
+ *    #   0x1.47ae147ae1476p-7 0.009999999999999992
+ *    #   0x1.47ae147ae1475p-7 0.00999999999999999
+ *    #   0x1.47ae147ae1474p-7 0.009999999999999988
+ *    #   0x1.47ae147ae1473p-7 0.009999999999999986
+ *    #   0x1.47ae147ae1472p-7 0.009999999999999985
+ *    #   0x1.47ae147ae1471p-7 0.009999999999999983
+ *    #   0x1.47ae147ae147p-7  0.009999999999999981
+ *    #   0x1.47ae147ae146fp-7 0.00999999999999998
+ *    #   0x1.47ae147ae146ep-7 0.009999999999999978
+ *    #   0x1.47ae147ae146dp-7 0.009999999999999976
+ *    #   0x1.47ae147ae146cp-7 0.009999999999999974
+ *    #   0x1.47ae147ae146bp-7 0.009999999999999972
+ *    #   0x1.47ae147ae146ap-7 0.00999999999999997
+ *    #   0x1.47ae147ae1469p-7 0.009999999999999969
+ *    #   0x1.47ae147ae1468p-7 0.009999999999999967
+ *
+ */
+static VALUE
+flo_prev_float(VALUE vx)
+{
+    double x, y;
+    x = NUM2DBL(vx);
+    y = nextafter(x, -INFINITY);
+    return DBL2NUM(y);
 }
 
 /*
@@ -1901,7 +2039,7 @@ num_step_size(VALUE from, VALUE args, VALUE eobj)
 {
     VALUE to, step;
     int argc = args ? RARRAY_LENINT(args) : 0;
-    VALUE *argv = args ? RARRAY_PTR(args) : 0;
+    const VALUE *argv = args ? RARRAY_CONST_PTR(args) : 0;
 
     num_step_scan_args(argc, argv, &to, &step);
 
@@ -1909,8 +2047,8 @@ num_step_size(VALUE from, VALUE args, VALUE eobj)
 }
 /*
  *  call-seq:
- *     num.step(by: step, to: limit]) {|i| block }  ->  self
- *     num.step(by: step, to: limit])               ->  an_enumerator
+ *     num.step(by: step, to: limit) {|i| block }   ->  self
+ *     num.step(by: step, to: limit)		    ->  an_enumerator
  *     num.step(limit=nil, step=1) {|i| block }     ->  self
  *     num.step(limit=nil, step=1)                  ->  an_enumerator
  *
@@ -1923,7 +2061,7 @@ num_step_size(VALUE from, VALUE args, VALUE eobj)
  *
  *  In the recommended keyword argument style, either or both of
  *  +step+ and +limit+ (default infinity) can be omitted.  In the
- *  fixed position argument style, integer zero as a step
+ *  fixed position argument style, zero as a step
  *  (i.e. num.step(limit, 0)) is not allowed for historical
  *  compatibility reasons.
  *
@@ -2017,6 +2155,23 @@ num_step(int argc, VALUE *argv, VALUE from)
     return from;
 }
 
+static char *
+out_of_range_float(char (*pbuf)[24], VALUE val)
+{
+    char *const buf = *pbuf;
+    char *s;
+
+    snprintf(buf, sizeof(*pbuf), "%-.10g", RFLOAT_VALUE(val));
+    if ((s = strchr(buf, ' ')) != 0) *s = '\0';
+    return buf;
+}
+
+#define FLOAT_OUT_OF_RANGE(val, type) do { \
+    char buf[24]; \
+    rb_raise(rb_eRangeError, "float %s out of range of "type, \
+	     out_of_range_float(&buf, (val))); \
+} while (0)
+
 #define LONG_MIN_MINUS_ONE ((double)LONG_MIN-1)
 #define LONG_MAX_PLUS_ONE (2*(double)(LONG_MAX/2+1))
 #define ULONG_MAX_PLUS_ONE (2*(double)(ULONG_MAX/2+1))
@@ -2025,7 +2180,7 @@ num_step(int argc, VALUE *argv, VALUE from)
    LONG_MIN <= (n): \
    LONG_MIN_MINUS_ONE < (n))
 
-SIGNED_VALUE
+long
 rb_num2long(VALUE val)
 {
   again:
@@ -2041,12 +2196,7 @@ rb_num2long(VALUE val)
 	    return (long)RFLOAT_VALUE(val);
 	}
 	else {
-	    char buf[24];
-	    char *s;
-
-	    snprintf(buf, sizeof(buf), "%-.10g", RFLOAT_VALUE(val));
-	    if ((s = strchr(buf, ' ')) != 0) *s = '\0';
-	    rb_raise(rb_eRangeError, "float %s out of range of integer", buf);
+	    FLOAT_OUT_OF_RANGE(val, "integer");
 	}
     }
     else if (RB_TYPE_P(val, T_BIGNUM)) {
@@ -2083,19 +2233,14 @@ rb_num2ulong_internal(VALUE val, int *wrap_p)
            return (unsigned long)(long)d;
        }
        else {
-           char buf[24];
-           char *s;
-
-           snprintf(buf, sizeof(buf), "%-.10g", RFLOAT_VALUE(val));
-           if ((s = strchr(buf, ' ')) != 0) *s = '\0';
-           rb_raise(rb_eRangeError, "float %s out of range of integer", buf);
+	   FLOAT_OUT_OF_RANGE(val, "integer");
        }
     }
     else if (RB_TYPE_P(val, T_BIGNUM)) {
         {
             unsigned long ul = rb_big2ulong(val);
             if (wrap_p)
-                *wrap_p = RBIGNUM_NEGATIVE_P(val);
+                *wrap_p = BIGNUM_NEGATIVE_P(val);
             return ul;
         }
     }
@@ -2105,7 +2250,7 @@ rb_num2ulong_internal(VALUE val, int *wrap_p)
     }
 }
 
-VALUE
+unsigned long
 rb_num2ulong(VALUE val)
 {
     return rb_num2ulong_internal(val, NULL);
@@ -2310,12 +2455,7 @@ rb_num2ll(VALUE val)
 	    return (LONG_LONG)(RFLOAT_VALUE(val));
 	}
 	else {
-	    char buf[24];
-	    char *s;
-
-	    snprintf(buf, sizeof(buf), "%-.10g", RFLOAT_VALUE(val));
-	    if ((s = strchr(buf, ' ')) != 0) *s = '\0';
-	    rb_raise(rb_eRangeError, "float %s out of range of long long", buf);
+	    FLOAT_OUT_OF_RANGE(val, "long long");
 	}
     }
     else if (RB_TYPE_P(val, T_BIGNUM)) {
@@ -2349,12 +2489,7 @@ rb_num2ull(VALUE val)
 	    return (unsigned LONG_LONG)(LONG_LONG)(RFLOAT_VALUE(val));
 	}
 	else {
-	    char buf[24];
-	    char *s;
-
-	    snprintf(buf, sizeof(buf), "%-.10g", RFLOAT_VALUE(val));
-	    if ((s = strchr(buf, ' ')) != 0) *s = '\0';
-	    rb_raise(rb_eRangeError, "float %s out of range of unsgined long long", buf);
+	    FLOAT_OUT_OF_RANGE(val, "unsigned long long");
 	}
     }
     else if (RB_TYPE_P(val, T_BIGNUM)) {
@@ -3292,13 +3427,12 @@ fix_rev(VALUE num)
 }
 
 static int
-bit_coerce(VALUE *x, VALUE *y, int err)
+bit_coerce(VALUE *x, VALUE *y)
 {
     if (!FIXNUM_P(*y) && !RB_TYPE_P(*y, T_BIGNUM)) {
-	do_coerce(x, y, err);
+	do_coerce(x, y, TRUE);
 	if (!FIXNUM_P(*x) && !RB_TYPE_P(*x, T_BIGNUM)
 	    && !FIXNUM_P(*y) && !RB_TYPE_P(*y, T_BIGNUM)) {
-	    if (!err) return FALSE;
 	    coerce_failed(*x, *y);
 	}
     }
@@ -3308,7 +3442,7 @@ bit_coerce(VALUE *x, VALUE *y, int err)
 VALUE
 rb_num_coerce_bit(VALUE x, VALUE y, ID func)
 {
-    bit_coerce(&x, &y, TRUE);
+    bit_coerce(&x, &y);
     return rb_funcall(x, func, 1, y);
 }
 
@@ -3331,7 +3465,7 @@ fix_and(VALUE x, VALUE y)
 	return rb_big_and(y, x);
     }
 
-    bit_coerce(&x, &y, TRUE);
+    bit_coerce(&x, &y);
     return rb_funcall(x, rb_intern("&"), 1, y);
 }
 
@@ -3354,7 +3488,7 @@ fix_or(VALUE x, VALUE y)
 	return rb_big_or(y, x);
     }
 
-    bit_coerce(&x, &y, TRUE);
+    bit_coerce(&x, &y);
     return rb_funcall(x, rb_intern("|"), 1, y);
 }
 
@@ -3377,7 +3511,7 @@ fix_xor(VALUE x, VALUE y)
 	return rb_big_xor(y, x);
     }
 
-    bit_coerce(&x, &y, TRUE);
+    bit_coerce(&x, &y);
     return rb_funcall(x, rb_intern("^"), 1, y);
 }
 
@@ -3473,7 +3607,7 @@ fix_aref(VALUE fix, VALUE idx)
     if (!FIXNUM_P(idx)) {
 	idx = rb_big_norm(idx);
 	if (!FIXNUM_P(idx)) {
-	    if (!RBIGNUM_SIGN(idx) || val >= 0)
+	    if (!BIGNUM_SIGN(idx) || val >= 0)
 		return INT2FIX(0);
 	    return INT2FIX(1);
 	}
@@ -3577,6 +3711,14 @@ fix_size(VALUE fix)
  *     (2**12-1).bit_length      #=> 12
  *     (2**12).bit_length        #=> 13
  *     (2**12+1).bit_length      #=> 13
+ *
+ *  This method can be used to detect overflow in Array#pack as follows.
+ *
+ *     if n.bit_length < 32
+ *       [n].pack("l") # no overflow
+ *     else
+ *       raise "overflow"
+ *     end
  */
 
 static VALUE
@@ -3859,8 +4001,6 @@ Init_Numeric(void)
     _control87(_control87(0,0),0x1FFF);
 #endif
     id_coerce = rb_intern("coerce");
-    id_to_i = rb_intern("to_i");
-    id_eq = rb_intern("==");
     id_div = rb_intern("div");
     id_cmp = rb_intern("<=>");
 
@@ -3999,7 +4139,8 @@ Init_Numeric(void)
      */
     rb_define_const(rb_cFloat, "MANT_DIG", INT2FIX(DBL_MANT_DIG));
     /*
-     *	The number of decimal digits in a double-precision floating point.
+     *	The minimum number of significant decimal digits in a double-precision
+     *	floating point.
      *
      *	Usually defaults to 15.
      */
@@ -4098,6 +4239,8 @@ Init_Numeric(void)
     rb_define_method(rb_cFloat, "nan?",      flo_is_nan_p, 0);
     rb_define_method(rb_cFloat, "infinite?", flo_is_infinite_p, 0);
     rb_define_method(rb_cFloat, "finite?",   flo_is_finite_p, 0);
+    rb_define_method(rb_cFloat, "next_float", flo_next_float, 0);
+    rb_define_method(rb_cFloat, "prev_float", flo_prev_float, 0);
 
     id_to = rb_intern("to");
     id_by = rb_intern("by");

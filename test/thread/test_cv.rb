@@ -80,8 +80,10 @@ class TestConditionVariable < Test::Unit::TestCase
       condvar.broadcast
       result << "P2"
     end
-    nr_threads.times do |i|
-      threads[i].join
+    Timeout.timeout(5) do
+      nr_threads.times do |i|
+        threads[i].join
+      end
     end
 
     assert_equal ["C1", "C1", "C1", "P1", "P2", "C2", "C2", "C2"], result
@@ -193,6 +195,14 @@ INPUT
     condvar = ConditionVariable.new
 
     assert_nothing_raised(Exception) { mutex.synchronize {condvar.broadcast} }
+  end
+
+  def test_dup
+    bug9440 = '[ruby-core:59961] [Bug #9440]'
+    condvar = ConditionVariable.new
+    assert_raise(NoMethodError, bug9440) do
+      condvar.dup
+    end
   end
 
   (DumpableCV = ConditionVariable.dup).class_eval {remove_method :marshal_dump}

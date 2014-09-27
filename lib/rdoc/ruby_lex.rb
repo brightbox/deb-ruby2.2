@@ -434,7 +434,7 @@ class RDoc::RubyLex
       |op, io|
       @ltype = "="
       res = ''
-      nil until (ch = getc) == "\n"
+      nil until getc == "\n"
 
       until ( peek_equal?("=end") && peek(4) =~ /\s/ ) do
         (ch = getc)
@@ -1184,9 +1184,9 @@ class RDoc::RubyLex
     str = if ltype == quoted and %w[" ' /].include? ltype then
             ltype.dup
           elsif RUBY_VERSION > '1.9' then
-            "%#{type or PERCENT_LTYPE.key ltype}#{PERCENT_PAREN_REV[quoted]}"
+            "%#{type or PERCENT_LTYPE.key ltype}#{PERCENT_PAREN_REV[quoted]||quoted}"
           else
-            "%#{type or PERCENT_LTYPE.index ltype}#{PERCENT_PAREN_REV[quoted]}"
+            "%#{type or PERCENT_LTYPE.index ltype}#{PERCENT_PAREN_REV[quoted]||quoted}"
           end
 
     subtype = nil

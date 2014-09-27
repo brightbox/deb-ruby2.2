@@ -681,6 +681,11 @@ class TestModule < Test::Unit::TestCase
     assert_raise(NameError) { c1.const_set(:foo, :foo) }
     assert_raise(NameError) { c1.const_set("bar", :foo) }
     assert_raise(TypeError) { c1.const_set(1, :foo) }
+    assert_nothing_raised(NameError) { c1.const_set("X\u{3042}", :foo) }
+    assert_raise(NameError) { c1.const_set("X\u{3042}".encode("utf-16be"), :foo) }
+    assert_raise(NameError) { c1.const_set("X\u{3042}".encode("utf-16le"), :foo) }
+    assert_raise(NameError) { c1.const_set("X\u{3042}".encode("utf-32be"), :foo) }
+    assert_raise(NameError) { c1.const_set("X\u{3042}".encode("utf-32le"), :foo) }
   end
 
   def test_const_get_invalid_name
@@ -1272,7 +1277,7 @@ class TestModule < Test::Unit::TestCase
     c = Class.new do
       attr_writer :foo
     end
-    assert_raise(ArgumentError) { c.new.send :foo= }
+    assert_raise(ArgumentError, bug8540) { c.new.send :foo= }
   end
 
   def test_private_constant
@@ -1629,7 +1634,7 @@ class TestModule < Test::Unit::TestCase
 
   def test_prepend_visibility_inherited
     bug8238 = '[ruby-core:54105] [Bug #8238]'
-    assert_separately [], <<-"end;", timeout: 3
+    assert_separately [], <<-"end;", timeout: 20
       class A
         def foo() A; end
         private :foo

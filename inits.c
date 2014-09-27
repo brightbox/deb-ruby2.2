@@ -2,7 +2,7 @@
 
   inits.c -
 
-  $Author: nobu $
+  $Author: normal $
   created at: Tue Dec 28 16:01:58 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -46,7 +46,6 @@ rb_call_inits(void)
     CALL(Time);
     CALL(Random);
     CALL(signal);
-    CALL(process);
     CALL(load);
     CALL(Proc);
     CALL(Binding);
@@ -56,6 +55,7 @@ rb_call_inits(void)
     CALL(VM);
     CALL(ISeq);
     CALL(Thread);
+    CALL(process);
     CALL(Cont);
     CALL(Rational);
     CALL(Complex);

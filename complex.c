@@ -20,8 +20,8 @@ VALUE rb_cComplex;
 
 static ID id_abs, id_arg, id_convert,
     id_denominator, id_eqeq_p, id_expt, id_fdiv,
-    id_inspect, id_negate, id_numerator, id_quo,
-    id_real_p, id_to_f, id_to_i, id_to_r, id_to_s,
+    id_negate, id_numerator, id_quo,
+    id_real_p, id_to_f, id_to_i, id_to_r,
     id_i_real, id_i_imag;
 
 #define f_boolcast(x) ((x) ? Qtrue : Qfalse)
@@ -130,7 +130,6 @@ f_sub(VALUE x, VALUE y)
 fun1(abs)
 fun1(arg)
 fun1(denominator)
-fun1(inspect)
 fun1(negate)
 fun1(numerator)
 fun1(real_p)
@@ -151,7 +150,6 @@ f_to_f(VALUE x)
 }
 
 fun1(to_r)
-fun1(to_s)
 
 inline static VALUE
 f_eqeq_p(VALUE x, VALUE y)
@@ -433,6 +431,8 @@ f_complex_new2(VALUE klass, VALUE x, VALUE y)
  *
  *    Complex(1, 2)    #=> (1+2i)
  *    Complex('1+2i')  #=> (1+2i)
+ *    Complex(nil)     #=> TypeError
+ *    Complex(1, nil)  #=> TypeError
  *
  * Syntax of string form:
  *
@@ -1241,7 +1241,7 @@ f_format(VALUE self, VALUE (*func)(VALUE))
 static VALUE
 nucomp_to_s(VALUE self)
 {
-    return f_format(self, f_to_s);
+    return f_format(self, rb_String);
 }
 
 /*
@@ -1262,7 +1262,7 @@ nucomp_inspect(VALUE self)
     VALUE s;
 
     s = rb_usascii_str_new2("(");
-    rb_str_concat(s, f_format(self, f_inspect));
+    rb_str_concat(s, f_format(self, rb_inspect));
     rb_str_cat2(s, ")");
 
     return s;
@@ -1342,6 +1342,20 @@ rb_Complex(VALUE x, VALUE y)
     return nucomp_s_convert(2, a, rb_cComplex);
 }
 
+VALUE
+rb_complex_set_real(VALUE cmp, VALUE r)
+{
+    RCOMPLEX_SET_REAL(cmp, r);
+    return cmp;
+}
+
+VALUE
+rb_complex_set_imag(VALUE cmp, VALUE i)
+{
+    RCOMPLEX_SET_REAL(cmp, i);
+    return cmp;
+}
+
 /*
  * call-seq:
  *    cmp.to_i  ->  integer
@@ -1359,9 +1373,8 @@ nucomp_to_i(VALUE self)
     get_dat1(self);
 
     if (k_inexact_p(dat->imag) || f_nonzero_p(dat->imag)) {
-	VALUE s = f_to_s(self);
-	rb_raise(rb_eRangeError, "can't convert %s into Integer",
-		 StringValuePtr(s));
+	rb_raise(rb_eRangeError, "can't convert %"PRIsVALUE" into Integer",
+		 self);
     }
     return f_to_i(dat->real);
 }
@@ -1383,9 +1396,8 @@ nucomp_to_f(VALUE self)
     get_dat1(self);
 
     if (k_inexact_p(dat->imag) || f_nonzero_p(dat->imag)) {
-	VALUE s = f_to_s(self);
-	rb_raise(rb_eRangeError, "can't convert %s into Float",
-		 StringValuePtr(s));
+	rb_raise(rb_eRangeError, "can't convert %"PRIsVALUE" into Float",
+		 self);
     }
     return f_to_f(dat->real);
 }
@@ -1409,9 +1421,8 @@ nucomp_to_r(VALUE self)
     get_dat1(self);
 
     if (k_inexact_p(dat->imag) || f_nonzero_p(dat->imag)) {
-	VALUE s = f_to_s(self);
-	rb_raise(rb_eRangeError, "can't convert %s into Rational",
-		 StringValuePtr(s));
+	rb_raise(rb_eRangeError, "can't convert %"PRIsVALUE" into Rational",
+		 self);
     }
     return f_to_r(dat->real);
 }
@@ -1437,9 +1448,8 @@ nucomp_rationalize(int argc, VALUE *argv, VALUE self)
     rb_scan_args(argc, argv, "01", NULL);
 
     if (k_inexact_p(dat->imag) || f_nonzero_p(dat->imag)) {
-       VALUE s = f_to_s(self);
-       rb_raise(rb_eRangeError, "can't convert %s into Rational",
-                StringValuePtr(s));
+       rb_raise(rb_eRangeError, "can't convert %"PRIsVALUE" into Rational",
+                self);
     }
     return rb_funcall2(dat->real, rb_intern("rationalize"), argc, argv);
 }
@@ -1775,9 +1785,8 @@ string_to_c_strict(VALUE self)
 	s = (char *)"";
 
     if (!parse_comp(s, 1, &num)) {
-	VALUE ins = f_inspect(self);
-	rb_raise(rb_eArgError, "invalid value for convert(): %s",
-		 StringValuePtr(ins));
+	rb_raise(rb_eArgError, "invalid value for convert(): %+"PRIsVALUE,
+		 self);
     }
 
     return num;
@@ -2060,7 +2069,6 @@ Init_Complex(void)
     id_eqeq_p = rb_intern("==");
     id_expt = rb_intern("**");
     id_fdiv = rb_intern("fdiv");
-    id_inspect = rb_intern("inspect");
     id_negate = rb_intern("-@");
     id_numerator = rb_intern("numerator");
     id_quo = rb_intern("quo");
@@ -2068,7 +2076,6 @@ Init_Complex(void)
     id_to_f = rb_intern("to_f");
     id_to_i = rb_intern("to_i");
     id_to_r = rb_intern("to_r");
-    id_to_s = rb_intern("to_s");
     id_i_real = rb_intern("@real");
     id_i_imag = rb_intern("@image"); /* @image, not @imag */
 
@@ -2160,7 +2167,7 @@ Init_Complex(void)
     rb_define_method(rb_cComplex, "inspect", nucomp_inspect, 0);
 
     rb_define_private_method(rb_cComplex, "marshal_dump", nucomp_marshal_dump, 0);
-    compat = rb_define_class_under(rb_cComplex, "compatible", rb_cObject);
+    compat = rb_define_class_under(rb_cComplex, "compatible", rb_cObject); /* :nodoc: */
     rb_define_private_method(compat, "marshal_load", nucomp_marshal_load, 1);
     rb_marshal_define_compat(rb_cComplex, compat, nucomp_dumper, nucomp_loader);
 
@@ -2202,6 +2209,8 @@ Init_Complex(void)
      */
     rb_define_const(rb_cComplex, "I",
 		    f_complex_new_bang2(rb_cComplex, ZERO, ONE));
+
+    rb_provide("complex.so");	/* for backward compatibility */
 }
 
 /*

@@ -14,18 +14,20 @@
 #define RUBY_ID_H
 
 enum ruby_id_types {
+    RUBY_ID_STATIC_SYM  = 0x01,
     RUBY_ID_LOCAL       = 0x00,
-    RUBY_ID_INSTANCE    = 0x01,
-    RUBY_ID_GLOBAL      = 0x03,
-    RUBY_ID_ATTRSET     = 0x04,
-    RUBY_ID_CONST       = 0x05,
-    RUBY_ID_CLASS       = 0x06,
-    RUBY_ID_JUNK        = 0x07,
+    RUBY_ID_INSTANCE    = (0x01<<1),
+    RUBY_ID_GLOBAL      = (0x03<<1),
+    RUBY_ID_ATTRSET     = (0x04<<1),
+    RUBY_ID_CONST       = (0x05<<1),
+    RUBY_ID_CLASS       = (0x06<<1),
+    RUBY_ID_JUNK        = (0x07<<1),
     RUBY_ID_INTERNAL    = RUBY_ID_JUNK,
-    RUBY_ID_SCOPE_SHIFT = 3,
-    RUBY_ID_SCOPE_MASK  = ~(~0U<<RUBY_ID_SCOPE_SHIFT)
+    RUBY_ID_SCOPE_SHIFT = 4,
+    RUBY_ID_SCOPE_MASK  = (~(~0U<<(RUBY_ID_SCOPE_SHIFT-1))<<1)
 };
 
+#define ID_STATIC_SYM  RUBY_ID_STATIC_SYM
 #define ID_SCOPE_SHIFT RUBY_ID_SCOPE_SHIFT
 #define ID_SCOPE_MASK  RUBY_ID_SCOPE_MASK
 #define ID_LOCAL       RUBY_ID_LOCAL
@@ -135,8 +137,21 @@ enum ruby_method_ids {
     tInitialize_copy,
     tInitialize_clone,
     tInitialize_dup,
+    tTo_int,
+    tTo_ary,
+    tTo_str,
+    tTo_sym,
+    tTo_hash,
+    tTo_proc,
+    tTo_io,
+    tTo_a,
+    tTo_s,
+    tTo_i,
+    tBt,
+    tBt_locations,
     tUScore,
-#define TOKEN2LOCALID(n) id##n = ((t##n<<ID_SCOPE_SHIFT)|ID_LOCAL)
+    tNEXT_ID,
+#define TOKEN2LOCALID(n) id##n = ((t##n<<ID_SCOPE_SHIFT)|ID_LOCAL|ID_STATIC_SYM)
     TOKEN2LOCALID(Freeze),
     TOKEN2LOCALID(Inspect),
     TOKEN2LOCALID(Intern),
@@ -163,6 +178,18 @@ enum ruby_method_ids {
     TOKEN2LOCALID(Initialize_copy),
     TOKEN2LOCALID(Initialize_clone),
     TOKEN2LOCALID(Initialize_dup),
+    TOKEN2LOCALID(To_int),
+    TOKEN2LOCALID(To_ary),
+    TOKEN2LOCALID(To_str),
+    TOKEN2LOCALID(To_sym),
+    TOKEN2LOCALID(To_hash),
+    TOKEN2LOCALID(To_proc),
+    TOKEN2LOCALID(To_io),
+    TOKEN2LOCALID(To_a),
+    TOKEN2LOCALID(To_s),
+    TOKEN2LOCALID(To_i),
+    TOKEN2LOCALID(Bt),
+    TOKEN2LOCALID(Bt_locations),
     TOKEN2LOCALID(UScore),
     tLAST_OP_ID = tPRESERVED_ID_END-1,
     idLAST_OP_ID = tLAST_OP_ID >> ID_SCOPE_SHIFT

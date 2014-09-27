@@ -3,7 +3,7 @@
 
   thread_pthread.c -
 
-  $Author: nagachika $
+  $Author: hsbt $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -34,18 +34,22 @@
 #include <sys/time.h>
 #endif
 
-static void native_mutex_lock(pthread_mutex_t *lock);
-static void native_mutex_unlock(pthread_mutex_t *lock);
-static int native_mutex_trylock(pthread_mutex_t *lock);
-static void native_mutex_initialize(pthread_mutex_t *lock);
-static void native_mutex_destroy(pthread_mutex_t *lock);
+static void native_mutex_lock(rb_nativethread_lock_t *lock);
+static void native_mutex_unlock(rb_nativethread_lock_t *lock);
+static int native_mutex_trylock(rb_nativethread_lock_t *lock);
+static void native_mutex_initialize(rb_nativethread_lock_t *lock);
+static void native_mutex_destroy(rb_nativethread_lock_t *lock);
 static void native_cond_signal(rb_nativethread_cond_t *cond);
 static void native_cond_broadcast(rb_nativethread_cond_t *cond);
-static void native_cond_wait(rb_nativethread_cond_t *cond, pthread_mutex_t *mutex);
+static void native_cond_wait(rb_nativethread_cond_t *cond, rb_nativethread_lock_t *mutex);
 static void native_cond_initialize(rb_nativethread_cond_t *cond, int flags);
 static void native_cond_destroy(rb_nativethread_cond_t *cond);
 static void rb_thread_wakeup_timer_thread_low(void);
-static pthread_t timer_thread_id;
+static struct {
+    pthread_t id;
+    int created;
+} timer_thread;
+#define TIMER_THREAD_CREATED_P() (timer_thread.created != 0)
 
 #define RB_CONDATTR_CLOCK_MONOTONIC 1
 
@@ -184,14 +188,14 @@ gvl_atfork(rb_vm_t *vm)
 #define NATIVE_MUTEX_LOCK_DEBUG 0
 
 static void
-mutex_debug(const char *msg, pthread_mutex_t *lock)
+mutex_debug(const char *msg, void *lock)
 {
     if (NATIVE_MUTEX_LOCK_DEBUG) {
 	int r;
 	static pthread_mutex_t dbglock = PTHREAD_MUTEX_INITIALIZER;
 
 	if ((r = pthread_mutex_lock(&dbglock)) != 0) {exit(EXIT_FAILURE);}
-	fprintf(stdout, "%s: %p\n", msg, (void *)lock);
+	fprintf(stdout, "%s: %p\n", msg, lock);
 	if ((r = pthread_mutex_unlock(&dbglock)) != 0) {exit(EXIT_FAILURE);}
     }
 }
@@ -338,7 +342,7 @@ native_cond_wait(rb_nativethread_cond_t *cond, pthread_mutex_t *mutex)
 }
 
 static int
-native_cond_timedwait(rb_nativethread_cond_t *cond, pthread_mutex_t *mutex, struct timespec *ts)
+native_cond_timedwait(rb_nativethread_cond_t *cond, pthread_mutex_t *mutex, const struct timespec *ts)
 {
     int r;
 
@@ -412,7 +416,7 @@ native_cond_timeout(rb_nativethread_cond_t *cond, struct timespec timeout_rel)
 #define native_thread_yield() ((void)0)
 #endif
 
-#if defined(SIGVTALRM) && !defined(__CYGWIN__) && !defined(__SYMBIAN32__)
+#if defined(SIGVTALRM) && !defined(__CYGWIN__)
 #define USE_SIGNAL_THREAD_LIST 1
 #endif
 #ifdef USE_SIGNAL_THREAD_LIST
@@ -450,6 +454,7 @@ Init_native_thread(void)
 
     pthread_key_create(&ruby_native_thread_key, NULL);
     th->thread_id = pthread_self();
+    fill_thread_id_str(th);
     native_thread_init(th);
 #ifdef USE_SIGNAL_THREAD_LIST
     native_mutex_initialize(&signal_thread_list_lock);
@@ -794,6 +799,7 @@ thread_start_func_1(void *th_ptr)
 	VALUE stack_start;
 #endif
 
+	fill_thread_id_str(th);
 #if defined USE_NATIVE_THREAD_INIT
 	native_thread_init_stack(th);
 #endif
@@ -827,13 +833,13 @@ struct cached_thread_entry {
 
 
 #if USE_THREAD_CACHE
-static pthread_mutex_t thread_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static rb_nativethread_lock_t thread_cache_lock = RB_NATIVETHREAD_LOCK_INIT;
 struct cached_thread_entry *cached_thread_root;
 
 static rb_thread_t *
 register_cached_thread_and_wait(void)
 {
-    rb_nativethread_cond_t cond = { PTHREAD_COND_INITIALIZER, };
+    rb_nativethread_cond_t cond = RB_NATIVETHREAD_COND_INIT;
     volatile rb_thread_t *th_area = 0;
     struct timeval tv;
     struct timespec ts;
@@ -848,7 +854,7 @@ register_cached_thread_and_wait(void)
     ts.tv_sec = tv.tv_sec + 60;
     ts.tv_nsec = tv.tv_usec * 1000;
 
-    pthread_mutex_lock(&thread_cache_lock);
+    native_mutex_lock(&thread_cache_lock);
     {
 	entry->th_area = &th_area;
 	entry->cond = &cond;
@@ -872,7 +878,7 @@ register_cached_thread_and_wait(void)
 	free(entry); /* ok */
 	native_cond_destroy(&cond);
     }
-    pthread_mutex_unlock(&thread_cache_lock);
+    native_mutex_unlock(&thread_cache_lock);
 
     return (rb_thread_t *)th_area;
 }
@@ -886,7 +892,7 @@ use_cached_thread(rb_thread_t *th)
     struct cached_thread_entry *entry;
 
     if (cached_thread_root) {
-	pthread_mutex_lock(&thread_cache_lock);
+	native_mutex_lock(&thread_cache_lock);
 	entry = cached_thread_root;
 	{
 	    if (cached_thread_root) {
@@ -898,7 +904,7 @@ use_cached_thread(rb_thread_t *th)
 	if (result) {
 	    native_cond_signal(entry->cond);
 	}
-	pthread_mutex_unlock(&thread_cache_lock);
+	native_mutex_unlock(&thread_cache_lock);
     }
 #endif
     return result;
@@ -954,6 +960,8 @@ native_thread_create(rb_thread_t *th)
 	native_mutex_unlock(&th->interrupt_lock);
 #endif
 	thread_debug("create: %p (%d)\n", (void *)th, err);
+	/* should be done in the created thread */
+	fill_thread_id_str(th);
 #ifdef HAVE_PTHREAD_ATTR_INIT
 	CHECK_ERR(pthread_attr_destroy(&attr));
 #endif
@@ -1019,7 +1027,7 @@ static void
 native_sleep(rb_thread_t *th, struct timeval *timeout_tv)
 {
     struct timespec timeout;
-    pthread_mutex_t *lock = &th->interrupt_lock;
+    rb_nativethread_lock_t *lock = &th->interrupt_lock;
     rb_nativethread_cond_t *cond = &th->native_thread_data.sleep_cond;
 
     if (timeout_tv) {
@@ -1046,7 +1054,7 @@ native_sleep(rb_thread_t *th, struct timeval *timeout_tv)
 
     GVL_UNLOCK_BEGIN();
     {
-	pthread_mutex_lock(lock);
+	native_mutex_lock(lock);
 	th->unblock.func = ubf_pthread_cond_signal;
 	th->unblock.arg = th;
 
@@ -1063,7 +1071,7 @@ native_sleep(rb_thread_t *th, struct timeval *timeout_tv)
 	th->unblock.func = 0;
 	th->unblock.arg = 0;
 
-	pthread_mutex_unlock(lock);
+	native_mutex_unlock(lock);
     }
     GVL_UNLOCK_END();
 
@@ -1153,7 +1161,7 @@ remove_signal_thread_list(rb_thread_t *th)
 static void
 ubf_select_each(rb_thread_t *th)
 {
-    thread_debug("ubf_select_each (%p)\n", (void *)th->thread_id);
+    thread_debug("ubf_select_each (%"PRI_THREAD_ID")\n", thread_id_str(th));
     if (th) {
 	pthread_kill(th->thread_id, SIGVTALRM);
     }
@@ -1172,7 +1180,7 @@ ubf_select(void *ptr)
      * In the other hands, we shouldn't call rb_thread_wakeup_timer_thread()
      * if running on timer thread because it may make endless wakeups.
      */
-    if (pthread_self() != timer_thread_id)
+    if (!pthread_equal(pthread_self(), timer_thread.id))
 	rb_thread_wakeup_timer_thread();
     ubf_select_each(th);
 }
@@ -1218,9 +1226,14 @@ static int check_signal_thread_list(void) { return 0; }
 #define TIME_QUANTUM_USEC (100 * 1000)
 
 #if USE_SLEEPY_TIMER_THREAD
-static int timer_thread_pipe[2] = {-1, -1};
-static int timer_thread_pipe_low[2] = {-1, -1}; /* low priority */
-static int timer_thread_pipe_owner_process;
+static struct {
+    int normal[2];
+    int low[2];
+    int owner_process;
+} timer_thread_pipe = {
+    {-1, -1},
+    {-1, -1}, /* low priority */
+};
 
 /* only use signal-safe system calls here */
 static void
@@ -1229,11 +1242,12 @@ rb_thread_wakeup_timer_thread_fd(int fd)
     ssize_t result;
 
     /* already opened */
-    if (timer_thread_pipe_owner_process == getpid()) {
+    if (timer_thread_pipe.owner_process == getpid()) {
 	const char *buff = "!";
       retry:
 	if ((result = write(fd, buff, 1)) <= 0) {
-	    switch (errno) {
+	    int e = errno;
+	    switch (e) {
 	      case EINTR: goto retry;
 	      case EAGAIN:
 #if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
@@ -1241,7 +1255,7 @@ rb_thread_wakeup_timer_thread_fd(int fd)
 #endif
 		break;
 	      default:
-		rb_async_bug_errno("rb_thread_wakeup_timer_thread - write", errno);
+		rb_async_bug_errno("rb_thread_wakeup_timer_thread - write", e);
 	    }
 	}
 	if (TT_DEBUG) WRITE_CONST(2, "rb_thread_wakeup_timer_thread: write\n");
@@ -1254,13 +1268,13 @@ rb_thread_wakeup_timer_thread_fd(int fd)
 void
 rb_thread_wakeup_timer_thread(void)
 {
-    rb_thread_wakeup_timer_thread_fd(timer_thread_pipe[1]);
+    rb_thread_wakeup_timer_thread_fd(timer_thread_pipe.normal[1]);
 }
 
 static void
 rb_thread_wakeup_timer_thread_low(void)
 {
-    rb_thread_wakeup_timer_thread_fd(timer_thread_pipe_low[1]);
+    rb_thread_wakeup_timer_thread_fd(timer_thread_pipe.low[1]);
 }
 
 /* VM-dependent API is not available for this function */
@@ -1278,13 +1292,17 @@ consume_communication_pipe(int fd)
 	    return;
 	}
 	else if (result < 0) {
-	    switch (errno) {
-	    case EINTR:
+	    int e = errno;
+	    switch (e) {
+	      case EINTR:
 		continue; /* retry */
-	    case EAGAIN:
+	      case EAGAIN:
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+	      case EWOULDBLOCK:
+#endif
 		return;
-	    default:
-		rb_async_bug_errno("consume_communication_pipe: read\n", errno);
+	      default:
+		rb_async_bug_errno("consume_communication_pipe: read\n", e);
 	    }
 	}
     }
@@ -1341,15 +1359,15 @@ setup_communication_pipe_internal(int pipes[2])
 static void
 setup_communication_pipe(void)
 {
-    if (timer_thread_pipe_owner_process == getpid()) {
+    if (timer_thread_pipe.owner_process == getpid()) {
 	/* already set up. */
 	return;
     }
-    setup_communication_pipe_internal(timer_thread_pipe);
-    setup_communication_pipe_internal(timer_thread_pipe_low);
+    setup_communication_pipe_internal(timer_thread_pipe.normal);
+    setup_communication_pipe_internal(timer_thread_pipe.low);
 
     /* validate pipe on this process */
-    timer_thread_pipe_owner_process = getpid();
+    timer_thread_pipe.owner_process = getpid();
 }
 
 /**
@@ -1365,9 +1383,9 @@ timer_thread_sleep(rb_global_vm_lock_t* gvl)
     int need_polling;
     struct pollfd pollfds[2];
 
-    pollfds[0].fd = timer_thread_pipe[0];
+    pollfds[0].fd = timer_thread_pipe.normal[0];
     pollfds[0].events = POLLIN;
-    pollfds[1].fd = timer_thread_pipe_low[0];
+    pollfds[1].fd = timer_thread_pipe.low[0];
     pollfds[1].events = POLLIN;
 
     need_polling = check_signal_thread_list();
@@ -1385,17 +1403,18 @@ timer_thread_sleep(rb_global_vm_lock_t* gvl)
 	/* maybe timeout */
     }
     else if (result > 0) {
-	consume_communication_pipe(timer_thread_pipe[0]);
-	consume_communication_pipe(timer_thread_pipe_low[0]);
+	consume_communication_pipe(timer_thread_pipe.normal[0]);
+	consume_communication_pipe(timer_thread_pipe.low[0]);
     }
     else { /* result < 0 */
-	switch (errno) {
-	case EBADF:
-	case EINVAL:
-	case ENOMEM: /* from Linux man */
-	case EFAULT: /* from FreeBSD man */
-	    rb_async_bug_errno("thread_timer: select", errno);
-	default:
+	int e = errno;
+	switch (e) {
+	  case EBADF:
+	  case EINVAL:
+	  case ENOMEM: /* from Linux man */
+	  case EFAULT: /* from FreeBSD man */
+	    rb_async_bug_errno("thread_timer: select", e);
+	  default:
 	    /* ignore */;
 	}
     }
@@ -1406,7 +1425,7 @@ timer_thread_sleep(rb_global_vm_lock_t* gvl)
 void rb_thread_wakeup_timer_thread(void) {}
 static void rb_thread_wakeup_timer_thread_low(void) {}
 
-static pthread_mutex_t timer_thread_lock;
+static rb_nativethread_lock_t timer_thread_lock;
 static rb_nativethread_cond_t timer_thread_cond;
 
 static inline void
@@ -1466,7 +1485,7 @@ thread_timer(void *p)
 static void
 rb_thread_create_timer_thread(void)
 {
-    if (!timer_thread_id) {
+    if (!timer_thread.created) {
 	int err;
 #ifdef HAVE_PTHREAD_ATTR_INIT
 	pthread_attr_t attr;
@@ -1496,18 +1515,19 @@ rb_thread_create_timer_thread(void)
 #endif /* USE_SLEEPY_TIMER_THREAD */
 
 	/* create timer thread */
-	if (timer_thread_id) {
+	if (timer_thread.created) {
 	    rb_bug("rb_thread_create_timer_thread: Timer thread was already created\n");
 	}
 #ifdef HAVE_PTHREAD_ATTR_INIT
-	err = pthread_create(&timer_thread_id, &attr, thread_timer, &GET_VM()->gvl);
+	err = pthread_create(&timer_thread.id, &attr, thread_timer, &GET_VM()->gvl);
 #else
-	err = pthread_create(&timer_thread_id, NULL, thread_timer, &GET_VM()->gvl);
+	err = pthread_create(&timer_thread.id, NULL, thread_timer, &GET_VM()->gvl);
 #endif
 	if (err != 0) {
 	    fprintf(stderr, "[FATAL] Failed to create timer thread: %s\n", strerror(err));
 	    exit(EXIT_FAILURE);
 	}
+	timer_thread.created = 1;
 #ifdef HAVE_PTHREAD_ATTR_INIT
 	pthread_attr_destroy(&attr);
 #endif
@@ -1524,9 +1544,9 @@ native_stop_timer_thread(int close_anyway)
     if (stopped) {
 	/* join */
 	rb_thread_wakeup_timer_thread();
-	native_thread_join(timer_thread_id);
+	native_thread_join(timer_thread.id);
 	if (TT_DEBUG) fprintf(stderr, "joined timer thread\n");
-	timer_thread_id = 0;
+	timer_thread.created = 0;
 
 	/* close communication pipe */
 	if (close_anyway) {
@@ -1597,10 +1617,10 @@ int
 rb_reserved_fd_p(int fd)
 {
 #if USE_SLEEPY_TIMER_THREAD
-    if (fd == timer_thread_pipe[0]     ||
-	fd == timer_thread_pipe[1]     ||
-	fd == timer_thread_pipe_low[0] ||
-	fd == timer_thread_pipe_low[1]) {
+    if (fd == timer_thread_pipe.normal[0] ||
+	fd == timer_thread_pipe.normal[1] ||
+	fd == timer_thread_pipe.low[0] ||
+	fd == timer_thread_pipe.low[1]) {
 	return 1;
     }
     else {

@@ -1087,13 +1087,17 @@ class TestIO < Test::Unit::TestCase
 
   def test_dup
     ruby do |f|
-      f2 = f.dup
-      f.puts "foo"
-      f2.puts "bar"
-      f.close_write
-      f2.close_write
-      assert_equal("foo\nbar\n", f.read)
-      assert_equal("", f2.read)
+      begin
+        f2 = f.dup
+        f.puts "foo"
+        f2.puts "bar"
+        f.close_write
+        f2.close_write
+        assert_equal("foo\nbar\n", f.read)
+        assert_equal("", f2.read)
+      ensure
+        f2.close
+      end
     end
   end
 
@@ -1404,18 +1408,22 @@ class TestIO < Test::Unit::TestCase
   end
 
   def test_pid
-    r, w = IO.pipe
-    assert_equal(nil, r.pid)
-    assert_equal(nil, w.pid)
+    IO.pipe {|r, w|
+      assert_equal(nil, r.pid)
+      assert_equal(nil, w.pid)
+    }
 
-    pipe = IO.popen(EnvUtil.rubybin, "r+")
-    pid1 = pipe.pid
-    pipe.puts "p $$"
-    pipe.close_write
-    pid2 = pipe.read.chomp.to_i
-    assert_equal(pid2, pid1)
-    assert_equal(pid2, pipe.pid)
-    pipe.close
+    begin
+      pipe = IO.popen(EnvUtil.rubybin, "r+")
+      pid1 = pipe.pid
+      pipe.puts "p $$"
+      pipe.close_write
+      pid2 = pipe.read.chomp.to_i
+      assert_equal(pid2, pid1)
+      assert_equal(pid2, pipe.pid)
+    ensure
+      pipe.close
+    end
     assert_raise(IOError) { pipe.pid }
   end
 
@@ -1653,7 +1661,7 @@ class TestIO < Test::Unit::TestCase
   end
 
   def test_pos_with_getc
-    bug6179 = '[ruby-core:43497]'
+    _bug6179 = '[ruby-core:43497]'
     make_tempfile {|t|
       ["", "t", "b"].each do |mode|
         open(t.path, "w#{mode}") do |f|
@@ -1676,6 +1684,25 @@ class TestIO < Test::Unit::TestCase
     }
   end
 
+  def can_seek_data(f)
+    if /linux/ =~ RUBY_PLATFORM
+      require "-test-/file"
+      # lseek(2)
+      case Bug::File::Fs.fsname(f.path)
+      when "btrfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,1]) >= 0
+      when "ocfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,2]) >= 0
+      when "xfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,5]) >= 0
+      when "ext4"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,8]) >= 0
+      when "tmpfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,8]) >= 0
+      end
+    end
+    false
+  end
 
   def test_seek
     make_tempfile {|t|
@@ -1702,16 +1729,28 @@ class TestIO < Test::Unit::TestCase
 
       if defined?(IO::SEEK_DATA)
         open(t.path) { |f|
+          break unless can_seek_data(f)
           assert_equal("foo\n", f.gets)
           f.seek(0, IO::SEEK_DATA)
           assert_equal("foo\nbar\nbaz\n", f.read)
         }
+        open(t.path, 'r+') { |f|
+          break unless can_seek_data(f)
+          f.seek(100*1024, IO::SEEK_SET)
+          f.print("zot\n")
+          f.seek(50*1024, IO::SEEK_DATA)
+          assert_operator(f.pos, :>=, 50*1024)
+          assert_match(/\A\0*zot\n\z/, f.read)
+        }
       end
 
       if defined?(IO::SEEK_HOLE)
-        open(t.path) { |f|2
+        open(t.path) { |f|
+          break unless can_seek_data(f)
           assert_equal("foo\n", f.gets)
           f.seek(0, IO::SEEK_HOLE)
+          assert_operator(f.pos, :>, 20)
+          f.seek(100*1024, IO::SEEK_HOLE)
           assert_equal("", f.read)
         }
       end
@@ -1738,16 +1777,28 @@ class TestIO < Test::Unit::TestCase
 
       if defined?(IO::SEEK_DATA)
         open(t.path) { |f|
+          break unless can_seek_data(f)
           assert_equal("foo\n", f.gets)
           f.seek(0, :DATA)
           assert_equal("foo\nbar\nbaz\n", f.read)
+        }
+        open(t.path, 'r+') { |f|
+          break unless can_seek_data(f)
+          f.seek(100*1024, :SET)
+          f.print("zot\n")
+          f.seek(50*1024, :DATA)
+          assert_operator(f.pos, :>=, 50*1024)
+          assert_match(/\A\0*zot\n\z/, f.read)
         }
       end
 
       if defined?(IO::SEEK_HOLE)
         open(t.path) { |f|
+          break unless can_seek_data(f)
           assert_equal("foo\n", f.gets)
           f.seek(0, :HOLE)
+          assert_operator(f.pos, :>, 20)
+          f.seek(100*1024, :HOLE)
           assert_equal("", f.read)
         }
       end
@@ -1889,7 +1940,7 @@ class TestIO < Test::Unit::TestCase
       assert_raise(Errno::EBADF, feature2250) {t.close}
     end
   ensure
-    t.unlink
+    t.close!
   end
 
   def test_autoclose_false_closed_by_finalizer
@@ -1905,7 +1956,7 @@ class TestIO < Test::Unit::TestCase
       assert_nothing_raised(Errno::EBADF, feature2250) {t.close}
     end
   ensure
-    t.unlink
+    t.close!
   end
 
   def test_open_redirect
@@ -2231,7 +2282,16 @@ End
   end
 
   def test_new_with_block
-    assert_in_out_err([], "r, w = IO.pipe; IO.new(r) {}", [], /^.+$/)
+    assert_in_out_err([], "r, w = IO.pipe; r.autoclose=false; IO.new(r.fileno) {}.close", [], /^.+$/)
+    n = "IO\u{5165 51fa 529b}"
+    c = eval("class #{n} < IO; self; end")
+    IO.pipe do |r, w|
+      assert_warning(/#{n}/) {
+        r.autoclose=false
+        io = c.new(r.fileno) {}
+        io.close
+      }
+    end
   end
 
   def test_readline2
@@ -2316,21 +2376,27 @@ End
   def test_flush_in_finalizer1
     require 'tempfile'
     bug3910 = '[ruby-dev:42341]'
-    Tempfile.open("bug3910") {|t|
+    t = Tempfile.open("bug3910") {|t|
       path = t.path
       t.close
       fds = []
       assert_nothing_raised(TypeError, bug3910) do
         500.times {
           f = File.open(path, "w")
+          f.instance_variable_set(:@test_flush_in_finalizer1, true)
           fds << f.fileno
           f.print "hoge"
         }
       end
-      t.unlink
+      t
     }
   ensure
-    GC.start
+    ObjectSpace.each_object(File) {|f|
+      if f.instance_variables.include?(:@test_flush_in_finalizer1)
+        f.close
+      end
+    }
+    t.close!
   end
 
   def test_flush_in_finalizer2
@@ -2339,14 +2405,23 @@ End
     Tempfile.open("bug3910") {|t|
       path = t.path
       t.close
-      1.times do
-        io = open(path,"w")
-        io.print "hoge"
+      begin
+        1.times do
+          io = open(path,"w")
+          io.instance_variable_set(:@test_flush_in_finalizer2, true)
+          io.print "hoge"
+        end
+        assert_nothing_raised(TypeError, bug3910) do
+          GC.start
+        end
+      ensure
+        ObjectSpace.each_object(File) {|f|
+          if f.instance_variables.include?(:@test_flush_in_finalizer2)
+            f.close
+          end
+        }
       end
-      assert_nothing_raised(TypeError, bug3910) do
-        GC.start
-      end
-      t.unlink
+      t.close!
     }
   end
 
@@ -2378,7 +2453,7 @@ End
       %w{normal random sequential willneed dontneed noreuse}.map(&:to_sym).each do |adv|
         [[0,0], [0, 20], [400, 2]].each do |offset, len|
           open(tf.path) do |t|
-            assert_equal(t.advise(adv, offset, len), nil)
+            assert_nil(t.advise(adv, offset, len))
             assert_raise(ArgumentError, "superfluous arguments") do
               t.advise(adv, offset, len, offset)
             end
@@ -2405,10 +2480,10 @@ End
   def test_invalid_advise
     feature4204 = '[ruby-dev:42887]'
     make_tempfile {|tf|
-      %w{Normal rand glark will_need zzzzzzzzzzzz \u2609}.map(&:to_sym).each do |adv|
+      %W{Normal rand glark will_need zzzzzzzzzzzz \u2609}.map(&:to_sym).each do |adv|
         [[0,0], [0, 20], [400, 2]].each do |offset, len|
           open(tf.path) do |t|
-            assert_raise(NotImplementedError, feature4204) { t.advise(adv, offset, len) }
+            assert_raise_with_message(NotImplementedError, /#{Regexp.quote(adv.inspect)}/, feature4204) { t.advise(adv, offset, len) }
           end
         end
       end
@@ -2789,18 +2864,31 @@ End
     bug6099 = '[ruby-dev:45297]'
     buf = " " * 100
     data = "a" * 100
+    th = nil
     with_pipe do |r,w|
-      r.fcntl(Fcntl::F_SETFL, Fcntl::O_NONBLOCK)
-      th = Thread.new {r.readpartial(100, buf)}
-      Thread.pass until th.stop?
-      buf.replace("")
-      assert_empty(buf, bug6099)
-      w.write(data)
-      Thread.pass while th.alive?
-      th.join
+      begin
+        r.nonblock = true
+        th = Thread.new {r.readpartial(100, buf)}
+
+        Thread.pass until th.stop?
+
+        assert_equal 100, buf.bytesize
+
+        begin
+          buf.replace("")
+        rescue RuntimeError => e
+          assert_match(/can't modify string; temporarily locked/, e.message)
+          Thread.pass
+        end until buf.empty?
+
+        assert_empty(buf, bug6099)
+        assert_predicate(th, :alive?)
+        w.write(data)
+        Thread.pass while th.alive?
+        th.join
+      end
     end
     assert_equal(data, buf, bug6099)
-  rescue RuntimeError # can't modify string; temporarily locked
   end
 
   def test_advise_pipe
@@ -2958,42 +3046,51 @@ End
     bug8669 = '[ruby-core:56121] [Bug #8669]'
 
     str = ""
-    r, = IO.pipe
-    t = Thread.new { r.read(nil, str) }
-    sleep 0.1 until t.stop?
-    t.raise
-    sleep 0.1 while t.alive?
-    assert_nothing_raised(RuntimeError, bug8669) { str.clear }
-  ensure
-    t.kill
+    IO.pipe {|r,|
+      t = Thread.new { r.read(nil, str) }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      assert_raise(RuntimeError) { t.join }
+    }
   end
 
   def test_readpartial_unlocktmp_ensure
     bug8669 = '[ruby-core:56121] [Bug #8669]'
 
     str = ""
-    r, = IO.pipe
-    t = Thread.new { r.readpartial(4096, str) }
-    sleep 0.1 until t.stop?
-    t.raise
-    sleep 0.1 while t.alive?
-    assert_nothing_raised(RuntimeError, bug8669) { str.clear }
-  ensure
-    t.kill
+    IO.pipe {|r, w|
+      t = Thread.new { r.readpartial(4096, str) }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      assert_raise(RuntimeError) { t.join }
+    }
   end
 
   def test_sysread_unlocktmp_ensure
     bug8669 = '[ruby-core:56121] [Bug #8669]'
 
     str = ""
-    r, = IO.pipe
-    t = Thread.new { r.sysread(4096, str) }
-    sleep 0.1 until t.stop?
-    t.raise
-    sleep 0.1 while t.alive?
-    assert_nothing_raised(RuntimeError, bug8669) { str.clear }
-  ensure
-    t.kill
+    IO.pipe {|r, w|
+      t = Thread.new { r.sysread(4096, str) }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      assert_raise(RuntimeError) { t.join }
+    }
+  end
+
+  def test_exception_at_close
+    bug10153 = '[ruby-core:64463] [Bug #10153] exception in close at the end of block'
+    assert_raise(Errno::EBADF, bug10153) do
+      IO.pipe do |r, w|
+        assert_nothing_raised {IO.open(w.fileno) {}}
+      end
+    end
   end
 
   def test_exception_at_close

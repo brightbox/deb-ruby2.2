@@ -186,6 +186,7 @@ ruby_strtoul(const char *str, char **endptr, int base)
 #endif
 
 
+#ifndef HAVE_GNU_QSORT_R
 /* mm.c */
 
 #define mmtype long
@@ -452,6 +453,7 @@ ruby_qsort(void* base, const size_t nel, const size_t size, cmpfunc_t *cmp, void
     else goto nxt;                         /* need not to sort both sides */
   }
 }
+#endif /* HAVE_GNU_QSORT_R */
 
 char *
 ruby_strdup(const char *str)
@@ -465,19 +467,14 @@ ruby_strdup(const char *str)
     return tmp;
 }
 
-#ifdef __native_client__
 char *
 ruby_getcwd(void)
 {
+#if defined __native_client__
     char *buf = xmalloc(2);
     strcpy(buf, ".");
-    return buf;
-}
-#else
-char *
-ruby_getcwd(void)
-{
-#ifdef HAVE_GETCWD
+#elif defined HAVE_GETCWD
+# if defined NO_GETCWD_MALLOC
     int size = 200;
     char *buf = xmalloc(size);
 
@@ -489,6 +486,12 @@ ruby_getcwd(void)
 	size *= 2;
 	buf = xrealloc(buf, size);
     }
+# else
+    char *buf, *cwd = getcwd(NULL, 0);
+    if (!cwd) rb_sys_fail("getcwd");
+    buf = ruby_strdup(cwd);	/* allocate by xmalloc */
+    free(cwd);
+# endif
 #else
 # ifndef PATH_MAX
 #  define PATH_MAX 8192
@@ -502,7 +505,6 @@ ruby_getcwd(void)
 #endif
     return buf;
 }
-#endif
 
 /****************************************************************
  *
