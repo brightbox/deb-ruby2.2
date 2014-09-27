@@ -17,8 +17,8 @@ baseruby=$(shell test -x /usr/bin/ruby && echo /usr/bin/ruby || echo /usr/bin/ru
 
 configure_options += --enable-multiarch
 configure_options += --target=$(DEB_HOST_MULTIARCH)
-configure_options += --program-suffix=2.1
-configure_options += --with-soname=ruby-2.1
+configure_options += --program-suffix=2.2
+configure_options += --with-soname=ruby-2.2
 configure_options += --enable-shared
 configure_options += --disable-rpath
 configure_options += --with-baseruby=$(baseruby)
@@ -69,12 +69,12 @@ override_dh_auto_build-arch:
 override_dh_auto_install-arch:
 	$(MAKE) install-nodoc DESTDIR=$(CURDIR)/debian/tmp
 	# remove RPATH from tcltklib bindings
-	chrpath --delete $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/ruby/2.1.0/tcltklib.so
+	chrpath --delete $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/ruby/2.2.0/tcltklib.so
 	# handle embedded copy of jquery
-	$(RM) $(CURDIR)/debian/tmp/usr/lib/ruby/2.1.0/rdoc/generator/template/darkfish/js/jquery.js
-	dh_link -plibruby2.1 /usr/share/javascript/jquery/jquery.min.js /usr/lib/ruby/2.1.0/rdoc/generator/template/darkfish/js/jquery.js
+	$(RM) $(CURDIR)/debian/tmp/usr/lib/ruby/2.2.0/rdoc/generator/template/darkfish/js/jquery.js
+	dh_link -plibruby2.2 /usr/share/javascript/jquery/jquery.min.js /usr/lib/ruby/2.2.0/rdoc/generator/template/darkfish/js/jquery.js
 	# remove embedded SSL certificates (replaced using ca-certificates via rubygems-integration)
-	$(RM) $(CURDIR)/debian/tmp/usr/lib/ruby/2.1.0/rubygems/ssl_certs/*
+	$(RM) $(CURDIR)/debian/tmp/usr/lib/ruby/2.2.0/rubygems/ssl_certs/*
 	# sanity check
 	debian/sanity_check
 
@@ -82,7 +82,7 @@ override_dh_auto_build-indep:
 	$(MAKE) docs V=1
 
 override_dh_auto_install-indep:
-	$(MAKE) install-doc DESTDIR=$(CURDIR)/debian/ruby2.1-doc
+	$(MAKE) install-doc DESTDIR=$(CURDIR)/debian/ruby2.2-doc
 
 override_dh_install:
 	dh_install
