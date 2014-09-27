@@ -37,7 +37,8 @@ class TestSyntax < Test::Unit::TestCase
       make_tmpsrc(f, "# -*- coding: #{enc.name} -*-")
       assert_raise(ArgumentError, enc.name) {load(f.path)}
     end
-    f.close!
+  ensure
+    f.close! if f
   end
 
   def test_script_lines
@@ -53,7 +54,8 @@ class TestSyntax < Test::Unit::TestCase
         assert_equal([enc, enc], debug_lines[f.path].map(&:encoding), bug4361)
       end
     end
-    f.close!
+  ensure
+    f.close! if f
   end
 
   def test_newline_in_block_parameters
@@ -116,17 +118,41 @@ class TestSyntax < Test::Unit::TestCase
     assert_raise(TypeError) {o.kw(**h)}
   end
 
+  def test_keyword_self_reference
+    bug9593 = '[ruby-core:61299] [Bug #9593]'
+    o = Object.new
+    def o.foo(var: defined?(var)) var end
+    assert_equal(42, o.foo(var: 42))
+    assert_equal("local-variable", o.foo, bug9593)
+
+    o = Object.new
+    def o.foo(var: var) var end
+    assert_nil(o.foo, bug9593)
+  end
+
+  def test_optional_self_reference
+    bug9593 = '[ruby-core:61299] [Bug #9593]'
+    o = Object.new
+    def o.foo(var = defined?(var)) var end
+    assert_equal(42, o.foo(42))
+    assert_equal("local-variable", o.foo, bug9593)
+
+    o = Object.new
+    def o.foo(var = var) var end
+    assert_nil(o.foo, bug9593)
+  end
+
   def test_warn_grouped_expression
     bug5214 = '[ruby-core:39050]'
     assert_warning("", bug5214) do
-      assert_valid_syntax("foo \\\n(\n  true)", "test") {$VERBOSE = true}
+      assert_valid_syntax("foo \\\n(\n  true)", "test", verbose: true)
     end
   end
 
   def test_warn_unreachable
     assert_warning("test:3: warning: statement not reached\n") do
       code = "loop do\n" "break\n" "foo\n" "end"
-      assert_valid_syntax(code, "test") {$VERBOSE = true}
+      assert_valid_syntax(code, "test", verbose: true)
     end
   end
 
@@ -146,7 +172,7 @@ WARN
      [:%, "string literal"],
     ].each do |op, syn|
       assert_warning(warning % [op, syn]) do
-        assert_valid_syntax("puts 1 #{op}0", "test") {$VERBOSE = true}
+        assert_valid_syntax("puts 1 #{op}0", "test", verbose: true)
       end
     end
   end
@@ -400,6 +426,15 @@ eom
     assert_warning(/encountered \\r/, feature8699) do
       eval("\r""__id__\r")
     end
+  end
+
+  def test_unexpected_fraction
+    msg = /unexpected fraction/
+    assert_syntax_error("0x0.0", msg)
+    assert_syntax_error("0b0.0", msg)
+    assert_syntax_error("0d0.0", msg)
+    assert_syntax_error("0o0.0", msg)
+    assert_syntax_error("0.0.0", msg)
   end
 
   def test_error_message_encoding

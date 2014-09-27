@@ -2,7 +2,7 @@
 
   struct.c -
 
-  $Author: naruse $
+  $Author: nobu $
   created at: Tue Mar 22 18:44:30 JST 1995
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -27,12 +27,6 @@ struct_ivar_get(VALUE c, ID id)
 	if (c == 0 || c == rb_cStruct)
 	    return Qnil;
     }
-}
-
-VALUE
-rb_struct_iv_get(VALUE c, const char *name)
-{
-    return struct_ivar_get(c, rb_intern(name));
 }
 
 VALUE
@@ -154,16 +148,19 @@ rb_struct_modify(VALUE s)
 static VALUE
 rb_struct_set(VALUE obj, VALUE val)
 {
-    VALUE members, slot;
+    VALUE members, slot, fsym;
     long i, len;
     ID fid = rb_frame_this_func();
 
     members = rb_struct_members(obj);
     len = RARRAY_LEN(members);
     rb_struct_modify(obj);
+    fid = rb_id_attrget(fid);
+    if (!fid) not_a_member(rb_frame_this_func());
+    fsym = ID2SYM(fid);
     for (i=0; i<len; i++) {
 	slot = RARRAY_AREF(members, i);
-	if (rb_id_attrset(SYM2ID(slot)) == fid) {
+	if (slot == fsym) {
 	    RSTRUCT_SET(obj, i, val);
 	    return val;
 	}
@@ -493,7 +490,7 @@ struct_alloc(VALUE klass)
 VALUE
 rb_struct_alloc(VALUE klass, VALUE values)
 {
-    return rb_class_new_instance(RARRAY_LENINT(values), RARRAY_PTR(values), klass);
+    return rb_class_new_instance(RARRAY_LENINT(values), RARRAY_CONST_PTR(values), klass);
 }
 
 VALUE
@@ -604,7 +601,7 @@ rb_struct_each_pair(VALUE s)
 static VALUE
 inspect_struct(VALUE s, VALUE dummy, int recur)
 {
-    VALUE cname = rb_class_name(rb_obj_class(s));
+    VALUE cname = rb_class_path(rb_obj_class(s));
     VALUE members, str = rb_str_new2("#<struct ");
     long i, len;
     char first = RSTRING_PTR(cname)[0];
@@ -721,17 +718,17 @@ rb_struct_init_copy(VALUE copy, VALUE s)
 }
 
 static VALUE
-rb_struct_aref_id(VALUE s, ID id)
+rb_struct_aref_sym(VALUE s, VALUE name)
 {
     VALUE members = rb_struct_members(s);
     long i, len = RARRAY_LEN(members);
 
     for (i=0; i<len; i++) {
-	if (SYM2ID(RARRAY_AREF(members, i)) == id) {
+	if (RARRAY_AREF(members, i) == name) {
 	    return RSTRUCT_GET(s, i);
 	}
     }
-    rb_name_error(id, "no member '%s' in struct", rb_id2name(id));
+    rb_name_error_str(name, "no member '% "PRIsVALUE"' in struct", name);
 
     UNREACHABLE;
 }
@@ -759,7 +756,7 @@ rb_struct_aref(VALUE s, VALUE idx)
     long i;
 
     if (RB_TYPE_P(idx, T_SYMBOL)) {
-	return rb_struct_aref_id(s, SYM2ID(idx));
+	return rb_struct_aref_sym(s, idx);
     }
     else if (RB_TYPE_P(idx, T_STRING)) {
 	ID id = rb_check_id(&idx);
@@ -767,7 +764,7 @@ rb_struct_aref(VALUE s, VALUE idx)
 	    rb_name_error_str(idx, "no member '%"PRIsVALUE"' in struct",
 			      QUOTE(idx));
 	}
-	return rb_struct_aref_id(s, id);
+	return rb_struct_aref_sym(s, ID2SYM(id));
     }
 
     i = NUM2LONG(idx);
@@ -782,7 +779,7 @@ rb_struct_aref(VALUE s, VALUE idx)
 }
 
 static VALUE
-rb_struct_aset_id(VALUE s, ID id, VALUE val)
+rb_struct_aset_sym(VALUE s, VALUE name, VALUE val)
 {
     VALUE members = rb_struct_members(s);
     long i, len = RARRAY_LEN(members);
@@ -793,13 +790,13 @@ rb_struct_aset_id(VALUE s, ID id, VALUE val)
     }
 
     for (i=0; i<len; i++) {
-	if (SYM2ID(RARRAY_AREF(members, i)) == id) {
+	if (RARRAY_AREF(members, i) == name) {
 	    rb_struct_modify(s);
 	    RSTRUCT_SET(s, i, val);
 	    return val;
 	}
     }
-    rb_name_error(id, "no member '%s' in struct", rb_id2name(id));
+    rb_name_error_str(name, "no member '% "PRIsVALUE"' in struct", name);
 
     UNREACHABLE;
 }
@@ -829,7 +826,7 @@ rb_struct_aset(VALUE s, VALUE idx, VALUE val)
     long i;
 
     if (RB_TYPE_P(idx, T_SYMBOL)) {
-	return rb_struct_aset_id(s, SYM2ID(idx), val);
+	return rb_struct_aset_sym(s, idx, val);
     }
     if (RB_TYPE_P(idx, T_STRING)) {
 	ID id = rb_check_id(&idx);
@@ -837,7 +834,7 @@ rb_struct_aset(VALUE s, VALUE idx, VALUE val)
 	    rb_name_error_str(idx, "no member '%"PRIsVALUE"' in struct",
 			      QUOTE(idx));
 	}
-	return rb_struct_aset_id(s, id, val);
+	return rb_struct_aset_sym(s, ID2SYM(id), val);
     }
 
     i = NUM2LONG(idx);
@@ -962,6 +959,8 @@ rb_struct_equal(VALUE s, VALUE s2)
  *   struct.hash   -> fixnum
  *
  * Returns a hash value based on this struct's contents (see Object#hash).
+ *
+ * See also Object#hash.
  */
 
 static VALUE
@@ -1065,7 +1064,7 @@ rb_struct_size(VALUE s)
  *  Symbol (<code>:name</code>).
  */
 void
-Init_Struct(void)
+InitVM_Struct(void)
 {
     rb_cStruct = rb_define_class("Struct", rb_cObject);
     rb_include_module(rb_cStruct, rb_mEnumerable);
@@ -1096,5 +1095,13 @@ Init_Struct(void)
     rb_define_method(rb_cStruct, "values_at", rb_struct_values_at, -1);
 
     rb_define_method(rb_cStruct, "members", rb_struct_members_m, 0);
+}
+
+#undef rb_intern
+void
+Init_Struct(void)
+{
     id_members = rb_intern("__members__");
+
+    InitVM(Struct);
 }

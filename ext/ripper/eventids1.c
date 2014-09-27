@@ -285,7 +285,7 @@ ripper_init_eventids1_table(VALUE self)
     id = rb_intern_const("aref_field");
     rb_hash_aset(h, ID2SYM(id), INT2NUM(2));
     id = rb_intern_const("arg_ambiguous");
-    rb_hash_aset(h, ID2SYM(id), INT2NUM(0));
+    rb_hash_aset(h, ID2SYM(id), INT2NUM(1));
     id = rb_intern_const("arg_paren");
     rb_hash_aset(h, ID2SYM(id), INT2NUM(1));
     id = rb_intern_const("args_add");

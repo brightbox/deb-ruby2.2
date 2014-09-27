@@ -1,6 +1,6 @@
 /************************************************
 
-  ainfo.c -
+  raddrinfo.c -
 
   created at: Thu Mar 31 12:21:29 JST 1994
 
@@ -718,8 +718,7 @@ get_addrinfo(VALUE self)
 static rb_addrinfo_t *
 alloc_addrinfo()
 {
-    rb_addrinfo_t *rai = ALLOC(rb_addrinfo_t);
-    memset(rai, 0, sizeof(rb_addrinfo_t));
+    rb_addrinfo_t *rai = ZALLOC(rb_addrinfo_t);
     rai->inspectname = Qnil;
     rai->canonname = Qnil;
     return rai;

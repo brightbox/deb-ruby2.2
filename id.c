@@ -43,6 +43,18 @@ Init_id(void)
     REGISTER_SYMID(idInitialize_copy, "initialize_copy");
     REGISTER_SYMID(idInitialize_clone, "initialize_clone");
     REGISTER_SYMID(idInitialize_dup, "initialize_dup");
+    REGISTER_SYMID(idTo_int, "to_int");
+    REGISTER_SYMID(idTo_ary, "to_ary");
+    REGISTER_SYMID(idTo_str, "to_str");
+    REGISTER_SYMID(idTo_sym, "to_sym");
+    REGISTER_SYMID(idTo_hash, "to_hash");
+    REGISTER_SYMID(idTo_proc, "to_proc");
+    REGISTER_SYMID(idTo_io, "to_io");
+    REGISTER_SYMID(idTo_a, "to_a");
+    REGISTER_SYMID(idTo_s, "to_s");
+    REGISTER_SYMID(idTo_i, "to_i");
+    REGISTER_SYMID(idBt, "bt");
+    REGISTER_SYMID(idBt_locations, "bt_locations");
     REGISTER_SYMID(idUScore, "_");
     REGISTER_SYMID(idNULL, ""/*NULL*/"");
     REGISTER_SYMID(idEmptyP, "empty?");

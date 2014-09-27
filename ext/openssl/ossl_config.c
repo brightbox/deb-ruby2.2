@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_config.c 43667 2013-11-13 09:34:08Z zzak $
+ * $Id: ossl_config.c 44349 2013-12-22 18:21:14Z zzak $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -17,7 +17,7 @@
 VALUE cConfig;
 /* Document-class: OpenSSL::ConfigError
  *
- * General error for openssl library configuration files. Including formating,
+ * General error for openssl library configuration files. Including formatting,
  * parsing errors, etc.
  */
 VALUE eConfigError;

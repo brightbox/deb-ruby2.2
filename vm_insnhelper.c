@@ -2,7 +2,7 @@
 
   vm_insnhelper.c - instruction helper functions.
 
-  $Author: naruse $
+  $Author: nobu $
 
   Copyright (C) 2007 Koichi Sasada
 
@@ -24,10 +24,18 @@
 
 static rb_control_frame_t *vm_get_ruby_level_caller_cfp(rb_thread_t *th, rb_control_frame_t *cfp);
 
+VALUE
+ruby_vm_sysstack_error_copy(void)
+{
+    VALUE e = rb_obj_alloc(rb_eSysStackError);
+    rb_obj_copy_ivar(e, sysstack_error);
+    return e;
+}
+
 static void
 vm_stackoverflow(void)
 {
-    rb_exc_raise(sysstack_error);
+    rb_exc_raise(ruby_vm_sysstack_error_copy());
 }
 
 static inline rb_control_frame_t *
@@ -41,13 +49,13 @@ vm_push_frame(rb_thread_t *th,
 	      VALUE *sp,
 	      int local_size,
 	      const rb_method_entry_t *me,
-	      size_t stack_max)
+	      int stack_max)
 {
     rb_control_frame_t *const cfp = th->cfp - 1;
     int i;
 
     /* check stack overflow */
-    CHECK_VM_STACK_OVERFLOW0(cfp, sp, local_size + (int)stack_max);
+    CHECK_VM_STACK_OVERFLOW0(cfp, sp, local_size + stack_max);
 
     th->cfp = cfp;
 
@@ -386,11 +394,10 @@ vm_get_ev_const(rb_thread_t *th, const rb_iseq_t *iseq,
 
 	    if (!NIL_P(klass)) {
 		VALUE av, am = 0;
-		st_data_t data;
+		rb_const_entry_t *ce;
 	      search_continue:
-		if (RCLASS_CONST_TBL(klass) &&
-		    st_lookup(RCLASS_CONST_TBL(klass), id, &data)) {
-		    val = ((rb_const_entry_t*)data)->value;
+		if ((ce = rb_const_lookup(klass, id))) {
+		    val = ce->value;
 		    if (val == Qundef) {
 			if (am == klass) break;
 			am = klass;
@@ -491,7 +498,7 @@ vm_getivar(VALUE obj, ID id, IC ic, rb_call_info_t *ci, int is_attr)
 
 	if (LIKELY((!is_attr && ic->ic_serial == RCLASS_SERIAL(klass)) ||
 		   (is_attr && ci->aux.index > 0))) {
-	    long index = !is_attr ? (long)ic->ic_value.index : ci->aux.index - 1;
+	    int index = !is_attr ? (int)ic->ic_value.index : ci->aux.index - 1;
 	    long len = ROBJECT_NUMIV(obj);
 	    VALUE *ptr = ROBJECT_IVPTR(obj);
 
@@ -515,7 +522,7 @@ vm_getivar(VALUE obj, ID id, IC ic, rb_call_info_t *ci, int is_attr)
 			ic->ic_serial = RCLASS_SERIAL(klass);
 		    }
 		    else { /* call_info */
-			ci->aux.index = index + 1;
+			ci->aux.index = (int)index + 1;
 		    }
 		}
 	    }
@@ -563,8 +570,11 @@ vm_setivar(VALUE obj, ID id, VALUE val, IC ic, rb_call_info_t *ci, int is_attr)
 		    ic->ic_value.index = index;
 		    ic->ic_serial = RCLASS_SERIAL(klass);
 		}
+		else if (index >= INT_MAX) {
+		    rb_raise(rb_eArgError, "too many instance variables");
+		}
 		else {
-		    ci->aux.index = index + 1;
+		    ci->aux.index = (int)(index + 1);
 		}
 	    }
 	    /* fall through */
@@ -638,10 +648,12 @@ vm_throw(rb_thread_t *th, rb_control_frame_t *reg_cfp,
 			if (cfp->ep == ep) {
 			    VALUE epc = cfp->pc - cfp->iseq->iseq_encoded;
 			    rb_iseq_t *iseq = cfp->iseq;
+			    struct iseq_catch_table *ct = iseq->catch_table;
+			    struct iseq_catch_table_entry *entry;
 			    int i;
 
-			    for (i=0; i<iseq->catch_table_size; i++) {
-				struct iseq_catch_table_entry *entry = &iseq->catch_table[i];
+			    for (i=0; i<ct->size; i++) {
+				entry = &ct->entries[i];
 
 				if (entry->type == CATCH_TYPE_BREAK &&
 				    entry->start < epc && entry->end >= epc) {
@@ -927,11 +939,11 @@ check_match(VALUE pattern, VALUE target, enum vm_check_match_type type)
 	VALUE defined_class;
 	rb_method_entry_t *me = rb_method_entry_with_refinements(CLASS_OF(pattern), idEqq, &defined_class);
 	if (me) {
-	  return vm_call0(GET_THREAD(), pattern, idEqq, 1, &target, me, defined_class);
+	    return vm_call0(GET_THREAD(), pattern, idEqq, 1, &target, me, defined_class);
 	}
 	else {
-	  /* fallback to funcall (e.g. method_missing) */
-	  return rb_funcall2(pattern, idEqq, 1, &target);
+	    /* fallback to funcall (e.g. method_missing) */
+	    return rb_funcall2(pattern, idEqq, 1, &target);
 	}
       }
       default:
@@ -1104,13 +1116,14 @@ vm_callee_setup_keyword_arg(rb_thread_t *th, const rb_iseq_t *iseq, int argc, in
 }
 
 static inline int
-vm_callee_setup_arg_complex(rb_thread_t *th, rb_call_info_t *ci, const rb_iseq_t *iseq, VALUE *orig_argv)
+vm_callee_setup_arg_complex(rb_thread_t *th, rb_call_info_t *ci, const rb_iseq_t *iseq, VALUE *orig_argv,
+			    int splattable)
 {
     const int m = iseq->argc;
     const int opts = iseq->arg_opts - (iseq->arg_opts > 0);
     const int min = m + iseq->arg_post_len;
     const int max = (iseq->arg_rest == -1) ? m + opts + iseq->arg_post_len : UNLIMITED_ARGUMENTS;
-    const int orig_argc = ci->argc;
+    int orig_argc = ci->argc;
     int argc = orig_argc;
     VALUE *argv = orig_argv;
     VALUE keyword_hash = Qnil;
@@ -1125,7 +1138,18 @@ vm_callee_setup_arg_complex(rb_thread_t *th, rb_call_info_t *ci, const rb_iseq_t
 
     /* mandatory */
     if ((argc < min) || (argc > max && max != UNLIMITED_ARGUMENTS)) {
-	argument_error(iseq, argc, min, max);
+	VALUE arg0;
+	long len;
+	if (!splattable ||
+	    argc != 1 ||
+	    !RB_TYPE_P(arg0 = argv[0], T_ARRAY) ||
+	    (len = RARRAY_LEN(arg0)) < (long)min ||
+	    (len > (long)max && max != UNLIMITED_ARGUMENTS)) {
+	    argument_error(iseq, argc, min, max);
+	}
+	CHECK_VM_STACK_OVERFLOW(th->cfp, len - 1);
+	MEMCPY(argv, RARRAY_CONST_PTR(arg0), VALUE, len);
+	ci->argc = argc = orig_argc = (int)len;
     }
 
     argv += m;
@@ -1212,7 +1236,17 @@ vm_callee_setup_arg(rb_thread_t *th, rb_call_info_t *ci, const rb_iseq_t *iseq,
     if (LIKELY(iseq->arg_simple & 0x01)) {
 	/* simple check */
 	if (ci->argc != iseq->argc) {
-	    argument_error(iseq, ci->argc, iseq->argc, iseq->argc);
+	    VALUE arg0;
+	    long len;
+	    if (!(is_lambda > 1) ||
+		ci->argc != 1 ||
+		!RB_TYPE_P(arg0 = argv[0], T_ARRAY) ||
+		(len = RARRAY_LEN(arg0)) != (long)iseq->argc) {
+		argument_error(iseq, ci->argc, iseq->argc, iseq->argc);
+	    }
+	    CHECK_VM_STACK_OVERFLOW(th->cfp, len - 1);
+	    MEMCPY(argv, RARRAY_CONST_PTR(arg0), VALUE, len);
+	    ci->argc = (int)len;
 	}
 	ci->aux.opt_pc = 0;
 	CI_SET_FASTPATH(ci,
@@ -1224,7 +1258,7 @@ vm_callee_setup_arg(rb_thread_t *th, rb_call_info_t *ci, const rb_iseq_t *iseq,
 			 !(ci->me->flag & NOEX_PROTECTED)));
     }
     else {
-	ci->aux.opt_pc = vm_callee_setup_arg_complex(th, ci, iseq, argv);
+	ci->aux.opt_pc = vm_callee_setup_arg_complex(th, ci, iseq, argv, is_lambda > 1);
     }
 }
 
@@ -2298,7 +2332,8 @@ vm_yield_setup_block_args(rb_thread_t *th, const rb_iseq_t * iseq,
 
 static inline int
 vm_yield_setup_args(rb_thread_t * const th, const rb_iseq_t *iseq,
-		    int argc, VALUE *argv, const rb_block_t *blockptr, int lambda)
+		    int argc, VALUE *argv, const rb_block_t *blockptr,
+		    int lambda)
 {
     if (0) { /* for debug */
 	printf("     argc: %d\n", argc);
@@ -2317,7 +2352,7 @@ vm_yield_setup_args(rb_thread_t * const th, const rb_iseq_t *iseq,
 	ci_entry.flag = 0;
 	ci_entry.argc = argc;
 	ci_entry.blockptr = (rb_block_t *)blockptr;
-	vm_callee_setup_arg(th, &ci_entry, iseq, argv, 1);
+	vm_callee_setup_arg(th, &ci_entry, iseq, argv, lambda);
 	return ci_entry.aux.opt_pc;
     }
     else {
@@ -2348,7 +2383,7 @@ vm_invoke_block(rb_thread_t *th, rb_control_frame_t *reg_cfp, rb_call_info_t *ci
 	VALUE * const rsp = GET_SP() - ci->argc;
 	SET_SP(rsp);
 
-	opt_pc = vm_yield_setup_args(th, iseq, ci->argc, rsp, 0, is_lambda);
+	opt_pc = vm_yield_setup_args(th, iseq, ci->argc, rsp, 0, is_lambda * 2);
 
 	vm_push_frame(th, iseq,
 		      is_lambda ? VM_FRAME_MAGIC_LAMBDA : VM_FRAME_MAGIC_BLOCK,
@@ -2387,9 +2422,9 @@ vm_make_proc_with_iseq(rb_iseq_t *blockiseq)
 }
 
 static VALUE
-vm_once_exec(rb_iseq_t *iseq)
+vm_once_exec(VALUE iseq)
 {
-    VALUE proc = vm_make_proc_with_iseq(iseq);
+    VALUE proc = vm_make_proc_with_iseq((rb_iseq_t *)iseq);
     return rb_proc_call_with_block(proc, 0, 0, Qnil);
 }
 

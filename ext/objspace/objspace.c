@@ -2,7 +2,7 @@
 
   objspace.c - ObjectSpace extender for MRI.
 
-  $Author: ko1 $
+  $Author: nobu $
   created at: Wed Jun 17 07:39:17 2009
 
   NOTE: This extension library is only expected to exist with C Ruby.
@@ -545,7 +545,7 @@ iow_inspect(VALUE self)
     VALUE obj = (VALUE)DATA_PTR(self);
     VALUE type = type2sym(BUILTIN_TYPE(obj));
 
-    return rb_sprintf("#<InternalObject:%p %s>", (void *)obj, rb_id2name(SYM2ID(type)));
+    return rb_sprintf("#<InternalObject:%p %"PRIsVALUE">", (void *)obj, rb_sym2str(type));
 }
 
 /* Returns the Object#object_id of the internal object. */

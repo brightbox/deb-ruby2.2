@@ -12,35 +12,37 @@
 #
 # === Module Functions
 #
-#   cd(dir, options)
-#   cd(dir, options) {|dir| .... }
-#   pwd()
-#   mkdir(dir, options)
-#   mkdir(list, options)
-#   mkdir_p(dir, options)
-#   mkdir_p(list, options)
-#   rmdir(dir, options)
-#   rmdir(list, options)
-#   ln(old, new, options)
-#   ln(list, destdir, options)
-#   ln_s(old, new, options)
-#   ln_s(list, destdir, options)
-#   ln_sf(src, dest, options)
-#   cp(src, dest, options)
-#   cp(list, dir, options)
-#   cp_r(src, dest, options)
-#   cp_r(list, dir, options)
-#   mv(src, dest, options)
-#   mv(list, dir, options)
-#   rm(list, options)
-#   rm_r(list, options)
-#   rm_rf(list, options)
-#   install(src, dest, mode = <src's>, options)
-#   chmod(mode, list, options)
-#   chmod_R(mode, list, options)
-#   chown(user, group, list, options)
-#   chown_R(user, group, list, options)
-#   touch(list, options)
+#   require 'fileutils'
+#
+#   FileUtils.cd(dir, options)
+#   FileUtils.cd(dir, options) {|dir| .... }
+#   FileUtils.pwd()
+#   FileUtils.mkdir(dir, options)
+#   FileUtils.mkdir(list, options)
+#   FileUtils.mkdir_p(dir, options)
+#   FileUtils.mkdir_p(list, options)
+#   FileUtils.rmdir(dir, options)
+#   FileUtils.rmdir(list, options)
+#   FileUtils.ln(old, new, options)
+#   FileUtils.ln(list, destdir, options)
+#   FileUtils.ln_s(old, new, options)
+#   FileUtils.ln_s(list, destdir, options)
+#   FileUtils.ln_sf(src, dest, options)
+#   FileUtils.cp(src, dest, options)
+#   FileUtils.cp(list, dir, options)
+#   FileUtils.cp_r(src, dest, options)
+#   FileUtils.cp_r(list, dir, options)
+#   FileUtils.mv(src, dest, options)
+#   FileUtils.mv(list, dir, options)
+#   FileUtils.rm(list, options)
+#   FileUtils.rm_r(list, options)
+#   FileUtils.rm_rf(list, options)
+#   FileUtils.install(src, dest, mode = <src's>, options)
+#   FileUtils.chmod(mode, list, options)
+#   FileUtils.chmod_R(mode, list, options)
+#   FileUtils.chown(user, group, list, options)
+#   FileUtils.chown_R(user, group, list, options)
+#   FileUtils.touch(list, options)
 #
 # The <tt>options</tt> parameter is a hash of options, taken from the list
 # <tt>:force</tt>, <tt>:noop</tt>, <tt>:preserve</tt>, and <tt>:verbose</tt>.
@@ -53,15 +55,15 @@
 #
 # There are some `low level' methods, which do not accept any option:
 #
-#   copy_entry(src, dest, preserve = false, dereference = false)
-#   copy_file(src, dest, preserve = false, dereference = true)
-#   copy_stream(srcstream, deststream)
-#   remove_entry(path, force = false)
-#   remove_entry_secure(path, force = false)
-#   remove_file(path, force = false)
-#   compare_file(path_a, path_b)
-#   compare_stream(stream_a, stream_b)
-#   uptodate?(file, cmp_list)
+#   FileUtils.copy_entry(src, dest, preserve = false, dereference = false)
+#   FileUtils.copy_file(src, dest, preserve = false, dereference = true)
+#   FileUtils.copy_stream(srcstream, deststream)
+#   FileUtils.remove_entry(path, force = false)
+#   FileUtils.remove_entry_secure(path, force = false)
+#   FileUtils.remove_file(path, force = false)
+#   FileUtils.compare_file(path_a, path_b)
+#   FileUtils.compare_stream(stream_a, stream_b)
+#   FileUtils.uptodate?(file, cmp_list)
 #
 # == module FileUtils::Verbose
 #
@@ -136,7 +138,7 @@ module FileUtils
   #
   # Options: (none)
   #
-  # Returns true if +newer+ is newer than all +old_list+.
+  # Returns true if +new+ is newer than all +old_list+.
   # Non-existent files are older than any file.
   #
   #   FileUtils.uptodate?('hello.o', %w(hello.c hello.h)) or \
@@ -253,7 +255,7 @@ module FileUtils
   private_module_function :fu_mkdir
 
   #
-  # Options: noop, verbose
+  # Options: parents, noop, verbose
   #
   # Removes one or more directories.
   #
@@ -854,7 +856,8 @@ module FileUtils
     fu_check_options options, OPT_TABLE['install']
     fu_output_message "install -c#{options[:preserve] && ' -p'}#{options[:mode] ? (' -m 0%o' % options[:mode]) : ''} #{[src,dest].flatten.join ' '}" if options[:verbose]
     return if options[:noop]
-    fu_each_src_dest(src, dest) do |s, d, st|
+    fu_each_src_dest(src, dest) do |s, d|
+      st = File.stat(s)
       unless File.exist?(d) and compare_file(s, d)
         remove_file d, true
         copy_file s, d
@@ -1097,49 +1100,37 @@ module FileUtils
 
   begin
     require 'etc'
-
-    def fu_get_uid(user)   #:nodoc:
-      return nil unless user
-      case user
-      when Integer
-        user
-      when /\A\d+\z/
-        user.to_i
-      else
-        Etc.getpwnam(user).uid
-      end
-    end
-    private_module_function :fu_get_uid
-
-    def fu_get_gid(group)   #:nodoc:
-      return nil unless group
-      case group
-      when Integer
-        group
-      when /\A\d+\z/
-        group.to_i
-      else
-        Etc.getgrnam(group).gid
-      end
-    end
-    private_module_function :fu_get_gid
-
-  rescue LoadError
-    # need Win32 support???
-
-    def fu_get_uid(user)   #:nodoc:
-      user    # FIXME
-    end
-    private_module_function :fu_get_uid
-
-    def fu_get_gid(group)   #:nodoc:
-      group   # FIXME
-    end
-    private_module_function :fu_get_gid
+  rescue LoadError # rescue LoadError for miniruby
   end
 
+  def fu_get_uid(user)   #:nodoc:
+    return nil unless user
+    case user
+    when Integer
+      user
+    when /\A\d+\z/
+      user.to_i
+    else
+      Etc.getpwnam(user) ? Etc.getpwnam(user).uid : nil
+    end
+  end
+  private_module_function :fu_get_uid
+
+  def fu_get_gid(group)   #:nodoc:
+    return nil unless group
+    case group
+    when Integer
+      group
+    when /\A\d+\z/
+      group.to_i
+    else
+      Etc.getgrnam(group) ? Etc.getgrnam(group).gid : nil
+    end
+  end
+  private_module_function :fu_get_gid
+
   #
-  # Options: noop verbose
+  # Options: noop verbose mtime nocreate
   #
   # Updates modification time (mtime) and access time (atime) of file(s) in
   # +list+.  Files are created if they don't exist.
@@ -1252,7 +1243,12 @@ module FileUtils
     end
 
     def exist?
-      lstat! ? true : false
+      begin
+        lstat
+        true
+      rescue Errno::ENOENT
+        false
+      end
     end
 
     def file?
@@ -1362,7 +1358,7 @@ module FileUtils
       when file?
         copy_file dest
       when directory?
-        if !File.exist?(dest) and descendant_diretory?(dest, path)
+        if !File.exist?(dest) and descendant_directory?(dest, path)
           raise ArgumentError, "cannot copy directory %s to itself %s" % [path, dest]
         end
         begin
@@ -1493,6 +1489,7 @@ module FileUtils
           end
         end
       end
+    ensure
       yield self
     end
 
@@ -1557,7 +1554,7 @@ module FileUtils
     end
     SYSCASE = File::FNM_SYSCASE.nonzero? ? "-i" : ""
 
-    def descendant_diretory?(descendant, ascendant)
+    def descendant_directory?(descendant, ascendant)
       /\A(?#{SYSCASE}:#{Regexp.quote(ascendant)})#{DIRECTORY_TERM}/ =~ File.dirname(descendant)
     end
   end   # class Entry_
@@ -1570,7 +1567,7 @@ module FileUtils
   def fu_each_src_dest(src, dest)   #:nodoc:
     fu_each_src_dest0(src, dest) do |s, d|
       raise ArgumentError, "same file: #{s} and #{d}" if fu_same?(s, d)
-      yield s, d, File.stat(s)
+      yield s, d
     end
   end
   private_module_function :fu_each_src_dest
@@ -1659,7 +1656,7 @@ module FileUtils
   #
   # Returns an Array of option names of the method +mid+.
   #
-  #   p FileUtils.options(:rm)  #=> ["noop", "verbose", "force"]
+  #   p FileUtils.options_of(:rm)  #=> ["noop", "verbose", "force"]
   #
   def FileUtils.options_of(mid)
     OPT_TABLE[mid.to_s].map {|sym| sym.to_s }

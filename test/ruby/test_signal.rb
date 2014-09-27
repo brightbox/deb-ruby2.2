@@ -73,12 +73,14 @@ class TestSignal < Test::Unit::TestCase
 
   def test_invalid_signal_name
     assert_raise(ArgumentError) { Process.kill(:XXXXXXXXXX, $$) }
+    assert_raise_with_message(ArgumentError, /\u{30eb 30d3 30fc}/) { Process.kill("\u{30eb 30d3 30fc}", $$) }
   end if Process.respond_to?(:kill)
 
   def test_signal_exception
     assert_raise(ArgumentError) { SignalException.new }
     assert_raise(ArgumentError) { SignalException.new(-1) }
     assert_raise(ArgumentError) { SignalException.new(:XXXXXXXXXX) }
+    assert_raise_with_message(ArgumentError, /\u{30eb 30d3 30fc}/) { SignalException.new("\u{30eb 30d3 30fc}") }
     Signal.list.each do |signm, signo|
       next if signm == "EXIT"
       assert_equal(SignalException.new(signm).signo, signo)
@@ -161,6 +163,7 @@ class TestSignal < Test::Unit::TestCase
 
       assert_raise(ArgumentError) { Signal.trap("XXXXXXXXXX", "SIG_DFL") }
 
+      assert_raise_with_message(ArgumentError, /\u{30eb 30d3 30fc}/) { Signal.trap("\u{30eb 30d3 30fc}", "SIG_DFL") }
     ensure
       Signal.trap(:INT, oldtrap) if oldtrap
     end
@@ -173,6 +176,13 @@ class TestSignal < Test::Unit::TestCase
       Process.kill :#{sig}, $$
     end;
   end if Process.respond_to?(:kill)
+
+  def test_trap_system_default
+    assert_separately([], <<-End)
+      trap(:QUIT, "SYSTEM_DEFAULT")
+      assert_equal("SYSTEM_DEFAULT", trap(:QUIT, "DEFAULT"))
+    End
+  end if Signal.list.key?('QUIT')
 
   def test_signal_requiring
     t = Tempfile.new(%w"require_ensure_test .rb")

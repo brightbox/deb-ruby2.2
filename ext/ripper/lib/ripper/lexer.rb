@@ -1,5 +1,5 @@
 #
-# $Id: lexer.rb 45116 2014-02-22 06:06:55Z naruse $
+# $Id: lexer.rb 44878 2014-02-07 12:57:44Z zzak $
 #
 # Copyright (c) 2004,2005 Minero Aoki
 #

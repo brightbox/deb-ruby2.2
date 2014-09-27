@@ -2,7 +2,7 @@
 
   debug.c -
 
-  $Author: ko1 $
+  $Author: nobu $
   created at: 04/08/25 02:31:54 JST
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -33,8 +33,9 @@ const union {
         RUBY_ENC_CODERANGE_7BIT    = ENC_CODERANGE_7BIT,
         RUBY_ENC_CODERANGE_VALID   = ENC_CODERANGE_VALID,
         RUBY_ENC_CODERANGE_BROKEN  = ENC_CODERANGE_BROKEN,
-        RUBY_FL_WB_PROTECTED     = FL_WB_PROTECTED,
-        RUBY_FL_PROMOTED    = FL_PROMOTED,
+        RUBY_FL_PROMOTED0   = FL_PROMOTED0,
+        RUBY_FL_PROMOTED1   = FL_PROMOTED1,
+        RUBY_FL_PROMOTED    = FL_PROMOTED0|FL_PROMOTED1,
         RUBY_FL_FINALIZE    = FL_FINALIZE,
         RUBY_FL_TAINT       = FL_TAINT,
         RUBY_FL_EXIVAR      = FL_EXIVAR,

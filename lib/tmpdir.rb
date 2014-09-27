@@ -1,13 +1,13 @@
 #
 # tmpdir - retrieve temporary directory path
 #
-# $Id: tmpdir.rb 40825 2013-05-19 03:10:21Z ktsj $
+# $Id: tmpdir.rb 46969 2014-07-26 17:44:07Z hsbt $
 #
 
 require 'fileutils'
 begin
   require 'etc.so'
-rescue LoadError
+rescue LoadError # rescue LoadError for miniruby
 end
 
 class Dir
@@ -19,7 +19,7 @@ class Dir
 
   def Dir::tmpdir
     if $SAFE > 0
-      tmp = @@systmpdir
+      @@systmpdir
     else
       tmp = nil
       for dir in [ENV['TMPDIR'], ENV['TMP'], ENV['TEMP'], @@systmpdir, '/tmp', '.']

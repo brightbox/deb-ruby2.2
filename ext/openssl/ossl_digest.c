@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_digest.c 33634 2011-11-04 07:19:23Z nobu $
+ * $Id: ossl_digest.c 47042 2014-08-03 01:56:01Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -38,7 +38,7 @@ GetDigestPtr(VALUE obj)
     const EVP_MD *md;
     ASN1_OBJECT *oid = NULL;
 
-    if (TYPE(obj) == T_STRING) {
+    if (RB_TYPE_P(obj, T_STRING)) {
     	const char *name = StringValueCStr(obj);
 
 	md = EVP_get_digestbyname(name);

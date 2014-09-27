@@ -2,7 +2,7 @@
 
   dbm.c -
 
-  $Author: nobu $
+  $Author: hsbt $
   created at: Mon Jan 24 15:59:52 JST 1994
 
   Copyright (C) 1995-2001 Yukihiro Matsumoto
@@ -45,16 +45,16 @@ closed_dbm(void)
     rb_raise(rb_eDBMError, "closed DBM file");
 }
 
-#define GetDBM(obj, dbmp) {\
+#define GetDBM(obj, dbmp) do {\
     Data_Get_Struct((obj), struct dbmdata, (dbmp));\
     if ((dbmp) == 0) closed_dbm();\
     if ((dbmp)->di_dbm == 0) closed_dbm();\
-}
+} while (0)
 
-#define GetDBM2(obj, data, dbm) {\
-    GetDBM((obj), (data));\
-    (dbm) = dbmp->di_dbm;\
-}
+#define GetDBM2(obj, dbmp, dbm) do {\
+    GetDBM((obj), (dbmp));\
+    (dbm) = (dbmp)->di_dbm;\
+} while (0)
 
 static void
 free_dbm(struct dbmdata *dbmp)
@@ -259,8 +259,11 @@ fdbm_fetch(VALUE obj, VALUE keystr, VALUE ifnone)
     value = dbm_fetch(dbm, key);
     if (value.dptr == 0) {
       not_found:
-	if (ifnone == Qnil && rb_block_given_p())
-	    return rb_yield(rb_tainted_str_new(key.dptr, key.dsize));
+	if (NIL_P(ifnone) && rb_block_given_p()) {
+	    keystr = rb_str_dup(keystr);
+	    OBJ_TAINT(keystr);
+	    return rb_yield(keystr);
+	}
 	return ifnone;
     }
     return rb_tainted_str_new(value.dptr, value.dsize);

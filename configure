@@ -620,6 +620,7 @@ ac_includes_default="\
 #endif"
 
 ac_subst_vars='LTLIBOBJS
+DESTDIR
 exec
 ruby_pc
 PACKAGE
@@ -727,6 +728,7 @@ rubylibprefix
 setup
 EXTOBJS
 ENCOBJS
+ENCSTATIC
 EXTSTATIC
 STRIP
 TRY_LINK
@@ -816,7 +818,6 @@ build_os
 build_vendor
 build_cpu
 build
-RUBY_RELEASE_DATE
 RUBY_PROGRAM_VERSION
 TEENY
 MINOR
@@ -874,8 +875,8 @@ with_opt_dir
 with_winnt_ver
 enable_pthread
 with_gmp
+with_jemalloc
 enable_largefile
-with_setjmp_type
 enable_setreuid
 with_dln_a_out
 enable_rpath
@@ -887,7 +888,9 @@ with_rubylibprefix
 enable_multiarch
 with_soname
 enable_shared
+enable_pie
 enable_dtrace
+with_setjmp_type
 enable_install_doc
 enable_install_rdoc
 enable_install_capi
@@ -911,6 +914,7 @@ with_vendorarchhdrdir
 with_mantype
 enable_rubygems
 with_ruby_pc
+with_destdir
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1553,6 +1557,7 @@ Optional Features:
                           default on ELF platforms
   --enable-multiarch      enable multiarch compatible directories
   --enable-shared         build a shared library for Ruby
+  --disable-pie           disable PIE feature
   --enable-dtrace         enable DTrace for tracing inside ruby. enabled by
                           default on systems having dtrace
   --disable-install-doc   do not install neither rdoc indexes nor C API
@@ -1581,7 +1586,7 @@ Optional Packages:
                           separated by $PATH_SEPARATOR
   --with-winnt-ver=0xXXXX target Windows NT version (default to 0x0501)
   --without-gmp           disable GNU GMP to accelerate Bignum operations
-  --with-setjmp-type      select setjmp type
+  --with-jemalloc         use jemalloc allocator
   --with-dln-a-out        use dln_a_out if possible
   --without-valgrind      disable valgrind memcheck support
   --with-ext=EXTS         pass to --with-ext option of extmk.rb
@@ -1591,6 +1596,7 @@ Optional Packages:
   --with-rubylibprefix=DIR
                           prefix for ruby libraries [[LIBDIR/RUBY_BASE_NAME]]
   --with-soname=SONAME    base name of shared library
+  --with-setjmp-type      select setjmp type
   --with-rubyarchprefix=DIR
                           prefix for architecture dependent ruby libraries
                           [[RUBYLIBPREFIX/ARCH]]
@@ -1628,6 +1634,7 @@ Optional Packages:
                           [[RUBYHDRDIR/vendor_ruby]]
   --with-mantype=TYPE     specify man page type; TYPE is one of man and doc
   pc file basename
+  --with-destdir=DESTDIR  specify default directory to install
 
 Some influential environment variables:
   CC          C compiler command
@@ -2892,8 +2899,6 @@ done
 
 RUBY_PROGRAM_VERSION=`sed -n 's/^#define RUBY_VERSION "\(.*\)"/\1/p' $srcdir/version.h`
 
-RUBY_RELEASE_DATE=`sed -n 's/^#define RUBY_RELEASE_DATE "\(.*\)"/\1/p' $srcdir/version.h`
-
 RUBY_PATCHLEVEL=`sed -n 's/^#define RUBY_PATCHLEVEL //p' $srcdir/version.h`
 $as_echo "#define CANONICALIZATION_FOR_MATHN 1" >>confdefs.h
 
@@ -3008,6 +3013,9 @@ test -z "$CXX" || ac_cv_prog_CXX="$CXX"
 if test "$program_prefix" = NONE; then
   program_prefix=
 fi
+if test "$prefix" -ef .; then
+  as_fn_error $? "--prefix cannot be the current working directory." "$LINENO" 5
+fi
 RUBY_BASE_NAME=`echo ruby | sed "$program_transform_name"`
 RUBYW_BASE_NAME=`echo rubyw | sed "$program_transform_name"`
 
@@ -3091,16 +3099,32 @@ test x"$target_alias" = x &&
 target_os=`echo $target_os | sed 's/linux-gnu$/linux/;s/linux-gnu/linux-/'`
 ac_install_sh='' # unusable for extension libraries.
 
-case $target_os in #(
-  darwin*) :
-    os_version_style=major+0 ;; #(
-  *) :
-    os_version_style=full ;;
-esac
 
 # Check whether --with-os-version-style was given.
 if test "${with_os_version_style+set}" = set; then :
   withval=$with_os_version_style; os_version_style=$withval
+else
+  os_version_style=full
+	    case $target_os in #(
+  *[0-9].*) :
+    case `/usr/bin/ruby -e 'puts RUBY_PLATFORM' 2>/dev/null` in #(
+  *-*[0-9].*.0) :
+    os_version_style=minor+0 ;; #(
+  *-*[0-9].*.*) :
+    os_version_style=full ;; #(
+  *-*[0-9].0  ) :
+    os_version_style=major+0 ;; #(
+  *-*[0-9].*  ) :
+    os_version_style=minor ;; #(
+  *-*[0-9]    ) :
+    os_version_style=major ;; #(
+  *) :
+     ;;
+esac ;; #(
+  *) :
+     ;;
+esac
+
 fi
 
 os_version_style_transform=
@@ -7099,6 +7123,13 @@ fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether LDFLAGS is valid" >&5
 $as_echo_n "checking whether LDFLAGS is valid... " >&6; }
+    {
+	mkdir tmp.$$.try_link &&
+	cd tmp.$$.try_link &&
+	cp ../confdefs.h . &&
+	echo '<?xml?><plist><dict><key>CFBundleIdentifier</key><string></string></dict></plist>' > Info.plist &&
+	:
+    } || as_fn_error $? "faild to make temporary directory" "$LINENO" 5
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -7115,6 +7146,7 @@ if ac_fn_c_try_link "$LINENO"; then :
 $as_echo "yes" >&6; }
 else
 
+	cd .. && rm -fr tmp.$$.try_link
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	as_fn_error $? "something wrong with LDFLAGS=\"$LDFLAGS\"" "$LINENO" 5
@@ -7123,6 +7155,7 @@ $as_echo "no" >&6; }
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
+    cd .. && rm -fr tmp.$$.try_link
 
 CFLAGS="$save_CFLAGS"
 save_CFLAGS=
@@ -7164,6 +7197,8 @@ if test "$GCC:${warnflags+set}:no" = yes::no; then
 		 -Werror=shorten-64-to-32 \
 		 -Werror=implicit-function-declaration \
 		 -Werror=division-by-zero \
+		 -Werror=deprecated-declarations \
+		 -Wno-packed-bitfield-compat \
 		 $extra_warning \
 		 ; do
 	if test "$particular_werror_flags" != yes; then
@@ -7344,6 +7379,60 @@ fi
     rb_cv_warnflags="$warnflags"
     warnflags=
 fi
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether -Qunused-arguments is accepted as CFLAGS" >&5
+$as_echo_n "checking whether -Qunused-arguments is accepted as CFLAGS... " >&6; }
+    save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $rb_cv_warnflags"
+if test "${ac_c_werror_flag+set}"; then
+  rb_c_werror_flag="$ac_c_werror_flag"
+else
+  unset rb_c_werror_flag
+fi
+ac_c_werror_flag=yes
+
+    CFLAGS="$CFLAGS -Qunused-arguments"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  # RUBY_APPEND_OPTIONS(rb_cv_wsuppress_flags)
+	for rb_opt in -Qunused-arguments; do
+	case " ${rb_cv_wsuppress_flags-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     rb_cv_wsuppress_flags="${rb_opt}" ;; #(
+  *) :
+     rb_cv_wsuppress_flags="$rb_cv_wsuppress_flags ${rb_opt}" ;;
+esac
+	done
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+CFLAGS="$save_CFLAGS"
+save_CFLAGS=
+if test "${rb_c_werror_flag+set}"; then
+  ac_c_werror_flag="$rb_c_werror_flag"
+else
+  unset ac_c_werror_flag
+fi
+
+
 if test "$GCC" = yes; then
     # -D_FORTIFY_SOURCE
     # When defined _FORTIFY_SOURCE, glibc enables some additional sanity
@@ -7557,9 +7646,10 @@ esac
   *) :
 
       # ANSI (no XCFLAGS because this is C only)
+	for ansi_options in -std=iso9899:1999 "-ansi -std=iso9899:199409"; do
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether -ansi -std=iso9899:199409 is accepted as CFLAGS" >&5
-$as_echo_n "checking whether -ansi -std=iso9899:199409 is accepted as CFLAGS... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether ${ansi_options} is accepted as CFLAGS" >&5
+$as_echo_n "checking whether ${ansi_options} is accepted as CFLAGS... " >&6; }
     save_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS $rb_cv_warnflags"
 if test "${ac_c_werror_flag+set}"; then
@@ -7569,7 +7659,7 @@ else
 fi
 ac_c_werror_flag=yes
 
-    CFLAGS="$CFLAGS -ansi -std=iso9899:199409"
+    CFLAGS="$CFLAGS ${ansi_options}"
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -7583,29 +7673,33 @@ main ()
 _ACEOF
 if ac_fn_c_try_compile "$LINENO"; then :
 
-        # RUBY_APPEND_OPTION(warnflags)
+		# RUBY_APPEND_OPTIONS(warnflags)
+	for rb_opt in ${ansi_options}; do
 	case " ${warnflags-} " in #(
-  *' -ansi -std=iso9899:199409 '*) :
+  *" ${rb_opt} "*) :
      ;; #(
   '  ') :
-     warnflags="-ansi -std=iso9899:199409" ;; #(
+     warnflags="${rb_opt}" ;; #(
   *) :
-     warnflags="$warnflags -ansi -std=iso9899:199409" ;;
+     warnflags="$warnflags ${rb_opt}" ;;
 esac
-        # RUBY_APPEND_OPTION(strict_warnflags)
+	done
+		# RUBY_APPEND_OPTIONS(strict_warnflags)
+	for rb_opt in ${ansi_options}; do
 	case " ${strict_warnflags-} " in #(
-  *' -ansi -std=iso9899:199409 '*) :
+  *" ${rb_opt} "*) :
      ;; #(
   '  ') :
-     strict_warnflags="-ansi -std=iso9899:199409" ;; #(
+     strict_warnflags="${rb_opt}" ;; #(
   *) :
-     strict_warnflags="$strict_warnflags -ansi -std=iso9899:199409" ;;
+     strict_warnflags="$strict_warnflags ${rb_opt}" ;;
 esac
+	done
 
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 else
-
+  ansi_options=
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 fi
@@ -7619,6 +7713,8 @@ else
   unset ac_c_werror_flag
 fi
 
+	    test "x${ansi_options}" = x || break
+	done
      ;;
 esac
 
@@ -8037,131 +8133,6 @@ else
 fi
 
     done
-    case "$target" in #(
-  *-darwin*) :
-
-	    # doesn't seem necessary on Mac OS X
-	 ;; #(
-  i[4-6]86*) :
-
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether -msse2 -mfpmath=sse is accepted as CFLAGS" >&5
-$as_echo_n "checking whether -msse2 -mfpmath=sse is accepted as CFLAGS... " >&6; }
-    save_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS $rb_cv_warnflags"
-if test "${ac_c_werror_flag+set}"; then
-  rb_c_werror_flag="$ac_c_werror_flag"
-else
-  unset rb_c_werror_flag
-fi
-ac_c_werror_flag=yes
-
-    CFLAGS="$CFLAGS -msse2 -mfpmath=sse"
-    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-int
-main ()
-{
-
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-
-		# RUBY_APPEND_OPTION(XCFLAGS)
-	case " ${XCFLAGS-} " in #(
-  *' -msse2 -mfpmath=sse '*) :
-     ;; #(
-  '  ') :
-     XCFLAGS="-msse2 -mfpmath=sse" ;; #(
-  *) :
-     XCFLAGS="$XCFLAGS -msse2 -mfpmath=sse" ;;
-esac
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-
-CFLAGS="$save_CFLAGS"
-save_CFLAGS=
-if test "${rb_c_werror_flag+set}"; then
-  ac_c_werror_flag="$rb_c_werror_flag"
-else
-  unset ac_c_werror_flag
-fi
-
-            case "$XCFLAGS" in #(
-  *-msse2*) :
-
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether -mstackrealign is accepted as CFLAGS" >&5
-$as_echo_n "checking whether -mstackrealign is accepted as CFLAGS... " >&6; }
-    save_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS $rb_cv_warnflags"
-if test "${ac_c_werror_flag+set}"; then
-  rb_c_werror_flag="$ac_c_werror_flag"
-else
-  unset rb_c_werror_flag
-fi
-ac_c_werror_flag=yes
-
-    CFLAGS="$CFLAGS -mstackrealign"
-    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-int
-main ()
-{
-
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-
-                        # RUBY_APPEND_OPTION(XCFLAGS)
-	case " ${XCFLAGS-} " in #(
-  *' -mstackrealign '*) :
-     ;; #(
-  '  ') :
-     XCFLAGS="-mstackrealign" ;; #(
-  *) :
-     XCFLAGS="$XCFLAGS -mstackrealign" ;;
-esac
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-
-CFLAGS="$save_CFLAGS"
-save_CFLAGS=
-if test "${rb_c_werror_flag+set}"; then
-  ac_c_werror_flag="$rb_c_werror_flag"
-else
-  unset ac_c_werror_flag
-fi
-
-                 ;; #(
-  *) :
-     ;;
-esac
-
-     ;; #(
-  *) :
-     ;;
-esac
 fi
 
 
@@ -8321,7 +8292,8 @@ rm -f conftest.err conftest.i conftest.$ac_ext
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $macosx_10_5" >&5
 $as_echo "$macosx_10_5" >&6; }
 		if test $macosx_10_5 = yes; then
-		    ac_cv_header_ucontext_h=no
+		    ac_cv_func_getcontext=no
+		    ac_cv_func_setcontext=no
 		else
 		    $as_echo "#define BROKEN_SETREUID 1" >>confdefs.h
 
@@ -8331,6 +8303,7 @@ $as_echo "$macosx_10_5" >&6; }
 		ac_cv_type_getgroups=gid_t # getgroups() on Rosetta fills garbage
 		ac_cv_lib_crypt_crypt=no
 		ac_cv_func_fdatasync=no # Mac OS X wrongly reports it has fdatasync()
+		ac_cv_func_vfork=no
                 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for broken crypt with 8bit chars" >&5
 $as_echo_n "checking for broken crypt with 8bit chars... " >&6; }
 if ${rb_cv_broken_crypt+:} false; then :
@@ -8519,8 +8492,9 @@ esac
                 ac_cv_func_clock_gettime=yes
                 ac_cv_func_clock_getres=yes
 		ac_cv_func_malloc_usable_size=no
+		{ test "$target_cpu" = x64 && ac_cv_func___builtin_setjmp=no; }
 		ac_fn_c_check_type "$LINENO" "NET_LUID" "ac_cv_type_NET_LUID" "#include <windows.h>
-		  	      #include <iphlpapi.h>
+			      #include <iphlpapi.h>
 "
 if test "x$ac_cv_type_NET_LUID" = xyes; then :
 
@@ -8564,6 +8538,9 @@ esac
 		ac_cv_func_getsockname=no
 		ac_cv_func_shutdown=no
 		ac_cv_func_close=no
+		 ;; #(
+  netbsd*) :
+    	LIBS="-lm $LIBS"
 		 ;; #(
   dragonfly*) :
     	LIBS="-lm $LIBS"
@@ -9091,10 +9068,10 @@ for ac_header in \
   sys/syscall.h \
   fcntl.h \
   sys/fcntl.h \
+  sys/param.h \
   sys/select.h \
   sys/time.h \
   sys/times.h \
-  sys/param.h \
   syscall.h \
   pwd.h \
   grp.h \
@@ -9116,11 +9093,13 @@ for ac_header in \
   sys/socket.h \
   process.h \
   sys/prctl.h \
+  sys/uio.h \
   atomic.h \
   malloc.h \
   malloc_np.h \
   malloc/malloc.h \
-  setjmpex.h
+  setjmpex.h \
+  sys/id.h
 
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
@@ -9207,6 +9186,127 @@ fi
    if test -z "$with_gmp"; then :
   with_gmp=no
 fi
+fi
+
+
+# Check whether --with-jemalloc was given.
+if test "${with_jemalloc+set}" = set; then :
+  withval=$with_jemalloc; with_jemalloc=yes
+else
+  with_jemalloc=no
+fi
+
+if test "x$with_jemalloc" = xyes; then :
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for malloc_conf in -ljemalloc" >&5
+$as_echo_n "checking for malloc_conf in -ljemalloc... " >&6; }
+if ${ac_cv_lib_jemalloc_malloc_conf+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-ljemalloc  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char malloc_conf ();
+int
+main ()
+{
+return malloc_conf ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_jemalloc_malloc_conf=yes
+else
+  ac_cv_lib_jemalloc_malloc_conf=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_jemalloc_malloc_conf" >&5
+$as_echo "$ac_cv_lib_jemalloc_malloc_conf" >&6; }
+if test "x$ac_cv_lib_jemalloc_malloc_conf" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBJEMALLOC 1
+_ACEOF
+
+  LIBS="-ljemalloc $LIBS"
+
+else
+  with_jemalloc=no
+fi
+
+  ac_fn_c_check_header_mongrel "$LINENO" "jemalloc/jemalloc.h" "ac_cv_header_jemalloc_jemalloc_h" "$ac_includes_default"
+if test "x$ac_cv_header_jemalloc_jemalloc_h" = xyes; then :
+
+    $as_echo "#define RUBY_ALTERNATIVE_MALLOC_HEADER <jemalloc/jemalloc.h>" >>confdefs.h
+
+
+fi
+
+
+  if test "x$with_jemalloc" = xno; then :
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for jemalloc with JEMALLOC_MANGLE" >&5
+$as_echo_n "checking for jemalloc with JEMALLOC_MANGLE... " >&6; }
+if ${rb_cv_jemalloc_demangle+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define JEMALLOC_MANGLE 1
+      #ifdef RUBY_ALTERNATIVE_MALLOC_HEADER
+      #include RUBY_ALTERNATIVE_MALLOC_HEADER
+      #else
+      #include <jemalloc.h>
+      #endif
+int
+main ()
+{
+return !&malloc_conf
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  rb_cv_jemalloc_demangle=yes
+else
+  rb_cv_jemalloc_demangle=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_jemalloc_demangle" >&5
+$as_echo "$rb_cv_jemalloc_demangle" >&6; }
+
+fi
+  if test "x$rb_cv_jemalloc_demangle" = xyes; then :
+
+    $as_echo "#define JEMALLOC_MANGLE 1" >>confdefs.h
+
+    with_jemalloc=yes
+    LIBS="-ljemalloc $LIBS"
+
+fi
+  if test "x$with_jemalloc" = xyes; then :
+
+      ac_cv_func_malloc_usable_size=yes
+
+else
+  as_fn_error $? "jemalloc requested but not found" "$LINENO" 5
+
+fi
+
 fi
 
 mv confdefs.h confdefs1.h
@@ -9418,6 +9518,21 @@ cat largefile.h >> confdefs.h
 case "$target_os" in #(
   mingw*) :
     ac_cv_type_off_t=yes;ac_cv_sizeof_off_t=8 ;; #(
+  aix*) :
+
+    case "$target_cpu:$ac_cv_sys_large_files" in #(
+  ppc64:*|powerpc64:*) :
+     ;; #(
+  *:no|*:unknown) :
+     ;; #(
+  *) :
+
+	    # AIX currently does not support a 32-bit call to posix_fadvise()
+	    # if _LARGE_FILES is defined.
+	    ac_cv_posix_fadvise=no
+	 ;;
+esac
+     ;; #(
   *) :
      ;;
 esac
@@ -9835,6 +9950,60 @@ if test $ac_cv_c_volatile = no; then
 $as_echo "#define volatile /**/" >>confdefs.h
 
 fi
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for typeof syntax and keyword spelling" >&5
+$as_echo_n "checking for typeof syntax and keyword spelling... " >&6; }
+if ${ac_cv_c_typeof+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_cv_c_typeof=no
+     for ac_kw in typeof __typeof__ no; do
+       test $ac_kw = no && break
+       cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+	   int value;
+	   typedef struct {
+		   char a [1
+			   + ! (($ac_kw (value))
+				(($ac_kw (value)) 0 < ($ac_kw (value)) -1
+				 ? ($ac_kw (value)) - 1
+				 : ~ (~ ($ac_kw (value)) 0
+				      << sizeof ($ac_kw (value)))))]; }
+	      ac__typeof_type_;
+	   return
+	     (! ((void) ((ac__typeof_type_ *) 0), 0));
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_c_typeof=$ac_kw
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+       test $ac_cv_c_typeof != no && break
+     done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_c_typeof" >&5
+$as_echo "$ac_cv_c_typeof" >&6; }
+  if test $ac_cv_c_typeof != no; then
+
+$as_echo "#define HAVE_TYPEOF 1" >>confdefs.h
+
+    if test $ac_cv_c_typeof != typeof; then
+
+cat >>confdefs.h <<_ACEOF
+#define typeof $ac_cv_c_typeof
+_ACEOF
+
+    fi
+  fi
 
 
 case ":$ac_cv_c_const:$ac_cv_c_volatile:" in #(
@@ -11293,6 +11462,53 @@ _ACEOF
 fi
 
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking packed struct attribute" >&5
+$as_echo_n "checking packed struct attribute... " >&6; }
+if ${rb_cv_packed_struct+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  rb_cv_packed_struct=no
+    for mac in \
+	"__pragma(pack(push, 1)) x __pragma(pack(pop))" \
+	"x __attribute__((packed))" \
+	; do
+	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define PACKED_STRUCT(x) $mac
+			PACKED_STRUCT(struct { int a; });
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_packed_struct=$mac; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_packed_struct" >&5
+$as_echo "$rb_cv_packed_struct" >&6; }
+packed_struct_unaligned=x
+if test "$rb_cv_packed_struct" != no; then
+    cat >>confdefs.h <<_ACEOF
+#define PACKED_STRUCT(x) $rb_cv_packed_struct
+_ACEOF
+
+else
+    cat >>confdefs.h <<_ACEOF
+#define PACKED_STRUCT(x) x
+_ACEOF
+
+fi
+cat >>confdefs.h <<_ACEOF
+#define PACKED_STRUCT_UNALIGNED(x) $packed_struct_unaligned
+_ACEOF
+
+
 
 
 if test "x$ac_cv_type_long_long" = xyes; then
@@ -11312,7 +11528,18 @@ else
   unset rb_c_werror_flag
 fi
 ac_c_werror_flag=yes
-for pri in ll I64; do
+# RUBY_APPEND_OPTIONS(CFLAGS)
+	for rb_opt in $rb_cv_wsuppress_flags; do
+	case " ${CFLAGS-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     CFLAGS="${rb_opt}" ;; #(
+  *) :
+     CFLAGS="$CFLAGS ${rb_opt}" ;;
+esac
+	done
+    for pri in ll I64; do
         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <stdio.h>
@@ -11372,7 +11599,18 @@ else
   unset rb_c_werror_flag
 fi
 ac_c_werror_flag=yes
-for pri in ll I64; do
+# RUBY_APPEND_OPTIONS(CFLAGS)
+	for rb_opt in $rb_cv_wsuppress_flags; do
+	case " ${CFLAGS-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     CFLAGS="${rb_opt}" ;; #(
+  *) :
+     CFLAGS="$CFLAGS ${rb_opt}" ;;
+esac
+	done
+    for pri in ll I64; do
         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <stdio.h>
@@ -12701,8 +12939,9 @@ fi
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for noreturn function attribute" >&5
-$as_echo_n "checking for noreturn function attribute... " >&6; }
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for NORETURN function attribute" >&5
+$as_echo_n "checking for NORETURN function attribute... " >&6; }
 if ${rb_cv_func_noreturn+:} false; then :
   $as_echo_n "(cached) " >&6
 else
@@ -12716,7 +12955,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((noreturn)) x" "x __attribute__ ((noreturn))" "__declspec(noreturn) x" x; do
+for mac in \
+    "__attribute__ ((noreturn)) x" \
+    "x __attribute__ ((noreturn))" \
+    "__declspec(noreturn) x" \
+    x; do
 
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -12756,8 +12999,9 @@ _ACEOF
 fi
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for deprecated function attribute" >&5
-$as_echo_n "checking for deprecated function attribute... " >&6; }
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for DEPRECATED function attribute" >&5
+$as_echo_n "checking for DEPRECATED function attribute... " >&6; }
 if ${rb_cv_func_deprecated+:} false; then :
   $as_echo_n "(cached) " >&6
 else
@@ -12771,7 +13015,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((deprecated)) x" "x __attribute__ ((deprecated))" "__declspec(deprecated) x" x; do
+for mac in \
+    "__attribute__ ((deprecated)) x" \
+    "x __attribute__ ((deprecated))" \
+    "__declspec(deprecated) x" \
+    x; do
 
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -12811,8 +13059,9 @@ _ACEOF
 fi
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for noinline function attribute" >&5
-$as_echo_n "checking for noinline function attribute... " >&6; }
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for NOINLINE function attribute" >&5
+$as_echo_n "checking for NOINLINE function attribute... " >&6; }
 if ${rb_cv_func_noinline+:} false; then :
   $as_echo_n "(cached) " >&6
 else
@@ -12826,7 +13075,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((noinline)) x" "x __attribute__ ((noinline))" "__declspec(noinline) x" x; do
+for mac in \
+    "__attribute__ ((noinline)) x" \
+    "x __attribute__ ((noinline))" \
+    "__declspec(noinline) x" \
+    x; do
 
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -12867,7 +13120,8 @@ fi
 
 
 if_i386=${universal_binary+defined __i386__}
-     rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
+
+rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for stdcall function attribute" >&5
 $as_echo_n "checking for stdcall function attribute... " >&6; }
 if ${rb_cv_func_stdcall+:} false; then :
@@ -12883,7 +13137,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((stdcall)) x" "x __attribute__ ((stdcall))" "__declspec(stdcall) x" x; do
+for mac in \
+    "__attribute__ ((stdcall)) x" \
+    "x __attribute__ ((stdcall))" \
+    "__declspec(stdcall) x" \
+    x; do
   mac="$mac"${rbcv_cond+" /* only if $rbcv_cond */"}
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -12929,9 +13187,9 @@ _ACEOF
 EOH
 
 fi
-unset rbcv_conddnl
+unset rbcv_cond
 
-     rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
+rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for cdecl function attribute" >&5
 $as_echo_n "checking for cdecl function attribute... " >&6; }
 if ${rb_cv_func_cdecl+:} false; then :
@@ -12947,7 +13205,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((cdecl)) x" "x __attribute__ ((cdecl))" "__declspec(cdecl) x" x; do
+for mac in \
+    "__attribute__ ((cdecl)) x" \
+    "x __attribute__ ((cdecl))" \
+    "__declspec(cdecl) x" \
+    x; do
   mac="$mac"${rbcv_cond+" /* only if $rbcv_cond */"}
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -12993,9 +13255,9 @@ _ACEOF
 EOH
 
 fi
-unset rbcv_conddnl
+unset rbcv_cond
 
-     rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
+rbcv_cond="${if_i386}"; test "$rbcv_cond" || unset rbcv_cond
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for fastcall function attribute" >&5
 $as_echo_n "checking for fastcall function attribute... " >&6; }
 if ${rb_cv_func_fastcall+:} false; then :
@@ -13011,7 +13273,11 @@ else
 fi
 ac_c_werror_flag=yes
 
-for mac in "__attribute__ ((fastcall)) x" "x __attribute__ ((fastcall))" "__declspec(fastcall) x" x; do
+for mac in \
+    "__attribute__ ((fastcall)) x" \
+    "x __attribute__ ((fastcall))" \
+    "__declspec(fastcall) x" \
+    x; do
   mac="$mac"${rbcv_cond+" /* only if $rbcv_cond */"}
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -13057,7 +13323,66 @@ _ACEOF
 EOH
 
 fi
-unset rbcv_conddnl
+unset rbcv_cond
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for FUNC_MINIMIZED function attribute" >&5
+$as_echo_n "checking for FUNC_MINIMIZED function attribute... " >&6; }
+if ${rb_cv_func_minimized+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  rb_cv_func_minimized=x
+save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $rb_cv_warnflags"
+if test "${ac_c_werror_flag+set}"; then
+  rb_c_werror_flag="$ac_c_werror_flag"
+else
+  unset rb_c_werror_flag
+fi
+ac_c_werror_flag=yes
+
+for mac in \
+    "__attribute__ ((optimize(\"-Os\",\"-fomit-frame-pointer\"))) x" \
+    "x __attribute__ ((optimize(\"-Os\",\"-fomit-frame-pointer\")))" \
+    "__declspec(optimize(\"-Os\",\"-fomit-frame-pointer\")) x" \
+    x; do
+
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#define FUNC_MINIMIZED(x) $mac
+
+    FUNC_MINIMIZED(void conftest_attribute_check(void));
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_func_minimized="$mac"; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+done
+
+CFLAGS="$save_CFLAGS"
+save_CFLAGS=
+if test "${rb_c_werror_flag+set}"; then
+  ac_c_werror_flag="$rb_c_werror_flag"
+else
+  unset ac_c_werror_flag
+fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_func_minimized" >&5
+$as_echo "$rb_cv_func_minimized" >&6; }
+if test "$rb_cv_func_minimized" != x; then
+        cat >>confdefs.h <<_ACEOF
+#define FUNC_MINIMIZED(x) $rb_cv_func_minimized
+_ACEOF
+
+fi
 
 
 if test "$GCC" = yes; then
@@ -13191,11 +13516,11 @@ fi
 ac_c_werror_flag=yes
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
-#include <stdlib.h>
+volatile int zero;
 int
 main ()
 {
-exit(0); __builtin_unreachable();
+if (zero) __builtin_unreachable();
   ;
   return 0;
 }
@@ -13697,7 +14022,18 @@ else
   unset rb_c_werror_flag
 fi
 ac_c_werror_flag=yes
-for pri in z; do
+# RUBY_APPEND_OPTIONS(CFLAGS)
+	for rb_opt in $rb_cv_wsuppress_flags; do
+	case " ${CFLAGS-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     CFLAGS="${rb_opt}" ;; #(
+  *) :
+     CFLAGS="$CFLAGS ${rb_opt}" ;;
+esac
+	done
+    for pri in z; do
         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <stdio.h>
@@ -13756,7 +14092,18 @@ else
   unset rb_c_werror_flag
 fi
 ac_c_werror_flag=yes
-for pri in t; do
+# RUBY_APPEND_OPTIONS(CFLAGS)
+	for rb_opt in $rb_cv_wsuppress_flags; do
+	case " ${CFLAGS-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     CFLAGS="${rb_opt}" ;; #(
+  *) :
+     CFLAGS="$CFLAGS ${rb_opt}" ;;
+esac
+	done
+    for pri in t; do
         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <stdio.h>
@@ -14112,6 +14459,16 @@ if test "x$ac_cv_member_struct_stat_st_ctimensec" = xyes; then :
 
 cat >>confdefs.h <<_ACEOF
 #define HAVE_STRUCT_STAT_ST_CTIMENSEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_birthtimespec" "ac_cv_member_struct_stat_st_birthtimespec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_birthtimespec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_BIRTHTIMESPEC 1
 _ACEOF
 
 
@@ -16522,148 +16879,6 @@ fi
   *) :
      ;;
 esac
-ac_fn_c_check_func "$LINENO" "dup2" "ac_cv_func_dup2"
-if test "x$ac_cv_func_dup2" = xyes; then :
-  $as_echo "#define HAVE_DUP2 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" dup2.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS dup2.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "memmove" "ac_cv_func_memmove"
-if test "x$ac_cv_func_memmove" = xyes; then :
-  $as_echo "#define HAVE_MEMMOVE 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" memmove.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS memmove.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "strerror" "ac_cv_func_strerror"
-if test "x$ac_cv_func_strerror" = xyes; then :
-  $as_echo "#define HAVE_STRERROR 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" strerror.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS strerror.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "strchr" "ac_cv_func_strchr"
-if test "x$ac_cv_func_strchr" = xyes; then :
-  $as_echo "#define HAVE_STRCHR 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" strchr.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS strchr.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "strstr" "ac_cv_func_strstr"
-if test "x$ac_cv_func_strstr" = xyes; then :
-  $as_echo "#define HAVE_STRSTR 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" strstr.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS strstr.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "crypt" "ac_cv_func_crypt"
-if test "x$ac_cv_func_crypt" = xyes; then :
-  $as_echo "#define HAVE_CRYPT 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" crypt.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS crypt.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "flock" "ac_cv_func_flock"
-if test "x$ac_cv_func_flock" = xyes; then :
-  $as_echo "#define HAVE_FLOCK 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" flock.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS flock.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "isnan" "ac_cv_func_isnan"
-if test "x$ac_cv_func_isnan" = xyes; then :
-  $as_echo "#define HAVE_ISNAN 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" isnan.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS isnan.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "finite" "ac_cv_func_finite"
-if test "x$ac_cv_func_finite" = xyes; then :
-  $as_echo "#define HAVE_FINITE 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" finite.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS finite.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "isinf" "ac_cv_func_isinf"
-if test "x$ac_cv_func_isinf" = xyes; then :
-  $as_echo "#define HAVE_ISINF 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" isinf.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS isinf.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "hypot" "ac_cv_func_hypot"
-if test "x$ac_cv_func_hypot" = xyes; then :
-  $as_echo "#define HAVE_HYPOT 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" hypot.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS hypot.$ac_objext"
- ;;
-esac
-
-fi
 
 ac_fn_c_check_func "$LINENO" "acosh" "ac_cv_func_acosh"
 if test "x$ac_cv_func_acosh" = xyes; then :
@@ -16678,44 +16893,6 @@ esac
 
 fi
 
-ac_fn_c_check_func "$LINENO" "erf" "ac_cv_func_erf"
-if test "x$ac_cv_func_erf" = xyes; then :
-  $as_echo "#define HAVE_ERF 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" erf.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS erf.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "tgamma" "ac_cv_func_tgamma"
-if test "x$ac_cv_func_tgamma" = xyes; then :
-  $as_echo "#define HAVE_TGAMMA 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" tgamma.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS tgamma.$ac_objext"
- ;;
-esac
-
-fi
-
-ac_fn_c_check_func "$LINENO" "lgamma_r" "ac_cv_func_lgamma_r"
-if test "x$ac_cv_func_lgamma_r" = xyes; then :
-  $as_echo "#define HAVE_LGAMMA_R 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" lgamma_r.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS lgamma_r.$ac_objext"
- ;;
-esac
-
-fi
 
 ac_fn_c_check_func "$LINENO" "cbrt" "ac_cv_func_cbrt"
 if test "x$ac_cv_func_cbrt" = xyes; then :
@@ -16730,31 +16907,48 @@ esac
 
 fi
 
-ac_fn_c_check_func "$LINENO" "strlcpy" "ac_cv_func_strlcpy"
-if test "x$ac_cv_func_strlcpy" = xyes; then :
-  $as_echo "#define HAVE_STRLCPY 1" >>confdefs.h
+
+ac_fn_c_check_func "$LINENO" "crypt" "ac_cv_func_crypt"
+if test "x$ac_cv_func_crypt" = xyes; then :
+  $as_echo "#define HAVE_CRYPT 1" >>confdefs.h
 
 else
   case " $LIBOBJS " in
-  *" strlcpy.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS strlcpy.$ac_objext"
+  *" crypt.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS crypt.$ac_objext"
  ;;
 esac
 
 fi
 
-ac_fn_c_check_func "$LINENO" "strlcat" "ac_cv_func_strlcat"
-if test "x$ac_cv_func_strlcat" = xyes; then :
-  $as_echo "#define HAVE_STRLCAT 1" >>confdefs.h
+
+ac_fn_c_check_func "$LINENO" "dup2" "ac_cv_func_dup2"
+if test "x$ac_cv_func_dup2" = xyes; then :
+  $as_echo "#define HAVE_DUP2 1" >>confdefs.h
 
 else
   case " $LIBOBJS " in
-  *" strlcat.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS strlcat.$ac_objext"
+  *" dup2.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS dup2.$ac_objext"
  ;;
 esac
 
 fi
+
+
+ac_fn_c_check_func "$LINENO" "erf" "ac_cv_func_erf"
+if test "x$ac_cv_func_erf" = xyes; then :
+  $as_echo "#define HAVE_ERF 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" erf.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS erf.$ac_objext"
+ ;;
+esac
+
+fi
+
 
 ac_fn_c_check_func "$LINENO" "ffs" "ac_cv_func_ffs"
 if test "x$ac_cv_func_ffs" = xyes; then :
@@ -16769,6 +16963,119 @@ esac
 
 fi
 
+
+ac_fn_c_check_func "$LINENO" "finite" "ac_cv_func_finite"
+if test "x$ac_cv_func_finite" = xyes; then :
+  $as_echo "#define HAVE_FINITE 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" finite.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS finite.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "flock" "ac_cv_func_flock"
+if test "x$ac_cv_func_flock" = xyes; then :
+  $as_echo "#define HAVE_FLOCK 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" flock.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS flock.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "hypot" "ac_cv_func_hypot"
+if test "x$ac_cv_func_hypot" = xyes; then :
+  $as_echo "#define HAVE_HYPOT 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" hypot.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS hypot.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "isinf" "ac_cv_func_isinf"
+if test "x$ac_cv_func_isinf" = xyes; then :
+  $as_echo "#define HAVE_ISINF 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" isinf.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS isinf.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "isnan" "ac_cv_func_isnan"
+if test "x$ac_cv_func_isnan" = xyes; then :
+  $as_echo "#define HAVE_ISNAN 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" isnan.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS isnan.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "lgamma_r" "ac_cv_func_lgamma_r"
+if test "x$ac_cv_func_lgamma_r" = xyes; then :
+  $as_echo "#define HAVE_LGAMMA_R 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" lgamma_r.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS lgamma_r.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "memmove" "ac_cv_func_memmove"
+if test "x$ac_cv_func_memmove" = xyes; then :
+  $as_echo "#define HAVE_MEMMOVE 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" memmove.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS memmove.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "nextafter" "ac_cv_func_nextafter"
+if test "x$ac_cv_func_nextafter" = xyes; then :
+  $as_echo "#define HAVE_NEXTAFTER 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" nextafter.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS nextafter.$ac_objext"
+ ;;
+esac
+
+fi
+
+
 ac_fn_c_check_func "$LINENO" "setproctitle" "ac_cv_func_setproctitle"
 if test "x$ac_cv_func_setproctitle" = xyes; then :
   $as_echo "#define HAVE_SETPROCTITLE 1" >>confdefs.h
@@ -16777,6 +17084,90 @@ else
   case " $LIBOBJS " in
   *" setproctitle.$ac_objext "* ) ;;
   *) LIBOBJS="$LIBOBJS setproctitle.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "strchr" "ac_cv_func_strchr"
+if test "x$ac_cv_func_strchr" = xyes; then :
+  $as_echo "#define HAVE_STRCHR 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" strchr.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS strchr.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "strerror" "ac_cv_func_strerror"
+if test "x$ac_cv_func_strerror" = xyes; then :
+  $as_echo "#define HAVE_STRERROR 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" strerror.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS strerror.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "strlcat" "ac_cv_func_strlcat"
+if test "x$ac_cv_func_strlcat" = xyes; then :
+  $as_echo "#define HAVE_STRLCAT 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" strlcat.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS strlcat.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "strlcpy" "ac_cv_func_strlcpy"
+if test "x$ac_cv_func_strlcpy" = xyes; then :
+  $as_echo "#define HAVE_STRLCPY 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" strlcpy.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS strlcpy.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "strstr" "ac_cv_func_strstr"
+if test "x$ac_cv_func_strstr" = xyes; then :
+  $as_echo "#define HAVE_STRSTR 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" strstr.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS strstr.$ac_objext"
+ ;;
+esac
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "tgamma" "ac_cv_func_tgamma"
+if test "x$ac_cv_func_tgamma" = xyes; then :
+  $as_echo "#define HAVE_TGAMMA 1" >>confdefs.h
+
+else
+  case " $LIBOBJS " in
+  *" tgamma.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS tgamma.$ac_objext"
  ;;
 esac
 
@@ -16849,6 +17240,231 @@ esac
 
 fi
 
+ac_fn_c_check_type "$LINENO" "pid_t" "ac_cv_type_pid_t" "$ac_includes_default"
+if test "x$ac_cv_type_pid_t" = xyes; then :
+
+else
+
+cat >>confdefs.h <<_ACEOF
+#define pid_t int
+_ACEOF
+
+fi
+
+for ac_header in vfork.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "vfork.h" "ac_cv_header_vfork_h" "$ac_includes_default"
+if test "x$ac_cv_header_vfork_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_VFORK_H 1
+_ACEOF
+
+fi
+
+done
+
+for ac_func in fork vfork
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+if test "x$ac_cv_func_fork" = xyes; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for working fork" >&5
+$as_echo_n "checking for working fork... " >&6; }
+if ${ac_cv_func_fork_works+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test "$cross_compiling" = yes; then :
+  ac_cv_func_fork_works=cross
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$ac_includes_default
+int
+main ()
+{
+
+	  /* By Ruediger Kuhlmann. */
+	  return fork () < 0;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  ac_cv_func_fork_works=yes
+else
+  ac_cv_func_fork_works=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_fork_works" >&5
+$as_echo "$ac_cv_func_fork_works" >&6; }
+
+else
+  ac_cv_func_fork_works=$ac_cv_func_fork
+fi
+if test "x$ac_cv_func_fork_works" = xcross; then
+  case $host in
+    *-*-amigaos* | *-*-msdosdjgpp*)
+      # Override, as these systems have only a dummy fork() stub
+      ac_cv_func_fork_works=no
+      ;;
+    *)
+      ac_cv_func_fork_works=yes
+      ;;
+  esac
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: result $ac_cv_func_fork_works guessed because of cross compilation" >&5
+$as_echo "$as_me: WARNING: result $ac_cv_func_fork_works guessed because of cross compilation" >&2;}
+fi
+ac_cv_func_vfork_works=$ac_cv_func_vfork
+if test "x$ac_cv_func_vfork" = xyes; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for working vfork" >&5
+$as_echo_n "checking for working vfork... " >&6; }
+if ${ac_cv_func_vfork_works+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test "$cross_compiling" = yes; then :
+  ac_cv_func_vfork_works=cross
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+/* Thanks to Paul Eggert for this test.  */
+$ac_includes_default
+#include <sys/wait.h>
+#ifdef HAVE_VFORK_H
+# include <vfork.h>
+#endif
+/* On some sparc systems, changes by the child to local and incoming
+   argument registers are propagated back to the parent.  The compiler
+   is told about this with #include <vfork.h>, but some compilers
+   (e.g. gcc -O) don't grok <vfork.h>.  Test for this by using a
+   static variable whose address is put into a register that is
+   clobbered by the vfork.  */
+static void
+#ifdef __cplusplus
+sparc_address_test (int arg)
+# else
+sparc_address_test (arg) int arg;
+#endif
+{
+  static pid_t child;
+  if (!child) {
+    child = vfork ();
+    if (child < 0) {
+      perror ("vfork");
+      _exit(2);
+    }
+    if (!child) {
+      arg = getpid();
+      write(-1, "", 0);
+      _exit (arg);
+    }
+  }
+}
+
+int
+main ()
+{
+  pid_t parent = getpid ();
+  pid_t child;
+
+  sparc_address_test (0);
+
+  child = vfork ();
+
+  if (child == 0) {
+    /* Here is another test for sparc vfork register problems.  This
+       test uses lots of local variables, at least as many local
+       variables as main has allocated so far including compiler
+       temporaries.  4 locals are enough for gcc 1.40.3 on a Solaris
+       4.1.3 sparc, but we use 8 to be safe.  A buggy compiler should
+       reuse the register of parent for one of the local variables,
+       since it will think that parent can't possibly be used any more
+       in this routine.  Assigning to the local variable will thus
+       munge parent in the parent process.  */
+    pid_t
+      p = getpid(), p1 = getpid(), p2 = getpid(), p3 = getpid(),
+      p4 = getpid(), p5 = getpid(), p6 = getpid(), p7 = getpid();
+    /* Convince the compiler that p..p7 are live; otherwise, it might
+       use the same hardware register for all 8 local variables.  */
+    if (p != p1 || p != p2 || p != p3 || p != p4
+	|| p != p5 || p != p6 || p != p7)
+      _exit(1);
+
+    /* On some systems (e.g. IRIX 3.3), vfork doesn't separate parent
+       from child file descriptors.  If the child closes a descriptor
+       before it execs or exits, this munges the parent's descriptor
+       as well.  Test for this by closing stdout in the child.  */
+    _exit(close(fileno(stdout)) != 0);
+  } else {
+    int status;
+    struct stat st;
+
+    while (wait(&status) != child)
+      ;
+    return (
+	 /* Was there some problem with vforking?  */
+	 child < 0
+
+	 /* Did the child fail?  (This shouldn't happen.)  */
+	 || status
+
+	 /* Did the vfork/compiler bug occur?  */
+	 || parent != getpid()
+
+	 /* Did the file descriptor bug occur?  */
+	 || fstat(fileno(stdout), &st) != 0
+	 );
+  }
+}
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  ac_cv_func_vfork_works=yes
+else
+  ac_cv_func_vfork_works=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_vfork_works" >&5
+$as_echo "$ac_cv_func_vfork_works" >&6; }
+
+fi;
+if test "x$ac_cv_func_fork_works" = xcross; then
+  ac_cv_func_vfork_works=$ac_cv_func_vfork
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: result $ac_cv_func_vfork_works guessed because of cross compilation" >&5
+$as_echo "$as_me: WARNING: result $ac_cv_func_vfork_works guessed because of cross compilation" >&2;}
+fi
+
+if test "x$ac_cv_func_vfork_works" = xyes; then
+
+$as_echo "#define HAVE_WORKING_VFORK 1" >>confdefs.h
+
+else
+
+$as_echo "#define vfork fork" >>confdefs.h
+
+fi
+if test "x$ac_cv_func_fork_works" = xyes; then
+
+$as_echo "#define HAVE_WORKING_FORK 1" >>confdefs.h
+
+fi
+
+
 for ac_func in __syscall
 do :
   ac_fn_c_check_func "$LINENO" "__syscall" "ac_cv_func___syscall"
@@ -16893,6 +17509,18 @@ _ACEOF
 fi
 done
 		# used for AC_ARG_WITH(setjmp-type)
+for ac_func in atan2l atan2f
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
 for ac_func in chroot
 do :
   ac_fn_c_check_func "$LINENO" "chroot" "ac_cv_func_chroot"
@@ -16948,6 +17576,17 @@ _ACEOF
 fi
 done
 
+for ac_func in dirfd
+do :
+  ac_fn_c_check_func "$LINENO" "dirfd" "ac_cv_func_dirfd"
+if test "x$ac_cv_func_dirfd" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_DIRFD 1
+_ACEOF
+
+fi
+done
+
 for ac_func in dl_iterate_phdr
 do :
   ac_fn_c_check_func "$LINENO" "dl_iterate_phdr" "ac_cv_func_dl_iterate_phdr"
@@ -16965,6 +17604,17 @@ do :
 if test "x$ac_cv_func_dlopen" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_DLOPEN 1
+_ACEOF
+
+fi
+done
+
+for ac_func in dladdr
+do :
+  ac_fn_c_check_func "$LINENO" "dladdr" "ac_cv_func_dladdr"
+if test "x$ac_cv_func_dladdr" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_DLADDR 1
 _ACEOF
 
 fi
@@ -17069,17 +17719,6 @@ _ACEOF
 fi
 done
 
-for ac_func in fork
-do :
-  ac_fn_c_check_func "$LINENO" "fork" "ac_cv_func_fork"
-if test "x$ac_cv_func_fork" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_FORK 1
-_ACEOF
-
-fi
-done
-
 for ac_func in fsync
 do :
   ac_fn_c_check_func "$LINENO" "fsync" "ac_cv_func_fsync"
@@ -17119,6 +17758,17 @@ do :
 if test "x$ac_cv_func_getcwd" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_GETCWD 1
+_ACEOF
+
+fi
+done
+
+for ac_func in getgidx
+do :
+  ac_fn_c_check_func "$LINENO" "getgidx" "ac_cv_func_getgidx"
+if test "x$ac_cv_func_getgidx" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_GETGIDX 1
 _ACEOF
 
 fi
@@ -17190,6 +17840,28 @@ _ACEOF
 fi
 done
 
+for ac_func in getresgid
+do :
+  ac_fn_c_check_func "$LINENO" "getresgid" "ac_cv_func_getresgid"
+if test "x$ac_cv_func_getresgid" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_GETRESGID 1
+_ACEOF
+
+fi
+done
+
+for ac_func in getresuid
+do :
+  ac_fn_c_check_func "$LINENO" "getresuid" "ac_cv_func_getresuid"
+if test "x$ac_cv_func_getresuid" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_GETRESUID 1
+_ACEOF
+
+fi
+done
+
 for ac_func in getrlimit
 do :
   ac_fn_c_check_func "$LINENO" "getrlimit" "ac_cv_func_getrlimit"
@@ -17223,6 +17895,17 @@ _ACEOF
 fi
 done
 		# for making ac_cv_func_gettimeofday
+for ac_func in getuidx
+do :
+  ac_fn_c_check_func "$LINENO" "getuidx" "ac_cv_func_getuidx"
+if test "x$ac_cv_func_getuidx" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_GETUIDX 1
+_ACEOF
+
+fi
+done
+
 for ac_func in gmtime_r
 do :
   ac_fn_c_check_func "$LINENO" "gmtime_r" "ac_cv_func_gmtime_r"
@@ -17251,6 +17934,17 @@ do :
 if test "x$ac_cv_func_ioctl" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_IOCTL 1
+_ACEOF
+
+fi
+done
+
+for ac_func in isfinite
+do :
+  ac_fn_c_check_func "$LINENO" "isfinite" "ac_cv_func_isfinite"
+if test "x$ac_cv_func_isfinite" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ISFINITE 1
 _ACEOF
 
 fi
@@ -17399,12 +18093,34 @@ _ACEOF
 fi
 done
 
+for ac_func in writev
+do :
+  ac_fn_c_check_func "$LINENO" "writev" "ac_cv_func_writev"
+if test "x$ac_cv_func_writev" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_WRITEV 1
+_ACEOF
+
+fi
+done
+
 for ac_func in memrchr
 do :
   ac_fn_c_check_func "$LINENO" "memrchr" "ac_cv_func_memrchr"
 if test "x$ac_cv_func_memrchr" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_MEMRCHR 1
+_ACEOF
+
+fi
+done
+
+for ac_func in memmem
+do :
+  ac_fn_c_check_func "$LINENO" "memmem" "ac_cv_func_memmem"
+if test "x$ac_cv_func_memmem" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_MEMMEM 1
 _ACEOF
 
 fi
@@ -17482,6 +18198,17 @@ do :
 if test "x$ac_cv_func_pread" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_PREAD 1
+_ACEOF
+
+fi
+done
+
+for ac_func in qsort_r
+do :
+  ac_fn_c_check_func "$LINENO" "qsort_r" "ac_cv_func_qsort_r"
+if test "x$ac_cv_func_qsort_r" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_QSORT_R 1
 _ACEOF
 
 fi
@@ -17939,6 +18666,63 @@ fi
 done
 
 
+if test "$ac_cv_func_getcwd" = yes; then :
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking if getcwd allocates buffer if NULL is given" >&5
+$as_echo_n "checking if getcwd allocates buffer if NULL is given... " >&6; }
+if ${rb_cv_getcwd_malloc+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test "$cross_compiling" = yes; then :
+  case $target_os in #(
+  linux*|darwin*|*bsd|cygwin*|mingw*|mswin*) :
+    rb_cv_getcwd_malloc=yes ;; #(
+  *) :
+    rb_cv_getcwd_malloc=no ;;
+esac
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <stddef.h>
+#include <stdio.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
+int
+main(int argc, char **argv)
+{
+    if (!getcwd(NULL, 0)) return EXIT_FAILURE;
+    return EXIT_SUCCESS;
+}
+
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  rb_cv_getcwd_malloc=yes
+else
+  rb_cv_getcwd_malloc=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_getcwd_malloc" >&5
+$as_echo "$rb_cv_getcwd_malloc" >&6; }
+    if test "$rb_cv_getcwd_malloc" = no; then :
+  $as_echo "#define NO_GETCWD_MALLOC 1" >>confdefs.h
+
+fi
+
+fi
+
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for __builtin_bswap16" >&5
 $as_echo_n "checking for __builtin_bswap16... " >&6; }
@@ -18181,6 +18965,140 @@ if test "${rb_cv_builtin___builtin_types_compatible_p}" != no; then
 
 fi
 
+if test "$ac_cv_func_qsort_r" != no; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether qsort_r is GNU version" >&5
+$as_echo_n "checking whether qsort_r is GNU version... " >&6; }
+if ${rb_cv_gnu_qsort_r+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <stdlib.h>
+void qsort_r(void *base, size_t nmemb, size_t size,
+	    int (*compar)(const void *, const void *, void *),
+	    void *arg);
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_gnu_qsort_r=yes
+else
+  rb_cv_gnu_qsort_r=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_gnu_qsort_r" >&5
+$as_echo "$rb_cv_gnu_qsort_r" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether qsort_r is BSD version" >&5
+$as_echo_n "checking whether qsort_r is BSD version... " >&6; }
+if ${rb_cv_bsd_qsort_r+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <stdlib.h>
+void qsort_r(void *base, size_t nmemb, size_t size,
+	     void *arg, int (*compar)(void *, const void *, const void *));
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_bsd_qsort_r=yes
+else
+  rb_cv_bsd_qsort_r=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_bsd_qsort_r" >&5
+$as_echo "$rb_cv_bsd_qsort_r" >&6; }
+  case "$rb_cv_gnu_qsort_r:$rb_cv_bsd_qsort_r" in #(
+  yes:no) :
+
+    $as_echo "#define HAVE_GNU_QSORT_R 1" >>confdefs.h
+
+   ;; #(
+  *) :
+     ;;
+esac
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether atan2 handles Inf as C99" >&5
+$as_echo_n "checking whether atan2 handles Inf as C99... " >&6; }
+if ${rb_cv_atan2_inf_c99+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+    if test $ac_cv_func_atan2f:$ac_cv_func_atan2l = yes:yes; then :
+
+	if test "$cross_compiling" = yes; then :
+  case $target_os in #(
+  mingw*|mswin*) :
+    rb_cv_atan2_inf_c99=no ;; #(
+  *) :
+    rb_cv_atan2_inf_c99=yes ;;
+esac
+
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <math.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
+int
+main(int argc, char **argv)
+{
+    if (fabs(atan2(INFINITY, INFINITY) - M_PI_4) <= 0.01) return EXIT_SUCCESS;
+    return EXIT_FAILURE;
+}
+
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  rb_cv_atan2_inf_c99=yes
+else
+  rb_cv_atan2_inf_c99=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+
+else
+  rb_cv_atan2_inf_c99=no
+fi
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_atan2_inf_c99" >&5
+$as_echo "$rb_cv_atan2_inf_c99" >&6; }
+if test "x$rb_cv_atan2_inf_c99" = xyes; then :
+  $as_echo "#define ATAN2_INF_C99 1" >>confdefs.h
+
+fi
+
 # Some platform need -lrt for clock_gettime, but the other don't.
 if test x"$ac_cv_func_clock_gettime" != xyes; then
     # glibc 2.17 moves clock_* functions from librt to the main C library.
@@ -18308,108 +19226,11 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_sigsetjmp" >&5
 $as_echo "$ac_cv_func_sigsetjmp" >&6; }
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __builtin_setjmp" >&5
-$as_echo_n "checking for __builtin_setjmp... " >&6; }
-if ${ac_cv_func___builtin_setjmp+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <setjmp.h>
-    jmp_buf jb; void t(v) int v; {__builtin_longjmp(jb, v);}
-int
-main ()
-{
-__builtin_setjmp(jb);
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_func___builtin_setjmp=yes
-else
-  ac_cv_func___builtin_setjmp=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
 
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func___builtin_setjmp" >&5
-$as_echo "$ac_cv_func___builtin_setjmp" >&6; }
 
 # we don't use _setjmp if _longjmp doesn't exist.
 test x$ac_cv_func__longjmp = xno && ac_cv_func__setjmp=no
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for setjmp type" >&5
-$as_echo_n "checking for setjmp type... " >&6; }
-setjmp_suffix=
-
-# Check whether --with-setjmp-type was given.
-if test "${with_setjmp_type+set}" = set; then :
-  withval=$with_setjmp_type;
-	case $withval in #(
-  __builtin_setjmp) :
-    setjmp=__builtin_setjmp ;; #(
-  _setjmp) :
-     setjmp_prefix=_ ;; #(
-  sigsetjmp) :
-     setjmp_prefix=sig ;; #(
-  setjmp) :
-     setjmp_prefix= ;; #(
-  setjmpex) :
-     setjmp_prefix= setjmp_suffix=ex ;; #(
-  '') :
-     unset setjmp_prefix ;; #(
-  *) :
-       as_fn_error $? "invalid setjmp type: $withval" "$LINENO" 5 ;;
-esac
-else
-  unset setjmp_prefix
-fi
-
-if test ${setjmp_prefix+set}; then
-    if test "${setjmp_prefix}" && eval test '$ac_cv_func_'${setjmp_prefix}setjmp${setjmp_suffix} = no; then
-	as_fn_error $? "${setjmp_prefix}setjmp${setjmp_suffix} is not available" "$LINENO" 5
-    fi
-elif test "$ac_cv_func___builtin_setjmp" = yes; then
-    setjmp_prefix=__builtin_
-    setjmp_suffix=
-elif test "$ac_cv_header_setjmpex_h:$ac_cv_func__setjmpex" = yes:yes; then
-    setjmp_prefix=
-    setjmp_suffix=ex
-elif test "$ac_cv_func__setjmp" = yes; then
-    setjmp_prefix=_
-    setjmp_suffix=
-elif test "$ac_cv_func_sigsetjmp" = yes; then
-    case $target_os in #(
-  solaris*|cygwin*) :
-    setjmp_prefix= ;; #(
-  *) :
-    setjmp_prefix=sig ;;
-esac
-    setjmp_suffix=
-else
-    setjmp_prefix=
-    setjmp_suffix=
-fi
-if test x$setjmp_prefix = xsig; then
-    setjmp_sigmask=yes
-else
-    unset setjmp_sigmask
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ${setjmp_prefix}setjmp${setjmp_suffix}" >&5
-$as_echo "${setjmp_prefix}setjmp${setjmp_suffix}" >&6; }
-cat >>confdefs.h <<_ACEOF
-#define RUBY_SETJMP(env) ${setjmp_prefix}setjmp${setjmp_suffix}(env${setjmp_sigmask+,0})
-_ACEOF
-
-cat >>confdefs.h <<_ACEOF
-#define RUBY_LONGJMP(env,val) ${setjmp_prefix}longjmp(env,val)
-_ACEOF
-
-cat >>confdefs.h <<_ACEOF
-#define RUBY_JMP_BUF ${setjmp_sigmask+${setjmp_prefix}}jmp_buf
-_ACEOF
 
 # End of setjmp check.
 
@@ -19098,118 +19919,6 @@ else
 
 fi
 
-# win32.c still use this. Don't remove it.
-test "$rb_cv_fcnt" = "not found" && rb_cv_fcnt="not found (OK if using GNU libc)"
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking read count field in FILE structures" >&5
-$as_echo_n "checking read count field in FILE structures... " >&6; }
-if ${rb_cv_fcnt+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  rb_cv_fcnt="not found (OK if using GNU libc)"
-for fcnt in	     _cnt	     __cnt	     _r		     readCount	     _rcount	; do
-    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <stdio.h>
-
-int
-main ()
-{
-FILE *f = stdin; f->$fcnt = 0;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  rb_cv_fcnt="$fcnt"; break
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-done
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_fcnt" >&5
-$as_echo "$rb_cv_fcnt" >&6; }
-case "$rb_cv_fcnt" in #(
-  "not found"*) :
-    rb_cv_fcnt="not found" ;; #(
-  *) :
-    cat >>confdefs.h <<_ACEOF
-#define FILE_COUNT $rb_cv_fcnt
-_ACEOF
- ;;
-esac
-
-# win32.c still use this. Don't remove it.
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking read buffer ptr field in FILE structures" >&5
-$as_echo_n "checking read buffer ptr field in FILE structures... " >&6; }
-if ${rb_cv_frptr+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  for frptr in	     _IO_read_ptr      _ptr	     __ptr	     bufpos	     _p	     __bufpos	; do
-    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <stdio.h>
-
-int
-main ()
-{
-FILE *f = stdin; char buf[256]; f->$frptr = buf;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  rb_cv_frptr="$frptr"; break
-else
-  rb_cv_frptr="not found"
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-done
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_frptr" >&5
-$as_echo "$rb_cv_frptr" >&6; }
-if test "$rb_cv_frptr" != "not found"; then
-  cat >>confdefs.h <<_ACEOF
-#define FILE_READPTR $rb_cv_frptr
-_ACEOF
-
-
-  if test "$rb_cv_fcnt" = "not found"; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking read buffer end field in FILE structures" >&5
-$as_echo_n "checking read buffer end field in FILE structures... " >&6; }
-if ${rb_cv_frend+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  for frend in	         _IO_read_end	         bufread 	         __bufread 	    ; do
-        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <stdio.h>
-
-int
-main ()
-{
-FILE *f = stdin; char buf[256]; f->$frend = buf;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  rb_cv_frend="$frend"; break
-else
-  rb_cv_frend="not found"
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-    done
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_frend" >&5
-$as_echo "$rb_cv_frend" >&6; }
-    if test "$rb_cv_frend" != "not found"; then
-      cat >>confdefs.h <<_ACEOF
-#define FILE_READEND $rb_cv_frend
-_ACEOF
-
-    fi
-  fi
-fi
-
 if test x"$ac_cv_func_gettimeofday" != xyes; then
     as_fn_error $? "gettimeofday() must exist" "$LINENO" 5
 fi
@@ -19589,6 +20298,45 @@ esac
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: \"Don't know how to find pthread library on your system -- thread support disabled\"" >&5
 $as_echo "$as_me: WARNING: \"Don't know how to find pthread library on your system -- thread support disabled\"" >&2;}
     fi
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether pthread_t is scalar type" >&5
+$as_echo_n "checking whether pthread_t is scalar type... " >&6; }
+if ${rb_cv_scalar_pthread_t+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+	    #include <pthread.h>
+
+int
+main ()
+{
+
+	    pthread_t thread_id;
+	    thread_id = 0;
+	    if (!thread_id) return 0;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_scalar_pthread_t=yes
+else
+  rb_cv_scalar_pthread_t=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_scalar_pthread_t" >&5
+$as_echo "$rb_cv_scalar_pthread_t" >&6; }
+    if test x"$rb_cv_scalar_pthread_t" = xyes; then
+	: # RUBY_CHECK_SIZEOF(pthread_t, [void* int long], [], [#include <pthread.h>])
+    else
+	$as_echo "#define NON_SCALAR_THREAD_ID 1" >>confdefs.h
+
+    fi
     for ac_func in sched_yield pthread_attr_setinheritsched \
 	pthread_getattr_np pthread_attr_get_np pthread_attr_getstack\
 	pthread_get_stackaddr_np pthread_get_stacksize_np \
@@ -19694,7 +20442,7 @@ done
     fi
 fi
 
-if test "$ac_cv_func_fork" = "yes" -a "$rb_with_pthread" = "yes"; then
+if test "$ac_cv_func_fork_works" = "yes" -a "$rb_with_pthread" = "yes"; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking if fork works with pthread" >&5
 $as_echo_n "checking if fork works with pthread... " >&6; }
 if ${rb_cv_fork_with_pthread+:} false; then :
@@ -19944,9 +20692,6 @@ else
   enable_rpath="$rb_cv_binary_elf"
 fi
 
-  if test "$enable_rpath" = yes; then
-    RPATHFLAG=" ${linker_flag}-R%1\$-s"
-  fi
 
   case "$target_os" in #(
   hpux*) :
@@ -19959,7 +20704,7 @@ fi
 			fi
 			rb_cv_dlopen=yes ;; #(
   solaris*) :
-     	if test "$GCC" = yes; then
+    	if test "$GCC" = yes; then
 			    : ${LDSHARED='$(CC) -shared'}
 			    if test "$rb_cv_prog_gnu_ld" = yes; then
 				LDFLAGS="$LDFLAGS -Wl,-E"
@@ -20027,20 +20772,6 @@ esac ;; #(
 			rb_cv_dlopen=yes ;; #(
   darwin*) :
     	: ${LDSHARED='$(CC) -dynamic -bundle'}
-			# RUBY_APPEND_OPTIONS(DLDFLAGS)
-	for rb_opt in  \
-			    "${linker_flag}-undefined${linker_flag:+,}dynamic_lookup" \
-			    "${linker_flag}-multiply_defined${linker_flag:+,}suppress" \
-			    ; do
-	case " ${DLDFLAGS-} " in #(
-  *" ${rb_opt} "*) :
-     ;; #(
-  '  ') :
-     DLDFLAGS="${rb_opt}" ;; #(
-  *) :
-     DLDFLAGS="$DLDFLAGS ${rb_opt}" ;;
-esac
-	done
 			: ${LDFLAGS=""}
 			: ${LIBPATHENV=DYLD_LIBRARY_PATH}
 			# /usr/local/include is always searched for
@@ -20124,10 +20855,156 @@ esac
   nacl) :
      LDSHARED='$(CC) -shared'  ;; #(
   *) :
-     	: ${LDSHARED='$(LD)'} ;;
+    	: ${LDSHARED='$(LD)'} ;;
 esac
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_dlopen" >&5
 $as_echo "$rb_cv_dlopen" >&6; }
+
+  if test "$rb_cv_dlopen" = yes; then
+    case "$target_os" in #(
+  darwin*) :
+
+	for flag in \
+	  "-undefined dynamic_lookup" \
+	  "-multiply_defined suppress" \
+	  ; do
+	  test "x${linker_flag}" = x || flag="${linker_flag}${flag// /,}"
+
+    save_LDFLAGS="$LDFLAGS"
+    LDFLAGS="$LDFLAGS $flag"
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $flag is accepted as LDFLAGS" >&5
+$as_echo_n "checking whether $flag is accepted as LDFLAGS... " >&6; }
+    save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $rb_cv_warnflags"
+if test "${ac_c_werror_flag+set}"; then
+  rb_c_werror_flag="$ac_c_werror_flag"
+else
+  unset rb_c_werror_flag
+fi
+ac_c_werror_flag=yes
+
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  flag=
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+CFLAGS="$save_CFLAGS"
+save_CFLAGS=
+if test "${rb_c_werror_flag+set}"; then
+  ac_c_werror_flag="$rb_c_werror_flag"
+else
+  unset ac_c_werror_flag
+fi
+    LDFLAGS="$save_LDFLAGS"
+    save_LDFLAGS=
+
+	  if test "x$flag" != x; then
+	    # RUBY_APPEND_OPTIONS(DLDFLAGS)
+	for rb_opt in $flag; do
+	case " ${DLDFLAGS-} " in #(
+  *" ${rb_opt} "*) :
+     ;; #(
+  '  ') :
+     DLDFLAGS="${rb_opt}" ;; #(
+  *) :
+     DLDFLAGS="$DLDFLAGS ${rb_opt}" ;;
+esac
+	done
+	  fi
+	done
+       ;; #(
+  *) :
+     ;;
+esac
+  fi
+
+  if test "$enable_rpath" = yes; then
+    if test x"${RPATHFLAG}" = x; then
+      for rpathflag in -R "-rpath "; do
+	case "$rpathflag" in #(
+  *" ") :
+    case "${linker_flag}" in #(
+  *,) :
+    rpathflag=`echo "$rpathflag" | tr ' ' ,` ;; #(
+  *) :
+     ;;
+esac ;; #(
+  *) :
+     ;;
+esac
+	rpathflag="${linker_flag}${rpathflag}"
+
+    save_LDFLAGS="$LDFLAGS"
+    LDFLAGS="$LDFLAGS ${rpathflag}."
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether ${rpathflag}. is accepted as LDFLAGS" >&5
+$as_echo_n "checking whether ${rpathflag}. is accepted as LDFLAGS... " >&6; }
+    save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $rb_cv_warnflags"
+if test "${ac_c_werror_flag+set}"; then
+  rb_c_werror_flag="$ac_c_werror_flag"
+else
+  unset rb_c_werror_flag
+fi
+ac_c_werror_flag=yes
+
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  rpathflag=
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+CFLAGS="$save_CFLAGS"
+save_CFLAGS=
+if test "${rb_c_werror_flag+set}"; then
+  ac_c_werror_flag="$rb_c_werror_flag"
+else
+  unset ac_c_werror_flag
+fi
+    LDFLAGS="$save_LDFLAGS"
+    save_LDFLAGS=
+
+	if test "x${rpathflag}" != x; then
+	  RPATHFLAG=" ${rpathflag}%1\$-s"
+	  break
+	fi
+      done
+    fi
+  fi
 fi
 if test "${LDSHAREDXX}" = ""; then
     case "${LDSHARED}" in #(
@@ -20179,6 +21056,58 @@ if test "x$OPT_DIR" != x; then
     LDFLAGS_OPTDIR="$val"
 fi
 
+case "$target_os" in #(
+  freebsd*) :
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for procstat_open_sysctl in -lprocstat" >&5
+$as_echo_n "checking for procstat_open_sysctl in -lprocstat... " >&6; }
+if ${ac_cv_lib_procstat_procstat_open_sysctl+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lprocstat  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char procstat_open_sysctl ();
+int
+main ()
+{
+return procstat_open_sysctl ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_procstat_procstat_open_sysctl=yes
+else
+  ac_cv_lib_procstat_procstat_open_sysctl=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_procstat_procstat_open_sysctl" >&5
+$as_echo "$ac_cv_lib_procstat_procstat_open_sysctl" >&6; }
+if test "x$ac_cv_lib_procstat_procstat_open_sysctl" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBPROCSTAT 1
+_ACEOF
+
+  LIBS="-lprocstat $LIBS"
+
+fi
+
+     ;; #(
+  *) :
+     ;;
+esac
 case "$target_cpu-$target_os" in #(
   *-darwin*) :
 
@@ -20390,24 +21319,25 @@ void sigsegv(int signum, siginfo_t *info, void *ctx){
     if (n > 0) {
 	/*fprintf(stdout, "backtrace:%d\n",n);*/
     } else {
-	abort();
+	_exit(EXIT_FAILURE);
     }
-    _exit(0);
+    _exit(EXIT_SUCCESS);
 }
 int
-main()
+main(void)
 {
+    volatile int *a = NULL;
     stack_t ss;
     ss.ss_sp = malloc(SIGSTKSZ);
     if (ss.ss_sp == NULL) {
 	fprintf(stderr, "cannot allocate memory for sigaltstack\n");
-	abort();
+	return EXIT_FAILURE;
     }
     ss.ss_size = SIGSTKSZ;
     ss.ss_flags = 0;
     if (sigaltstack(&ss, NULL) == -1) {
 	fprintf(stderr, "sigaltstack failed\n");
-	abort();
+	return EXIT_FAILURE;
     }
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
@@ -20416,9 +21346,8 @@ main()
     sa.sa_flags |= SA_SIGINFO;
     sa.sa_flags |= SA_ONSTACK;
     sigaction(SIGSEGV, &sa, NULL);
-    int *a = NULL;
     a[0] = 1;
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 _ACEOF
@@ -20542,17 +21471,6 @@ esac
 esac
 fi
 if test "$rb_cv_dlopen:$load_relative" = yes:yes; then
-    for ac_func in dladdr
-do :
-  ac_fn_c_check_func "$LINENO" "dladdr" "ac_cv_func_dladdr"
-if test "x$ac_cv_func_dladdr" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_DLADDR 1
-_ACEOF
-
-fi
-done
-
     if test "$ac_cv_func_dladdr" = yes; then
 	LOAD_RELATIVE=1
     fi
@@ -20706,19 +21624,28 @@ if test "${with_static_linked_ext+set}" = set; then :
   withval=$with_static_linked_ext; case $withval in #(
   yes) :
     STATIC=;EXTSTATIC=static ;; #(
+  no) :
+     ;; #(
   *) :
-     ;;
+    EXTSTATIC="$withval" ;;
 esac
 fi
 
-if test x"$EXTSTATIC" = xstatic; then
+case ",$EXTSTATIC," in #(
+  ,static,|*,enc,*) :
+
   ENCOBJS='enc/encinit.$(OBJEXT) enc/libenc.$(LIBEXT) enc/libtrans.$(LIBEXT)'
   EXTOBJS='ext/extinit.$(OBJEXT)'
   cat >>confdefs.h <<_ACEOF
 #define EXTSTATIC 1
 _ACEOF
 
-fi
+  ENCSTATIC=static
+
+ ;; #(
+  *) :
+     ;;
+esac
 
 
 
@@ -21102,7 +22029,13 @@ esac
   LIBRUBYARG_SHARED=
 
   # enable PIE if possible
+  # Check whether --enable-pie was given.
+if test "${enable_pie+set}" = set; then :
+  enableval=$enable_pie; pie=$enableval
+else
   pie=
+fi
+
   case "$target_os" in #(
   haiku) :
 
@@ -21245,8 +22178,18 @@ esac
 esac
 if test "$enable_rpath" = yes; then
     test -z "$LIBRUBY_RPATHFLAGS" || LIBRUBY_RPATHFLAGS="$LIBRUBY_RPATHFLAGS "
-    LIBRUBY_RPATHFLAGS="$LIBRUBY_RPATHFLAGS${linker_flag}-R ${linker_flag}${libprefix}"
-    test "x$cross_compiling" = xyes || LIBRUBY_RPATHFLAGS="$LIBRUBY_RPATHFLAGS -L${libprefix}"
+    rpathflag="${RPATHFLAG}"
+    case "${cross_compiling}${load_relative}" in #(
+  *yes*) :
+     ;; #(
+  *) :
+    rpathflag="$RPATHFLAG$LIBPATHFLAG" ;;
+esac
+    rpathflag=`IFS="$PATH_SEPARATOR"
+        echo x "$rpathflag" |
+        sed "s/^x *//;s${IFS}"'%1\\$-s'"${IFS}${libprefix}${IFS}g;s${IFS}%s${IFS}${libprefix}${IFS}g"
+    `
+    LIBRUBY_RPATHFLAGS="$LIBRUBY_RPATHFLAGS${rpathflag}"
     LIBRUBYARG_SHARED="$LIBRUBY_RPATHFLAGS $LIBRUBYARG_SHARED"
     LIBRUBYARG_STATIC="$LIBRUBY_RPATHFLAGS $LIBRUBYARG_STATIC"
 fi
@@ -21388,6 +22331,143 @@ fi
 
 
 
+
+
+if test x"${ac_cv_func___builtin_setjmp}" = xyes; then
+   unset ac_cv_func___builtin_setjmp
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __builtin_setjmp" >&5
+$as_echo_n "checking for __builtin_setjmp... " >&6; }
+if ${ac_cv_func___builtin_setjmp+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+    ac_cv_func___builtin_setjmp=no
+    for cast in "" "(void **)"; do
+	save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $rb_cv_warnflags"
+if test "${ac_c_werror_flag+set}"; then
+  rb_c_werror_flag="$ac_c_werror_flag"
+else
+  unset rb_c_werror_flag
+fi
+ac_c_werror_flag=yes
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <setjmp.h>
+	    #include <stdio.h>
+	    jmp_buf jb;
+	    void t(void) {__builtin_longjmp($cast jb, 1);}
+	    int jump(void) {(void)(__builtin_setjmp($cast jb) ? 1 : 0); return 0;}
+int
+main ()
+{
+
+	    void (*volatile f)(void) = t;
+	    if (!jump()) printf("%d\n", f != 0);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_func___builtin_setjmp="yes with cast ($cast)"
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+CFLAGS="$save_CFLAGS"
+save_CFLAGS=
+if test "${rb_c_werror_flag+set}"; then
+  ac_c_werror_flag="$rb_c_werror_flag"
+else
+  unset ac_c_werror_flag
+fi
+	test "$ac_cv_func___builtin_setjmp" = no || break
+    done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func___builtin_setjmp" >&5
+$as_echo "$ac_cv_func___builtin_setjmp" >&6; }
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for setjmp type" >&5
+$as_echo_n "checking for setjmp type... " >&6; }
+setjmp_suffix=
+
+# Check whether --with-setjmp-type was given.
+if test "${with_setjmp_type+set}" = set; then :
+  withval=$with_setjmp_type;
+	case $withval in #(
+  __builtin_setjmp) :
+    setjmp=__builtin_setjmp ;; #(
+  _setjmp) :
+     setjmp_prefix=_ ;; #(
+  sigsetjmp) :
+     setjmp_prefix=sig ;; #(
+  setjmp) :
+     setjmp_prefix= ;; #(
+  setjmpex) :
+     setjmp_prefix= setjmp_suffix=ex ;; #(
+  '') :
+     unset setjmp_prefix ;; #(
+  *) :
+       as_fn_error $? "invalid setjmp type: $withval" "$LINENO" 5 ;;
+esac
+else
+  unset setjmp_prefix
+fi
+
+setjmp_cast=
+if test ${setjmp_prefix+set}; then
+    if test "${setjmp_prefix}" && eval test '$ac_cv_func_'${setjmp_prefix}setjmp${setjmp_suffix} = no; then
+	as_fn_error $? "${setjmp_prefix}setjmp${setjmp_suffix} is not available" "$LINENO" 5
+    fi
+elif { case "$ac_cv_func___builtin_setjmp" in #(
+  yes*) :
+    true ;; #(
+  *) :
+    false ;;
+esac; }; then
+    setjmp_cast=`expr "$ac_cv_func___builtin_setjmp" : "yes with cast (\(.*\))"`
+    setjmp_prefix=__builtin_
+    setjmp_suffix=
+elif test "$ac_cv_header_setjmpex_h:$ac_cv_func__setjmpex" = yes:yes; then
+    setjmp_prefix=
+    setjmp_suffix=ex
+elif test "$ac_cv_func__setjmp" = yes; then
+    setjmp_prefix=_
+    setjmp_suffix=
+elif test "$ac_cv_func_sigsetjmp" = yes; then
+    case $target_os in #(
+  solaris*|cygwin*) :
+    setjmp_prefix= ;; #(
+  *) :
+    setjmp_prefix=sig ;;
+esac
+    setjmp_suffix=
+else
+    setjmp_prefix=
+    setjmp_suffix=
+fi
+if test x$setjmp_prefix = xsig; then
+    setjmp_sigmask=yes
+else
+    unset setjmp_sigmask
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ${setjmp_prefix}setjmp${setjmp_suffix}${setjmp_cast:+\($setjmp_cast\)}" >&5
+$as_echo "${setjmp_prefix}setjmp${setjmp_suffix}${setjmp_cast:+\($setjmp_cast\)}" >&6; }
+cat >>confdefs.h <<_ACEOF
+#define RUBY_SETJMP(env) ${setjmp_prefix}setjmp${setjmp_suffix}($setjmp_cast(env)${setjmp_sigmask+,0})
+_ACEOF
+
+cat >>confdefs.h <<_ACEOF
+#define RUBY_LONGJMP(env,val) ${setjmp_prefix}longjmp($setjmp_cast(env),val)
+_ACEOF
+
+cat >>confdefs.h <<_ACEOF
+#define RUBY_JMP_BUF ${setjmp_sigmask+${setjmp_prefix}}jmp_buf
+_ACEOF
+
+
 }
 { # build section
 
@@ -21411,7 +22491,7 @@ fi
 if test "${enable_install_capi+set}" = set; then :
   enableval=$enable_install_capi; install_capi=$enableval
 else
-  install_capi=yes
+  install_capi=no
 fi
 
 
@@ -21812,11 +22892,35 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_architecture_macros" >&5
 $as_echo "$rb_cv_architecture_macros" >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether __ARCHITECTURE__ is available" >&5
+$as_echo_n "checking whether __ARCHITECTURE__ is available... " >&6; }
+if ${rb_cv_architecture_available+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <stdio.h>
+		const char arch[] = __ARCHITECTURE__;
+int
+main ()
+{
+puts(arch);
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  rb_cv_architecture_available=yes
+else
+  rb_cv_architecture_available=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_architecture_available" >&5
+$as_echo "$rb_cv_architecture_available" >&6; }
 fi
 
-ac_fn_c_check_func "$LINENO" "memmem" "ac_cv_func_memmem"
-if test "x$ac_cv_func_memmem" = xyes; then :
-
+if test "$ac_cv_func_memmem" = yes; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for broken memmem" >&5
 $as_echo_n "checking for broken memmem... " >&6; }
 if ${rb_cv_broken_memmem+:} false; then :
@@ -21866,13 +22970,8 @@ fi
 fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_broken_memmem" >&5
 $as_echo "$rb_cv_broken_memmem" >&6; }
-  if test "$rb_cv_broken_memmem" = no; then
-    $as_echo "#define HAVE_MEMMEM 1" >>confdefs.h
-
-  fi
-
+  test x"$rb_cv_broken_memmem" = xyes && ac_cv_func_memmem=no
 fi
-
 
 
 CPPFLAGS="$CPPFLAGS "'$(DEFS)'
@@ -22070,31 +23169,6 @@ configure_args="`echo "${ac_configure_args}" | sed 's/\\$/$$/g'`"
 
 if test "${universal_binary-no}" = yes ; then
     arch="universal-${target_os}"
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether __ARCHITECTURE__ is available" >&5
-$as_echo_n "checking whether __ARCHITECTURE__ is available... " >&6; }
-if ${rb_cv_architecture_available+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-const char arch = __ARCHITECTURE__;
-int
-main ()
-{
-puts(arch);
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  rb_cv_architecture_available=yes
-else
-  rb_cv_architecture_available=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_architecture_available" >&5
-$as_echo "$rb_cv_architecture_available" >&6; }
     if test "${rb_cv_architecture_available}" = yes; then
 	cat >>confdefs.h <<_ACEOF
 #define RUBY_PLATFORM_CPU __ARCHITECTURE__
@@ -22364,6 +23438,14 @@ fi
 
 
 exec=exec
+
+
+
+# Check whether --with-destdir was given.
+if test "${with_destdir+set}" = set; then :
+  withval=$with_destdir; DESTDIR="$withval"
+fi
+
 
 
 ac_config_files="$ac_config_files $ruby_pc:template/ruby.pc.in"
@@ -23537,6 +24619,7 @@ which seems to be undefined.  Please make sure it is defined" >&2;}
   *) :
     VCSUP='$(VCS)' ;;
 esac
+	sed -n 's/^#define \(RUBY_RELEASE_DATE\) "\(.*\)"/\1 = \2/p' "$srcdir/version.h"
 	sed '/^MISSING/s/\$U\././g;/^VCS *=/s#@VCS@#'"$VCS"'#;/^VCSUP *=/s#@VCSUP@#'"$VCSUP"'#' Makefile
 	echo; test x"$EXEEXT" = x || echo 'miniruby: miniruby$(EXEEXT)'
 	if test "$gnumake" != yes; then

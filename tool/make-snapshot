@@ -21,11 +21,21 @@ options:
   -archname=NAME        make the basename of snapshots NAME
   -keep_temp            keep temporary working directory
   -patch_file=PATCH     apply PATCH file after export
+  -packages=PKG[,...]   make PKG packages (#{PACKAGES.keys.join(", ")})
+  -digests=ALG[,...]    show ALG digests (#{DIGESTS.join(", ")})
 version:
-  trunk, stable, branches/*, tags/*, X.Y.Z, X.Y.Z-pL
+  trunk, stable, branches/*, tags/*, X.Y, X.Y.Z, X.Y.Z-pL
 each versions may be followed by optional @revision.
 USAGE
 end
+
+DIGESTS = %w[MD5 SHA256 SHA512]
+PACKAGES = {
+  "bzip" => %w".tar.bz2 bzip2 -c",
+  "gzip" => %w".tar.gz  gzip -c",
+  "xz"   => %w".tar.xz  xz -c",
+  "zip"  => %w".zip     zip -qr",
+}
 
 ENV["LC_ALL"] = ENV["LANG"] = "C"
 SVNURL = URI.parse("http://svn.ruby-lang.org/repos/ruby/")
@@ -58,6 +68,18 @@ class Dir
     path
   end unless respond_to?(:mktmpdir)
 end
+
+$packages &&= $packages.split(/[, ]+/).tap {|pkg|
+  pkg -= PACKAGES.keys
+  pkg.empty? or abort "#{File.basename $0}: unknown packages - #{pkg.join(", ")}"
+}
+$packages ||= PACKAGES.keys
+
+$digests &&= $digests.split(/[, ]+/).tap {|dig|
+  dig -= DIGESTS
+  dig.empty? or abort "#{File.basename $0}: unknown digests - #{dig.join(", ")}"
+}
+$digests ||= DIGESTS
 
 $patch_file &&= File.expand_path($patch_file)
 path = ENV["PATH"].split(File::PATH_SEPARATOR)
@@ -100,6 +122,7 @@ Dir.chdir tmp
 
 def package(rev, destdir)
   patchlevel = false
+  prerelease = false
   if revision = rev[/@(\d+)\z/, 1]
     rev = $`
   end
@@ -110,14 +133,15 @@ def package(rev, destdir)
     url = SVNURL + "branches/"
     url = url + `svn ls #{url}`[/.*^(ruby_\d+_\d+)\//m, 1]
   when /\A(.*)\.(.*)\.(.*)-(preview|rc)(\d+)/
+    prerelease = true
     tag = "#{$4}#{$5}"
     url = SVNURL + "tags/v#{$1}_#{$2}_#{$3}_#{$4}#{$5}"
   when /\A(.*)\.(.*)\.(.*)-p(\d+)/
     patchlevel = true
     tag = "p#{$4}"
     url = SVNURL + "tags/v#{$1}_#{$2}_#{$3}_#{$4}"
-  when /\A(\d+)\.(\d+)\.(\d+)\z/
-    if $1 > "2" || $1 == "2" && $2 >= "1"
+  when /\A(\d+)\.(\d+)(?:\.(\d+))?\z/
+    if $3 && ($1 > "2" || $1 == "2" && $2 >= "1")
       patchlevel = true
       tag = ""
       url = SVNURL + "tags/v#{$1}_#{$2}_#{$3}"
@@ -171,11 +195,17 @@ def package(rev, destdir)
       patchlevel = versionhdr[/^\#define\s+RUBY_PATCHLEVEL\s+(\d+)/, 1]
       tag = (patchlevel ? "p#{patchlevel}" : "r#{revision}")
     end
+  elsif prerelease
+    versionhdr ||= IO.read("#{v}/version.h")
+    versionhdr.sub!(/^\#define\s+RUBY_PATCHLEVEL_STR\s+"\K.+?(?=")/, tag)
+    IO.write("#{v}/version.h", versionhdr)
   else
     tag ||= "r#{revision}"
   end
   unless v == $exported
-    if tag.empty?
+    if $archname
+      n = $archname
+    elsif tag.empty?
       n = "ruby-#{version}"
     else
       n = "ruby-#{version}-#{tag}"
@@ -190,11 +220,12 @@ def package(rev, destdir)
     %w[config.guess config.sub].each do |conf|
       next if File.exist?("tool/#{conf}")
       begin
-        require File.expand_path("config_files", $tooldir)
+        require File.expand_path("downloader", $tooldir)
       rescue LoadError
-        abort "Error!!! Copy 'config_files.rb' from 'tool' directory of the recent ruby repository!"
+        abort "Error!!! Copy 'downloader.rb' from 'tool' directory of the recent ruby repository!"
       end
-      ConfigFiles.download(conf, "tool")
+      url = "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=%s;hb=HEAD" % conf
+      Downloader.download(url, conf, "tool")
     end
     File.open(clean.add("cross.rb"), "w") do |f|
       f.puts "Object.__send__(:remove_const, :CROSS_COMPILING) if defined?(CROSS_COMPILING)"
@@ -248,6 +279,14 @@ def package(rev, destdir)
     else
       system("#{YACC} -o parse.c parse.y")
     end
+    if File.file?('gems/bundled_gems') && bundled_gems = File.read('gems/bundled_gems')
+      bundled_gems.split("\n").map(&:split).each do |gem, ver|
+        gem_name = "#{gem}-#{ver}.gem"
+        unless File.file?("gems/#{gem_name}")
+          Downloader.download("https://rubygems.org/downloads/#{gem_name}", gem_name, "gems")
+        end
+      end
+    end
     FileUtils.rm_rf(clean)
     unless $?.success?
       puts " failed"
@@ -264,13 +303,33 @@ def package(rev, destdir)
     v = File.basename(v)
   end
 
-  return [["bzip tarball", ".tar.bz2", %w"tar cjf"],
-          ["gzip tarball", ".tar.gz", %w"tar czf"],
-          ["zip archive", ".zip", %w"zip -qr"]
-         ].collect do |mesg, ext, cmd|
+  tarball = nil
+  return $packages.collect do |mesg|
+    (ext, *cmd) = PACKAGES[mesg]
+    File.directory?(destdir) or FileUtils.mkpath(destdir)
     file = File.join(destdir, "#{$archname||v}#{ext}")
-    print "creating #{mesg}... #{file}"
-    if system(*(cmd + [file, v]))
+    case ext
+    when /\.tar/
+      if tarball
+        next if tarball.empty?
+      else
+        tarball = "#{$archname||v}.tar"
+        print "creating tarball... #{tarball}"
+        if system("tar", "cf", tarball, v)
+          puts " done"
+        else
+          puts " failed"
+          tarball = ""
+          next
+        end
+      end
+      print "creating #{mesg} tarball... #{file}"
+      done = system(*(cmd + [tarball]), out: file)
+    else
+      print "creating #{mesg} archive... #{file}"
+      done = system(*(cmd + [file, v]))
+    end
+    if done
       puts " done"
       file
     else
@@ -289,13 +348,11 @@ revisions.collect {|rev| package(rev, destdir)}.flatten.each do |name|
     next
   end
   str = open(name, "rb") {|f| f.read}
-  md5 = Digest::MD5.hexdigest str
-  sha = Digest::SHA256.hexdigest str
   puts "* #{name}"
   puts "  SIZE:   #{str.bytesize} bytes"
-  puts "  MD5:    #{md5}"
-  puts "  SHA256: #{sha}"
-  puts
+  $digests.each do |alg|
+    printf "  %-8s%s\n", "#{alg}:", Digest.const_get(alg).hexdigest(str)
+  end
 end
 
 exit false if !success

@@ -385,7 +385,7 @@ module Net   #:nodoc:
   class HTTP < Protocol
 
     # :stopdoc:
-    Revision = %q$Revision: 44079 $.split[1]
+    Revision = %q$Revision: 47079 $.split[1]
     HTTPVersion = '1.1'
     begin
       require 'zlib'
@@ -687,10 +687,10 @@ module Net   #:nodoc:
     # The port number to connect to.
     attr_reader :port
 
-    # The local host used to estabilish the connection.
+    # The local host used to establish the connection.
     attr_accessor :local_host
 
-    # The local port used to estabilish the connection.
+    # The local port used to establish the connection.
     attr_accessor :local_port
 
     attr_writer :proxy_from_env
@@ -1026,7 +1026,9 @@ module Net   #:nodoc:
 
     # The proxy URI determined from the environment for this connection.
     def proxy_uri # :nodoc:
-      @proxy_uri ||= URI("http://#{address}:#{port}").find_proxy
+      @proxy_uri ||= URI::HTTP.new(
+        "http".freeze, nil, address, port, nil, nil, nil, nil, nil
+      ).find_proxy
     end
 
     # The address of the proxy server, if one is configured.
@@ -1123,7 +1125,7 @@ module Net   #:nodoc:
     #       end
     #     }
     #
-    def get(path, initheader = {}, dest = nil, &block) # :yield: +body_segment+
+    def get(path, initheader = nil, dest = nil, &block) # :yield: +body_segment+
       res = nil
       request(Get.new(path, initheader)) {|r|
         r.read_body dest, &block
@@ -1455,10 +1457,7 @@ module Net   #:nodoc:
         req['connection'] ||= 'close'
       end
 
-      host = req['host'] || address
-      host = $1 if host =~ /(.*):\d+$/
-      req.update_uri host, port, use_ssl?
-
+      req.update_uri address, port, use_ssl?
       req['host'] ||= addr_port()
     end
 

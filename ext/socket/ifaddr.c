@@ -74,7 +74,6 @@ static const rb_data_type_t ifaddr_type = {
     {ifaddr_mark, ifaddr_free, ifaddr_memsize,},
 };
 
-#define IS_IFADDRS(obj) rb_typeddata_is_kind_of((obj), &ifaddr_type)
 static inline rb_ifaddr_t *
 check_ifaddr(VALUE self)
 {
@@ -292,6 +291,9 @@ ifaddr_inspect_flags(ifa_flags_t flags, VALUE result)
 #endif
 #ifdef IFF_ALLMULTI
     INSPECT_BIT(IFF_ALLMULTI, "ALLMULTI")
+#endif
+#ifdef IFF_SIMPLEX
+    INSPECT_BIT(IFF_SIMPLEX, "SIMPLEX")
 #endif
 #ifdef IFF_MASTER
     INSPECT_BIT(IFF_MASTER, "MASTER")

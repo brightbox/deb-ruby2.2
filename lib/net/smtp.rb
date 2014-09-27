@@ -14,7 +14,7 @@
 # NOTE: You can find Japanese version of this document at:
 # http://www.ruby-lang.org/ja/man/html/net_smtp.html
 #
-# $Id: smtp.rb 45111 2014-02-22 05:39:58Z naruse $
+# $Id: smtp.rb 46793 2014-07-11 19:22:19Z kosaki $
 #
 # See Net::SMTP for documentation.
 #
@@ -171,7 +171,7 @@ module Net
   #
   class SMTP
 
-    Revision = %q$Revision: 45111 $.split[1]
+    Revision = %q$Revision: 46793 $.split[1]
 
     # The default SMTP port number, 25.
     def SMTP.default_port
@@ -901,10 +901,17 @@ module Net
       end
       res = critical {
         check_continue get_response('DATA')
-        if msgstr
-          @socket.write_message msgstr
-        else
-          @socket.write_message_by_block(&block)
+        socket_sync_bak = @socket.io.sync
+        begin
+          @socket.io.sync = false
+          if msgstr
+            @socket.write_message msgstr
+          else
+            @socket.write_message_by_block(&block)
+          end
+        ensure
+          @socket.io.flush
+          @socket.io.sync = socket_sync_bak
         end
         recv_response()
       }

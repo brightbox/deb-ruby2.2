@@ -272,14 +272,14 @@ queue_sleep(VALUE arg)
 }
 
 static VALUE
-queue_do_pop(VALUE self, VALUE should_block)
+queue_do_pop(VALUE self, int should_block)
 {
     struct waiting_delete args;
     args.waiting = GET_QUEUE_WAITERS(self);
     args.th	 = rb_thread_current();
 
     while (queue_length(self) == 0) {
-	if (!(int)should_block) {
+	if (!should_block) {
 	    rb_raise(rb_eThreadError, "queue empty");
 	}
 	rb_ary_push(args.waiting, args.th);
@@ -289,18 +289,13 @@ queue_do_pop(VALUE self, VALUE should_block)
     return rb_ary_shift(GET_QUEUE_QUE(self));
 }
 
-static VALUE
-queue_pop_should_block(int argc, VALUE *argv)
+static int
+queue_pop_should_block(int argc, const VALUE *argv)
 {
-    VALUE should_block = Qtrue;
-    switch (argc) {
-      case 0:
-	break;
-      case 1:
-	should_block = RTEST(argv[0]) ? Qfalse : Qtrue;
-	break;
-      default:
-	rb_raise(rb_eArgError, "wrong number of arguments (%d for 1)", argc);
+    int should_block = 1;
+    rb_check_arity(argc, 0, 1);
+    if (argc > 0) {
+	should_block = !RTEST(argv[0]);
     }
     return should_block;
 }
@@ -322,7 +317,7 @@ queue_pop_should_block(int argc, VALUE *argv)
 static VALUE
 rb_queue_pop(int argc, VALUE *argv, VALUE self)
 {
-    VALUE should_block = queue_pop_should_block(argc, argv);
+    int should_block = queue_pop_should_block(argc, argv);
     return queue_do_pop(self, should_block);
 }
 
@@ -453,34 +448,51 @@ rb_szqueue_max_set(VALUE self, VALUE vmax)
     return vmax;
 }
 
+static int
+szqueue_push_should_block(int argc, const VALUE *argv)
+{
+    int should_block = 1;
+    rb_check_arity(argc, 1, 2);
+    if (argc > 1) {
+	should_block = !RTEST(argv[1]);
+    }
+    return should_block;
+}
+
 /*
  * Document-method: SizedQueue#push
  * call-seq:
- *   push(object)
- *   enq(object)
+ *   push(object, non_block=false)
+ *   enq(object, non_block=false)
  *   <<(object)
  *
  * Pushes +object+ to the queue.
  *
- * If there is no space left in the queue, waits until space becomes available.
+ * If there is no space left in the queue, waits until space becomes
+ * available, unless +non_block+ is true.  If +non_block+ is true, the
+ * thread isn't suspended, and an exception is raised.
  */
 
 static VALUE
-rb_szqueue_push(VALUE self, VALUE obj)
+rb_szqueue_push(int argc, VALUE *argv, VALUE self)
 {
     struct waiting_delete args;
+    int should_block = szqueue_push_should_block(argc, argv);
     args.waiting = GET_SZQUEUE_WAITERS(self);
     args.th      = rb_thread_current();
 
     while (queue_length(self) >= GET_SZQUEUE_ULONGMAX(self)) {
+	if (!should_block) {
+	    rb_raise(rb_eThreadError, "queue full");
+	}
 	rb_ary_push(args.waiting, args.th);
 	rb_ensure((VALUE (*)())rb_thread_sleep_deadly, (VALUE)0, queue_delete_from_waiting, (VALUE)&args);
     }
-    return queue_do_push(self, obj);
+    return queue_do_push(self, argv[0]);
 }
 
 static VALUE
-szqueue_do_pop(VALUE self, VALUE should_block)
+szqueue_do_pop(VALUE self, int should_block)
 {
     VALUE retval = queue_do_pop(self, should_block);
 
@@ -508,7 +520,7 @@ szqueue_do_pop(VALUE self, VALUE should_block)
 static VALUE
 rb_szqueue_pop(int argc, VALUE *argv, VALUE self)
 {
-    VALUE should_block = queue_pop_should_block(argc, argv);
+    int should_block = queue_pop_should_block(argc, argv);
     return szqueue_do_pop(self, should_block);
 }
 
@@ -544,6 +556,7 @@ rb_szqueue_num_waiting(VALUE self)
 #define UNDER_THREAD 1
 #endif
 
+/* :nodoc: */
 static VALUE
 undumpable(VALUE obj)
 {
@@ -589,12 +602,14 @@ Init_thread(void)
     id_sleep = rb_intern("sleep");
 
     rb_define_method(rb_cConditionVariable, "initialize", rb_condvar_initialize, 0);
+    rb_undef_method(rb_cConditionVariable, "initialize_copy");
     rb_define_method(rb_cConditionVariable, "marshal_dump", undumpable, 0);
     rb_define_method(rb_cConditionVariable, "wait", rb_condvar_wait, -1);
     rb_define_method(rb_cConditionVariable, "signal", rb_condvar_signal, 0);
     rb_define_method(rb_cConditionVariable, "broadcast", rb_condvar_broadcast, 0);
 
     rb_define_method(rb_cQueue, "initialize", rb_queue_initialize, 0);
+    rb_undef_method(rb_cQueue, "initialize_copy");
     rb_define_method(rb_cQueue, "marshal_dump", undumpable, 0);
     rb_define_method(rb_cQueue, "push", rb_queue_push, 1);
     rb_define_method(rb_cQueue, "pop", rb_queue_pop, -1);
@@ -617,7 +632,7 @@ Init_thread(void)
     rb_define_method(rb_cSizedQueue, "initialize", rb_szqueue_initialize, 1);
     rb_define_method(rb_cSizedQueue, "max", rb_szqueue_max_get, 0);
     rb_define_method(rb_cSizedQueue, "max=", rb_szqueue_max_set, 1);
-    rb_define_method(rb_cSizedQueue, "push", rb_szqueue_push, 1);
+    rb_define_method(rb_cSizedQueue, "push", rb_szqueue_push, -1);
     rb_define_method(rb_cSizedQueue, "pop", rb_szqueue_pop, -1);
     rb_define_method(rb_cSizedQueue, "clear", rb_szqueue_clear, 0);
     rb_define_method(rb_cSizedQueue, "num_waiting", rb_szqueue_num_waiting, 0);

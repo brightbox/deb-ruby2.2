@@ -2,7 +2,7 @@
 
   method.h -
 
-  $Author: tmm1 $
+  $Author: normal $
   created at: Wed Jul 15 20:02:33 2009
 
   Copyright (C) 2009 Koichi Sasada
@@ -77,6 +77,7 @@ typedef struct rb_iseq_struct rb_iseq_t;
 
 typedef struct rb_method_definition_struct {
     rb_method_type_t type; /* method type */
+    int alias_count;
     ID original_id;
     union {
 	rb_iseq_t * const iseq;            /* should be mark */
@@ -91,7 +92,6 @@ typedef struct rb_method_definition_struct {
 	} optimize_type;
 	struct rb_method_entry_struct *orig_me;
     } body;
-    int alias_count;
 } rb_method_definition_t;
 
 typedef struct rb_method_entry_struct {
@@ -136,7 +136,6 @@ VALUE rb_obj_method_location(VALUE obj, ID id);
 void rb_mark_method_entry(const rb_method_entry_t *me);
 void rb_free_method_entry(rb_method_entry_t *me);
 void rb_sweep_method_entry(void *vm);
-void rb_free_m_tbl(st_table *tbl);
 void rb_free_m_tbl_wrapper(struct method_table_wrapper *wrapper);
 
 #endif /* METHOD_H */

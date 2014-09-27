@@ -586,7 +586,7 @@ class TestRegexp < Test::Unit::TestCase
     assert_predicate(m, :tainted?)
   end
 
-  def check(re, ss, fs = [], msg = nil)
+  def assert_regexp(re, ss, fs = [], msg = nil)
     re = Regexp.new(re) unless re.is_a?(Regexp)
     ss = [ss] unless ss.is_a?(Array)
     ss.each do |e, s|
@@ -598,10 +598,12 @@ class TestRegexp < Test::Unit::TestCase
     fs = [fs] unless fs.is_a?(Array)
     fs.each {|s| assert_no_match(re, s, msg) }
   end
+  alias check assert_regexp
 
-  def failcheck(re)
+  def assert_fail(re)
     assert_raise(RegexpError) { %r"#{ re }" }
   end
+  alias failcheck assert_fail
 
   def test_parse
     check(/\*\+\?\{\}\|\(\)\<\>\`\'/, "*+?{}|()<>`'")
@@ -912,12 +914,15 @@ class TestRegexp < Test::Unit::TestCase
     assert_no_match(/^\p{age=1.1}$/u, "\u2754")
   end
 
+  MatchData_A = eval("class MatchData_\u{3042} < MatchData; self; end")
+
   def test_matchdata
     a = "haystack".match(/hay/)
     b = "haystack".match(/hay/)
     assert_equal(a, b, '[ruby-core:24748]')
     h = {a => 42}
     assert_equal(42, h[b], '[ruby-core:24748]')
+    assert_match(/#<TestRegexp::MatchData_\u{3042}:/, MatchData_A.allocate.inspect)
   end
 
   def test_regexp_poped
@@ -1003,8 +1008,9 @@ class TestRegexp < Test::Unit::TestCase
     assert_equal(/0/, pr1.call(0))
     assert_equal(/0/, pr1.call(1))
     assert_equal(/0/, pr1.call(2))
+  end
 
-    # recursive
+  def test_once_recursive
     pr2 = proc{|i|
       if i > 0
         /#{pr2.call(i-1).to_s}#{i}/
@@ -1013,8 +1019,9 @@ class TestRegexp < Test::Unit::TestCase
       end
     }
     assert_equal(/(?-mix:(?-mix:(?-mix:)1)2)3/, pr2.call(3))
+  end
 
-    # multi-thread
+  def test_once_multithread
     m = Mutex.new
     pr3 = proc{|i|
       /#{m.unlock; sleep 0.5; i}/o
@@ -1025,8 +1032,9 @@ class TestRegexp < Test::Unit::TestCase
     th2 = Thread.new{m.lock; ary << pr3.call(n+=1)}
     th1.join; th2.join
     assert_equal([/1/, /1/], ary)
+  end
 
-    # escape
+  def test_once_escape
     pr4 = proc{|i|
       catch(:xyzzy){
         /#{throw :xyzzy, i}/o =~ ""

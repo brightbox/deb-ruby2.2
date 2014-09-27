@@ -2,7 +2,7 @@
 
   object.c -
 
-  $Author: naruse $
+  $Author: ko1 $
   created at: Thu Jul 15 12:01:24 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -146,6 +146,9 @@ rb_obj_equal(VALUE obj1, VALUE obj2)
 }
 
 /*
+ * call-seq:
+ *    obj.hash    -> fixnum
+ *
  * Generates a Fixnum hash value for this object.  This function must have the
  * property that <code>a.eql?(b)</code> implies <code>a.hash == b.hash</code>.
  *
@@ -279,6 +282,8 @@ rb_obj_copy_ivar(VALUE dest, VALUE obj)
     }
 }
 
+void rb_copy_wb_protected_attribute(VALUE dest, VALUE obj);
+
 static void
 init_copy(VALUE dest, VALUE obj)
 {
@@ -287,26 +292,11 @@ init_copy(VALUE dest, VALUE obj)
     }
     RBASIC(dest)->flags &= ~(T_MASK|FL_EXIVAR);
     RBASIC(dest)->flags |= RBASIC(obj)->flags & (T_MASK|FL_EXIVAR|FL_TAINT);
+    rb_copy_wb_protected_attribute(dest, obj);
     rb_copy_generic_ivar(dest, obj);
     rb_gc_copy_finalizer(dest, obj);
-    switch (TYPE(obj)) {
-      case T_OBJECT:
+    if (RB_TYPE_P(obj, T_OBJECT)) {
 	rb_obj_copy_ivar(dest, obj);
-        break;
-      case T_CLASS:
-      case T_MODULE:
-	if (RCLASS_IV_TBL(dest)) {
-	    st_free_table(RCLASS_IV_TBL(dest));
-	    RCLASS_IV_TBL(dest) = 0;
-	}
-	if (RCLASS_CONST_TBL(dest)) {
-	    rb_free_const_table(RCLASS_CONST_TBL(dest));
-	    RCLASS_CONST_TBL(dest) = 0;
-	}
-	if (RCLASS_IV_TBL(obj)) {
-	    RCLASS_IV_TBL(dest) = rb_st_copy(dest, RCLASS_IV_TBL(obj));
-	}
-        break;
     }
 }
 
@@ -344,8 +334,8 @@ rb_obj_clone(VALUE obj)
         rb_raise(rb_eTypeError, "can't clone %s", rb_obj_classname(obj));
     }
     clone = rb_obj_alloc(rb_obj_class(obj));
-    RBASIC(clone)->flags &= (FL_TAINT|FL_PROMOTED|FL_WB_PROTECTED);
-    RBASIC(clone)->flags |= RBASIC(obj)->flags & ~(FL_PROMOTED|FL_FREEZE|FL_FINALIZE|FL_WB_PROTECTED);
+    RBASIC(clone)->flags &= (FL_TAINT);
+    RBASIC(clone)->flags |= RBASIC(obj)->flags & ~(FL_PROMOTED0|FL_PROMOTED1|FL_FREEZE|FL_FINALIZE);
 
     singleton = rb_singleton_class_clone_and_attach(obj, clone);
     RBASIC_SET_CLASS(clone, singleton);
@@ -416,6 +406,23 @@ rb_obj_dup(VALUE obj)
     rb_funcall(dup, id_init_dup, 1, obj);
 
     return dup;
+}
+
+/*
+ *  call-seq:
+ *     obj.itself -> an_object
+ *
+ *  Returns <i>obj</i>.
+ *
+ *	string = 'my string' #=> "my string"
+ *	string.itself.object_id == string.object_id #=> true
+ *
+ */
+
+static VALUE
+rb_obj_itself(VALUE obj)
+{
+    return obj;
 }
 
 /* :nodoc: */
@@ -973,7 +980,7 @@ rb_obj_tainted(VALUE obj)
 VALUE
 rb_obj_taint(VALUE obj)
 {
-    if (!OBJ_TAINTED(obj)) {
+    if (!OBJ_TAINTED(obj) && OBJ_TAINTABLE(obj)) {
 	rb_check_frozen(obj);
 	OBJ_TAINT(obj);
     }
@@ -1050,8 +1057,6 @@ rb_obj_infect(VALUE obj1, VALUE obj2)
     OBJ_INFECT(obj1, obj2);
 }
 
-static st_table *immediate_frozen_tbl = 0;
-
 /*
  *  call-seq:
  *     obj.freeze    -> obj
@@ -1071,6 +1076,9 @@ static st_table *immediate_frozen_tbl = 0;
  *
  *     prog.rb:3:in `<<': can't modify frozen array (RuntimeError)
  *     	from prog.rb:3
+ *
+ *  Objects of the following classes are always frozen: Fixnum,
+ *  Bignum, Float, Symbol.
  */
 
 VALUE
@@ -1079,10 +1087,7 @@ rb_obj_freeze(VALUE obj)
     if (!OBJ_FROZEN(obj)) {
 	OBJ_FREEZE(obj);
 	if (SPECIAL_CONST_P(obj)) {
-	    if (!immediate_frozen_tbl) {
-		immediate_frozen_tbl = st_init_numtable();
-	    }
-	    st_insert(immediate_frozen_tbl, obj, (st_data_t)Qtrue);
+	    rb_bug("special consts should be frozen.");
 	}
     }
     return obj;
@@ -1102,12 +1107,7 @@ rb_obj_freeze(VALUE obj)
 VALUE
 rb_obj_frozen_p(VALUE obj)
 {
-    if (OBJ_FROZEN(obj)) return Qtrue;
-    if (SPECIAL_CONST_P(obj)) {
-	if (!immediate_frozen_tbl) return Qfalse;
-	if (st_lookup(immediate_frozen_tbl, obj, 0)) return Qtrue;
-    }
-    return Qfalse;
+    return OBJ_FROZEN(obj) ? Qtrue : Qfalse;
 }
 
 
@@ -1426,16 +1426,16 @@ rb_obj_not_match(VALUE obj1, VALUE obj2)
  *  Returns 0 if +obj+ and +other+ are the same object
  *  or <code>obj == other</code>, otherwise nil.
  *
- *  The <=> is used by various methods to compare objects, for example
+ *  The <code><=></code> is used by various methods to compare objects, for example
  *  Enumerable#sort, Enumerable#max etc.
  *
- *  Your implementation of <=> should return one of the following values: -1, 0,
+ *  Your implementation of <code><=></code> should return one of the following values: -1, 0,
  *  1 or nil. -1 means self is smaller than other. 0 means self is equal to other.
  *  1 means self is bigger than other. Nil means the two values could not be
  *  compared.
  *
- *  When you define <=>, you can include Comparable to gain the methods <=, <,
- *  ==, >=, > and between?.
+ *  When you define <code><=></code>, you can include Comparable to gain the methods
+ *  <code><=</code>, <code><</code>, <code>==</code>, <code>>=</code>, <code>></code> and <code>between?</code>.
  */
 static VALUE
 rb_obj_cmp(VALUE obj1, VALUE obj2)
@@ -1720,6 +1720,17 @@ rb_mod_initialize(VALUE module)
     return Qnil;
 }
 
+/* :nodoc: */
+static VALUE
+rb_mod_initialize_clone(VALUE clone, VALUE orig)
+{
+    VALUE ret;
+    ret = rb_obj_init_dup_clone(clone, orig);
+    if (OBJ_FROZEN(orig))
+        rb_class_name(clone);
+    return ret;
+}
+
 /*
  *  call-seq:
  *     Class.new(super_class=Object)               -> a_class
@@ -1853,7 +1864,7 @@ rb_class_allocate_instance(VALUE klass)
  */
 
 VALUE
-rb_class_new_instance(int argc, VALUE *argv, VALUE klass)
+rb_class_new_instance(int argc, const VALUE *argv, VALUE klass)
 {
     VALUE obj;
 
@@ -2564,20 +2575,22 @@ rb_mod_singleton_p(VALUE klass)
     return Qfalse;
 }
 
-static struct conv_method_tbl {
-    const char *method;
+static const struct conv_method_tbl {
+    const char method[8];
     ID id;
 } conv_method_names[] = {
-    {"to_int", 0},
-    {"to_ary", 0},
-    {"to_str", 0},
-    {"to_sym", 0},
-    {"to_hash", 0},
-    {"to_proc", 0},
-    {"to_io", 0},
-    {"to_a", 0},
-    {"to_s", 0},
-    {NULL, 0}
+#define M(n) {"to_"#n, idTo_##n}
+    M(int),
+    M(ary),
+    M(str),
+    M(sym),
+    M(hash),
+    M(proc),
+    M(io),
+    M(a),
+    M(s),
+    M(i),
+#undef M
 };
 #define IMPLICIT_CONVERSIONS 7
 
@@ -2588,7 +2601,7 @@ convert_type(VALUE val, const char *tname, const char *method, int raise)
     int i;
     VALUE r;
 
-    for (i=0; conv_method_names[i].method; i++) {
+    for (i=0; i < numberof(conv_method_names); i++) {
 	if (conv_method_names[i].method[0] == method[0] &&
 	    strcmp(conv_method_names[i].method, method) == 0) {
 	    m = conv_method_names[i].id;
@@ -2599,18 +2612,31 @@ convert_type(VALUE val, const char *tname, const char *method, int raise)
     r = rb_check_funcall(val, m, 0, 0);
     if (r == Qundef) {
 	if (raise) {
-	    rb_raise(rb_eTypeError, i < IMPLICIT_CONVERSIONS
-                ? "no implicit conversion of %s into %s"
-                : "can't convert %s into %s",
-		     NIL_P(val) ? "nil" :
-		     val == Qtrue ? "true" :
-		     val == Qfalse ? "false" :
-		     rb_obj_classname(val),
+	    const char *msg = i < IMPLICIT_CONVERSIONS ?
+		"no implicit conversion of" : "can't convert";
+	    const char *cname = NIL_P(val) ? "nil" :
+		val == Qtrue ? "true" :
+		val == Qfalse ? "false" :
+		NULL;
+	    if (cname)
+		rb_raise(rb_eTypeError, "%s %s into %s", msg, cname, tname);
+	    rb_raise(rb_eTypeError, "%s %"PRIsVALUE" into %s", msg,
+		     rb_obj_class(val),
 		     tname);
 	}
 	return Qnil;
     }
     return r;
+}
+
+NORETURN(static void conversion_mismatch(VALUE, const char *, const char *, VALUE));
+static void
+conversion_mismatch(VALUE val, const char *tname, const char *method, VALUE result)
+{
+    VALUE cname = rb_obj_class(val);
+    rb_raise(rb_eTypeError,
+	     "can't convert %"PRIsVALUE" to %s (%"PRIsVALUE"#%s gives %"PRIsVALUE")",
+	     cname, tname, cname, method, rb_obj_class(result));
 }
 
 VALUE
@@ -2621,9 +2647,7 @@ rb_convert_type(VALUE val, int type, const char *tname, const char *method)
     if (TYPE(val) == type) return val;
     v = convert_type(val, tname, method, TRUE);
     if (TYPE(v) != type) {
-	const char *cname = rb_obj_classname(val);
-	rb_raise(rb_eTypeError, "can't convert %s to %s (%s#%s gives %s)",
-		 cname, tname, cname, method, rb_obj_classname(v));
+	conversion_mismatch(val, tname, method, v);
     }
     return v;
 }
@@ -2638,9 +2662,7 @@ rb_check_convert_type(VALUE val, int type, const char *tname, const char *method
     v = convert_type(val, tname, method, FALSE);
     if (NIL_P(v)) return Qnil;
     if (TYPE(v) != type) {
-	const char *cname = rb_obj_classname(val);
-	rb_raise(rb_eTypeError, "can't convert %s to %s (%s#%s gives %s)",
-		 cname, tname, cname, method, rb_obj_classname(v));
+	conversion_mismatch(val, tname, method, v);
     }
     return v;
 }
@@ -2655,9 +2677,7 @@ rb_to_integer(VALUE val, const char *method)
     if (RB_TYPE_P(val, T_BIGNUM)) return val;
     v = convert_type(val, "Integer", method, TRUE);
     if (!rb_obj_is_kind_of(v, rb_cInteger)) {
-	const char *cname = rb_obj_classname(val);
-	rb_raise(rb_eTypeError, "can't convert %s to Integer (%s#%s gives %s)",
-		 cname, cname, method, rb_obj_classname(v));
+	conversion_mismatch(val, "Integer", method, v);
     }
     return v;
 }
@@ -2752,13 +2772,15 @@ rb_Integer(VALUE val)
  *  In any case, strings should be strictly conformed to numeric
  *  representation. This behavior is different from that of
  *  <code>String#to_i</code>.  Non string values will be converted using
- *  <code>to_int</code>, and <code>to_i</code>.
+ *  <code>to_int</code>, and <code>to_i</code>. Passing <code>nil</code>
+ *  raises a TypeError.
  *
  *     Integer(123.999)    #=> 123
  *     Integer("0x1a")     #=> 26
  *     Integer(Time.new)   #=> 1204973019
  *     Integer("0930", 10) #=> 930
  *     Integer("111", 2)   #=> 7
+ *     Integer(nil)        #=> TypeError
  */
 
 static VALUE
@@ -3235,8 +3257,6 @@ rb_f_hash(VALUE obj, VALUE arg)
 void
 Init_Object(void)
 {
-    int i;
-
     Init_class_hierarchy();
 
 #if 0
@@ -3295,6 +3315,7 @@ Init_Object(void)
     rb_define_method(rb_mKernel, "singleton_class", rb_obj_singleton_class, 0);
     rb_define_method(rb_mKernel, "clone", rb_obj_clone, 0);
     rb_define_method(rb_mKernel, "dup", rb_obj_dup, 0);
+    rb_define_method(rb_mKernel, "itself", rb_obj_itself, 0);
     rb_define_method(rb_mKernel, "initialize_copy", rb_obj_init_copy, 1);
     rb_define_method(rb_mKernel, "initialize_dup", rb_obj_init_dup_clone, 1);
     rb_define_method(rb_mKernel, "initialize_clone", rb_obj_init_dup_clone, 1);
@@ -3379,6 +3400,7 @@ Init_Object(void)
 
     rb_define_alloc_func(rb_cModule, rb_module_s_alloc);
     rb_define_method(rb_cModule, "initialize", rb_mod_initialize, 0);
+    rb_define_method(rb_cModule, "initialize_clone", rb_mod_initialize_clone, 1);
     rb_define_method(rb_cModule, "instance_methods", rb_class_instance_methods, -1); /* in class.c */
     rb_define_method(rb_cModule, "public_instance_methods",
 		     rb_class_public_instance_methods, -1);    /* in class.c */
@@ -3449,8 +3471,4 @@ Init_Object(void)
      * An alias of +false+
      */
     rb_define_global_const("FALSE", Qfalse);
-
-    for (i=0; conv_method_names[i].method; i++) {
-	conv_method_names[i].id = rb_intern(conv_method_names[i].method);
-    }
 }
