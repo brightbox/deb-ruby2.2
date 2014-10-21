@@ -2,7 +2,7 @@
 
   defines.h -
 
-  $Author: akr $
+  $Author: hsbt $
   created at: Wed May 18 00:21:44 JST 1994
 
 ************************************************/
@@ -143,60 +143,6 @@ void xfree(void*);
 # define SIZEOF_LONG_LONG SIZEOF___INT64
 #endif
 
-#ifndef BDIGIT
-# if SIZEOF_INT*2 <= SIZEOF_LONG_LONG
-#  define BDIGIT unsigned int
-#  define SIZEOF_BDIGITS SIZEOF_INT
-#  define BDIGIT_DBL unsigned LONG_LONG
-#  define BDIGIT_DBL_SIGNED LONG_LONG
-#  define PRI_BDIGIT_PREFIX ""
-#  define PRI_BDIGIT_DBL_PREFIX PRI_LL_PREFIX
-# elif SIZEOF_INT*2 <= SIZEOF_LONG
-#  define BDIGIT unsigned int
-#  define SIZEOF_BDIGITS SIZEOF_INT
-#  define BDIGIT_DBL unsigned long
-#  define BDIGIT_DBL_SIGNED long
-#  define PRI_BDIGIT_PREFIX ""
-#  define PRI_BDIGIT_DBL_PREFIX "l"
-# elif SIZEOF_SHORT*2 <= SIZEOF_LONG
-#  define BDIGIT unsigned short
-#  define SIZEOF_BDIGITS SIZEOF_SHORT
-#  define BDIGIT_DBL unsigned long
-#  define BDIGIT_DBL_SIGNED long
-#  define PRI_BDIGIT_PREFIX "h"
-#  define PRI_BDIGIT_DBL_PREFIX "l"
-# else
-#  define BDIGIT unsigned short
-#  define SIZEOF_BDIGITS (SIZEOF_LONG/2)
-#  define SIZEOF_ACTUAL_BDIGIT SIZEOF_LONG
-#  define BDIGIT_DBL unsigned long
-#  define BDIGIT_DBL_SIGNED long
-#  define PRI_BDIGIT_PREFIX "h"
-#  define PRI_BDIGIT_DBL_PREFIX "l"
-# endif
-#endif
-#ifndef SIZEOF_ACTUAL_BDIGIT
-# define SIZEOF_ACTUAL_BDIGIT SIZEOF_BDIGITS
-#endif
-
-#ifdef PRI_BDIGIT_PREFIX
-# define PRIdBDIGIT PRI_BDIGIT_PREFIX"d"
-# define PRIiBDIGIT PRI_BDIGIT_PREFIX"i"
-# define PRIoBDIGIT PRI_BDIGIT_PREFIX"o"
-# define PRIuBDIGIT PRI_BDIGIT_PREFIX"u"
-# define PRIxBDIGIT PRI_BDIGIT_PREFIX"x"
-# define PRIXBDIGIT PRI_BDIGIT_PREFIX"X"
-#endif
-
-#ifdef PRI_BDIGIT_DBL_PREFIX
-# define PRIdBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"d"
-# define PRIiBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"i"
-# define PRIoBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"o"
-# define PRIuBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"u"
-# define PRIxBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"x"
-# define PRIXBDIGIT_DBL PRI_BDIGIT_DBL_PREFIX"X"
-#endif
-
 #ifdef __CYGWIN__
 #undef _WIN32
 #endif
@@ -219,11 +165,6 @@ void xfree(void*);
 
 #if defined(__BEOS__) && !defined(__HAIKU__) && !defined(BONE)
 #include <net/socket.h> /* intern.h needs fd_set definition */
-#endif
-
-#ifdef __SYMBIAN32__
-# define FALSE 0
-# define TRUE 1
 #endif
 
 #ifdef RUBY_EXPORT
@@ -299,9 +240,12 @@ void rb_ia64_flushrs(void);
 #define RUBY_PLATFORM "unknown-unknown"
 #endif
 
+#ifndef FUNC_MINIMIZED
+#define FUNC_MINIMIZED(x) x
+#endif
 #ifndef RUBY_ALIAS_FUNCTION_TYPE
 #define RUBY_ALIAS_FUNCTION_TYPE(type, prot, name, args) \
-    type prot {return name args;}
+    FUNC_MINIMIZED(type prot) {return name args;}
 #endif
 #ifndef RUBY_ALIAS_FUNCTION_VOID
 #define RUBY_ALIAS_FUNCTION_VOID(prot, name, args) \
@@ -310,6 +254,27 @@ void rb_ia64_flushrs(void);
 #ifndef RUBY_ALIAS_FUNCTION
 #define RUBY_ALIAS_FUNCTION(prot, name, args) \
     RUBY_ALIAS_FUNCTION_TYPE(VALUE, prot, name, args)
+#endif
+
+#ifndef UNALIGNED_WORD_ACCESS
+# if defined(__i386) || defined(__i386__) || defined(_M_IX86) || \
+     defined(__x86_64) || defined(__x86_64__) || defined(_M_AMD64) || \
+     defined(__powerpc64__) || \
+     defined(__mc68020__)
+#   define UNALIGNED_WORD_ACCESS 1
+# else
+#   define UNALIGNED_WORD_ACCESS 0
+# endif
+#endif
+#ifndef PACKED_STRUCT
+# define PACKED_STRUCT(x) x
+#endif
+#ifndef PACKED_STRUCT_UNALIGNED
+# if UNALIGNED_WORD_ACCESS
+#   define PACKED_STRUCT_UNALIGNED(x) PACKED_STRUCT(x)
+# else
+#   define PACKED_STRUCT_UNALIGNED(x) x
+# endif
 #endif
 
 RUBY_SYMBOL_EXPORT_END

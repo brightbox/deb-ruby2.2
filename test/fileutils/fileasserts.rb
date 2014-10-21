@@ -1,4 +1,4 @@
-# $Id: fileasserts.rb 41859 2013-07-09 09:03:32Z knu $
+# $Id: fileasserts.rb 44387 2013-12-24 14:20:47Z nobu $
 
 module Test
   module Unit
@@ -86,6 +86,24 @@ EOT
 File modes expected to be equal:
  <#{'%0*o' % [width, mode1]}>: "#{file1}"
  <#{'%0*o' % [width, mode2]}>: "#{file2}"
+EOT
+      end
+
+      def assert_ownership_group(expected, file)
+        actual = File.stat(file).gid
+        assert expected == actual, <<EOT
+File group ownership of "#{file}" unexpected:
+ Expected: <#{expected}>
+   Actual: <#{actual}>
+EOT
+      end
+
+      def assert_ownership_user(expected, file)
+        actual = File.stat(file).uid
+        assert expected == actual, <<EOT
+File user ownership of "#{file}" unexpected:
+ Expected: <#{expected}>
+   Actual: <#{actual}>
 EOT
       end
     end

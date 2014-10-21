@@ -183,9 +183,11 @@ module Psych
             klass = class_loader.struct
             members = o.children.map { |c| accept c }
             h = Hash[*members]
-            klass.new(*h.map { |k,v|
+            s = klass.new(*h.map { |k,v|
               class_loader.symbolize k
             }).new(*h.map { |k,v| v })
+            register(o, s)
+            s
           end
 
         when /^!ruby\/object:?(.*)?$/
@@ -199,6 +201,8 @@ module Psych
             class_loader.rational
             h = Hash[*o.children.map { |c| accept c }]
             register o, Rational(h['numerator'], h['denominator'])
+          elsif name == 'Hash'
+            revive_hash(register(o, {}), o)
           else
             obj = revive((resolve_class(name) || class_loader.object), o)
             obj
@@ -301,9 +305,9 @@ module Psych
           key = accept(k)
           val = accept(v)
 
-          if key == '<<'
+          if key == '<<' && k.tag != "tag:yaml.org,2002:str"
             case v
-            when Nodes::Alias
+            when Nodes::Alias, Nodes::Mapping
               begin
                 hash.merge! val
               rescue TypeError

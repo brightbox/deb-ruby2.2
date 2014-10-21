@@ -327,12 +327,17 @@ class Pathname
   #   p2 = p1 + "bin/ruby"           # Pathname:/usr/bin/ruby
   #   p3 = p1 + "/etc/passwd"        # Pathname:/etc/passwd
   #
+  #   # / is aliased to +.
+  #   p4 = p1 / "bin/ruby"           # Pathname:/usr/bin/ruby
+  #   p5 = p1 / "/etc/passwd"        # Pathname:/etc/passwd
+  #
   # This method doesn't access the file system; it is pure string manipulation.
   #
   def +(other)
     other = Pathname.new(other) unless Pathname === other
     Pathname.new(plus(@path, other.to_s))
   end
+  alias / +
 
   def plus(path1, path2) # -> path # :nodoc:
     prefix2 = path2
@@ -387,7 +392,7 @@ class Pathname
   #       #=> true
   #
   def join(*args)
-    args.unshift self
+    return self if args.empty?
     result = args.pop
     result = Pathname.new(result) unless Pathname === result
     return result if result.absolute?
@@ -396,7 +401,7 @@ class Pathname
       result = arg + result
       return result if result.absolute?
     }
-    result
+    self + result
   end
 
   #
@@ -537,13 +542,13 @@ class Pathname    # * Find *
   #
   # See Find.find
   #
-  def find # :yield: pathname
-    return to_enum(__method__) unless block_given?
+  def find(ignore_error: true) # :yield: pathname
+    return to_enum(__method__, ignore_error: ignore_error) unless block_given?
     require 'find'
     if @path == '.'
-      Find.find(@path) {|f| yield self.class.new(f.sub(%r{\A\./}, '')) }
+      Find.find(@path, ignore_error: ignore_error) {|f| yield self.class.new(f.sub(%r{\A\./}, '')) }
     else
-      Find.find(@path) {|f| yield self.class.new(f) }
+      Find.find(@path, ignore_error: ignore_error) {|f| yield self.class.new(f) }
     end
   end
 end

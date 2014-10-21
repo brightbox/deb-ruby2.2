@@ -2,7 +2,7 @@
 
   vm_dump.c -
 
-  $Author: tmm1 $
+  $Author: normal $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -13,6 +13,7 @@
 #include "addr2line.h"
 #include "vm_core.h"
 #include "internal.h"
+#include "iseq.h"
 
 /* see vm_insnhelper.h for the values */
 #ifndef VMDEBUG
@@ -359,7 +360,6 @@ rb_vmdebug_debug_print_pre(rb_thread_t *th, rb_control_frame_t *cfp,VALUE *_pc)
     rb_iseq_t *iseq = cfp->iseq;
 
     if (iseq != 0) {
-	VALUE *seq = iseq->iseq;
 	ptrdiff_t pc = _pc - iseq->iseq_encoded;
 	int i;
 
@@ -371,7 +371,9 @@ rb_vmdebug_debug_print_pre(rb_thread_t *th, rb_control_frame_t *cfp,VALUE *_pc)
 
 	/* printf("%3"PRIdPTRDIFF" ", VM_CFP_CNT(th, cfp)); */
 	if (pc >= 0) {
-	    rb_iseq_disasm_insn(0, seq, (size_t)pc, iseq, 0);
+	    const VALUE *iseq_original = rb_iseq_original_iseq(iseq);
+
+	    rb_iseq_disasm_insn(0, iseq_original, (size_t)pc, iseq, 0);
 	}
     }
 
@@ -432,14 +434,16 @@ rb_vmdebug_thread_dump_state(VALUE self)
 }
 
 #if defined(HAVE_BACKTRACE)
-# if HAVE_LIBUNWIND
+# ifdef HAVE_LIBUNWIND
 #  undef backtrace
 #  define backtrace unw_backtrace
 # elif defined(__APPLE__) && defined(__x86_64__)
 #  define UNW_LOCAL_ONLY
 #  include <libunwind.h>
 #  undef backtrace
-int backtrace (void **trace, int size) {
+int
+backtrace(void **trace, int size)
+{
     unw_cursor_t cursor; unw_context_t uc;
     unw_word_t ip;
     int n = 0;
@@ -688,19 +692,18 @@ rb_print_backtrace(void)
 #define MAX_NATIVE_TRACE 1024
     static void *trace[MAX_NATIVE_TRACE];
     int n = backtrace(trace, MAX_NATIVE_TRACE);
-    char **syms = backtrace_symbols(trace, n);
-
-    if (syms) {
-#ifdef USE_ELF
-	rb_dump_backtrace_with_lines(n, trace, syms);
+#if defined(USE_ELF) && defined(HAVE_DLADDR)
+    rb_dump_backtrace_with_lines(n, trace);
 #else
+    char **syms = backtrace_symbols(trace, n);
+    if (syms) {
 	int i;
 	for (i=0; i<n; i++) {
 	    fprintf(stderr, "%s\n", syms[i]);
 	}
-#endif
 	free(syms);
     }
+#endif
 #elif defined(_WIN32)
     DWORD tid = GetCurrentThreadId();
     HANDLE th = (HANDLE)_beginthread(dump_thread, 0, &tid);
@@ -709,8 +712,229 @@ rb_print_backtrace(void)
 #endif
 }
 
+#ifdef __FreeBSD__
+#include <sys/user.h>
+#include <sys/sysctl.h>
+#include <sys/param.h>
+#include <libprocstat.h>
+# ifndef KVME_TYPE_MGTDEVICE
+# define KVME_TYPE_MGTDEVICE     8
+# endif
 void
-rb_vm_bugreport(void)
+procstat_vm(struct procstat *procstat, struct kinfo_proc *kipp)
+{
+	struct kinfo_vmentry *freep, *kve;
+	int ptrwidth;
+	unsigned int i, cnt;
+	const char *str;
+#ifdef __x86_64__
+	ptrwidth = 14;
+#else
+	ptrwidth = 2*sizeof(void *) + 2;
+#endif
+	fprintf(stderr, "%*s %*s %3s %4s %4s %3s %3s %4s %-2s %-s\n",
+		ptrwidth, "START", ptrwidth, "END", "PRT", "RES",
+		"PRES", "REF", "SHD", "FL", "TP", "PATH");
+
+	freep = procstat_getvmmap(procstat, kipp, &cnt);
+	if (freep == NULL)
+		return;
+	for (i = 0; i < cnt; i++) {
+		kve = &freep[i];
+		fprintf(stderr, "%#*jx ", ptrwidth, (uintmax_t)kve->kve_start);
+		fprintf(stderr, "%#*jx ", ptrwidth, (uintmax_t)kve->kve_end);
+		fprintf(stderr, "%s", kve->kve_protection & KVME_PROT_READ ? "r" : "-");
+		fprintf(stderr, "%s", kve->kve_protection & KVME_PROT_WRITE ? "w" : "-");
+		fprintf(stderr, "%s ", kve->kve_protection & KVME_PROT_EXEC ? "x" : "-");
+		fprintf(stderr, "%4d ", kve->kve_resident);
+		fprintf(stderr, "%4d ", kve->kve_private_resident);
+		fprintf(stderr, "%3d ", kve->kve_ref_count);
+		fprintf(stderr, "%3d ", kve->kve_shadow_count);
+		fprintf(stderr, "%-1s", kve->kve_flags & KVME_FLAG_COW ? "C" : "-");
+		fprintf(stderr, "%-1s", kve->kve_flags & KVME_FLAG_NEEDS_COPY ? "N" :
+		    "-");
+		fprintf(stderr, "%-1s", kve->kve_flags & KVME_FLAG_SUPER ? "S" : "-");
+		fprintf(stderr, "%-1s ", kve->kve_flags & KVME_FLAG_GROWS_UP ? "U" :
+		    kve->kve_flags & KVME_FLAG_GROWS_DOWN ? "D" : "-");
+		switch (kve->kve_type) {
+		case KVME_TYPE_NONE:
+			str = "--";
+			break;
+		case KVME_TYPE_DEFAULT:
+			str = "df";
+			break;
+		case KVME_TYPE_VNODE:
+			str = "vn";
+			break;
+		case KVME_TYPE_SWAP:
+			str = "sw";
+			break;
+		case KVME_TYPE_DEVICE:
+			str = "dv";
+			break;
+		case KVME_TYPE_PHYS:
+			str = "ph";
+			break;
+		case KVME_TYPE_DEAD:
+			str = "dd";
+			break;
+		case KVME_TYPE_SG:
+			str = "sg";
+			break;
+		case KVME_TYPE_MGTDEVICE:
+			str = "md";
+			break;
+		case KVME_TYPE_UNKNOWN:
+		default:
+			str = "??";
+			break;
+		}
+		fprintf(stderr, "%-2s ", str);
+		fprintf(stderr, "%-s\n", kve->kve_path);
+	}
+	free(freep);
+}
+#endif
+
+#if defined __linux__
+# if defined __x86_64__ || defined __i386__
+#  define HAVE_PRINT_MACHINE_REGISTERS 1
+# endif
+#elif defined __APPLE__
+# if defined __x86_64__ || defined __i386__
+#  define HAVE_PRINT_MACHINE_REGISTERS 1
+# endif
+#endif
+
+#ifdef HAVE_PRINT_MACHINE_REGISTERS
+static int
+print_machine_register(size_t reg, const char *reg_name, int col_count, int max_col)
+{
+    int ret;
+    char buf[64];
+
+#ifdef __LP64__
+    ret = snprintf(buf, sizeof(buf), " %3.3s: 0x%016zx", reg_name, reg);
+#else
+    ret = snprintf(buf, sizeof(buf), " %3.3s: 0x%08zx", reg_name, reg);
+#endif
+    if (col_count + ret > max_col) {
+	fputs("\n", stderr);
+	col_count = 0;
+    }
+    col_count += ret;
+    fputs(buf, stderr);
+    return col_count;
+}
+# ifdef __linux__
+#   define dump_machine_register(reg) (col_count = print_machine_register(mctx->gregs[REG_##reg], #reg, col_count, 80))
+# elif defined __APPLE__
+#   define dump_machine_register(reg) (col_count = print_machine_register(mctx->__ss.__##reg, #reg, col_count, 80))
+# endif
+
+static void
+rb_dump_machine_register(const ucontext_t *ctx)
+{
+    int col_count = 0;
+    if (!ctx) return;
+
+    fprintf(stderr, "-- Machine register context "
+	    "------------------------------------------------\n");
+
+# if defined __linux__
+    {
+	const mcontext_t *const mctx = &ctx->uc_mcontext;
+#   if defined __x86_64__
+	dump_machine_register(RIP);
+	dump_machine_register(RBP);
+	dump_machine_register(RSP);
+	dump_machine_register(RAX);
+	dump_machine_register(RBX);
+	dump_machine_register(RCX);
+	dump_machine_register(RDX);
+	dump_machine_register(RDI);
+	dump_machine_register(RSI);
+	dump_machine_register(R8);
+	dump_machine_register(R9);
+	dump_machine_register(R10);
+	dump_machine_register(R11);
+	dump_machine_register(R12);
+	dump_machine_register(R13);
+	dump_machine_register(R14);
+	dump_machine_register(R15);
+	dump_machine_register(EFL);
+#   elif defined __i386__
+	dump_machine_register(GS);
+	dump_machine_register(FS);
+	dump_machine_register(ES);
+	dump_machine_register(DS);
+	dump_machine_register(EDI);
+	dump_machine_register(ESI);
+	dump_machine_register(EBP);
+	dump_machine_register(ESP);
+	dump_machine_register(EBX);
+	dump_machine_register(EDX);
+	dump_machine_register(ECX);
+	dump_machine_register(EAX);
+	dump_machine_register(TRAPNO);
+	dump_machine_register(ERR);
+	dump_machine_register(EIP);
+	dump_machine_register(CS);
+	dump_machine_register(EFL);
+	dump_machine_register(UESP);
+	dump_machine_register(SS);
+#   endif
+    }
+# elif defined __APPLE__
+    {
+	const mcontext_t mctx = ctx->uc_mcontext;
+#   if defined __x86_64__
+	dump_machine_register(rax);
+	dump_machine_register(rbx);
+	dump_machine_register(rcx);
+	dump_machine_register(rdx);
+	dump_machine_register(rdi);
+	dump_machine_register(rsi);
+	dump_machine_register(rbp);
+	dump_machine_register(rsp);
+	dump_machine_register(r8);
+	dump_machine_register(r9);
+	dump_machine_register(r10);
+	dump_machine_register(r11);
+	dump_machine_register(r12);
+	dump_machine_register(r13);
+	dump_machine_register(r14);
+	dump_machine_register(r15);
+	dump_machine_register(rip);
+	dump_machine_register(rflags);
+#   elif defined __i386__
+	dump_machine_register(eax);
+	dump_machine_register(ebx);
+	dump_machine_register(ecx);
+	dump_machine_register(edx);
+	dump_machine_register(edi);
+	dump_machine_register(esi);
+	dump_machine_register(ebp);
+	dump_machine_register(esp);
+	dump_machine_register(ss);
+	dump_machine_register(eflags);
+	dump_machine_register(eip);
+	dump_machine_register(cs);
+	dump_machine_register(ds);
+	dump_machine_register(es);
+	dump_machine_register(fs);
+	dump_machine_register(gs);
+#   endif
+    }
+# endif
+    fprintf(stderr, "\n\n");
+}
+#else
+# define rb_dump_machine_register(ctx) ((void)0)
+#endif /* HAVE_PRINT_MACHINE_REGISTERS */
+
+void
+rb_vm_bugreport(const void *ctx)
 {
 #ifdef __linux__
 # define PROC_MAPS_NAME "/proc/self/maps"
@@ -739,6 +963,8 @@ rb_vm_bugreport(void)
 	rb_backtrace_print_as_bugreport();
 	fputs("\n", stderr);
     }
+
+    rb_dump_machine_register(ctx);
 
 #if HAVE_BACKTRACE || defined(_WIN32)
     fprintf(stderr, "-- C level backtrace information "
@@ -808,5 +1034,25 @@ rb_vm_bugreport(void)
 	    }
 	}
 #endif /* __linux__ */
+#ifdef __FreeBSD__
+# define MIB_KERN_PROC_PID_LEN 4
+	int mib[MIB_KERN_PROC_PID_LEN];
+	struct kinfo_proc kp;
+	size_t len = sizeof(struct kinfo_proc);
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_PROC;
+	mib[2] = KERN_PROC_PID;
+	mib[3] = getpid();
+	if (sysctl(mib, MIB_KERN_PROC_PID_LEN, &kp, &len, NULL, 0) == -1) {
+	    perror("sysctl");
+	}
+	else {
+	    struct procstat *prstat = procstat_open_sysctl();
+	    fprintf(stderr, "* Process memory map:\n\n");
+	    procstat_vm(prstat, &kp);
+	    procstat_close(prstat);
+	    fprintf(stderr, "\n");
+	}
+#endif /* __FreeBSD__ */
     }
 }

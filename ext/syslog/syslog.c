@@ -5,7 +5,7 @@
  * Documented by mathew <meta@pobox.com>
  *
  * $RoughId: syslog.c,v 1.21 2002/02/25 12:21:17 knu Exp $
- * $Id: syslog.c 44904 2014-02-10 13:35:07Z naruse $
+ * $Id: syslog.c 44581 2014-01-13 00:57:41Z nobu $
  */
 
 #include "ruby/ruby.h"
@@ -327,10 +327,10 @@ static VALUE mSyslog_inspect(VALUE self)
     Check_Type(self, T_MODULE);
 
     if (!syslog_opened)
-	return rb_sprintf("<#%s: opened=false>", rb_class2name(self));
+	return rb_sprintf("<#%"PRIsVALUE": opened=false>", self);
 
-    return rb_sprintf("<#%s: opened=true, ident=\"%s\", options=%d, facility=%d, mask=%d>",
-		      rb_class2name(self),
+    return rb_sprintf("<#%"PRIsVALUE": opened=true, ident=\"%s\", options=%d, facility=%d, mask=%d>",
+		      self,
 		      syslog_ident,
 		      syslog_options,
 		      syslog_facility,

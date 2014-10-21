@@ -68,7 +68,7 @@ require "cgi/util"
 # a magic comment, however, it returns a string in the encoding specified
 # by the magic comment.
 #
-#   # -*- coding: UTF-8 -*-
+#   # -*- coding: utf-8 -*-
 #   require 'erb'
 #
 #   template = ERB.new <<EOF
@@ -258,7 +258,7 @@ require "cgi/util"
 # Rails, the web application framework, uses ERB to create views.
 #
 class ERB
-  Revision = '$Date:: 2013-12-06 11:54:55 +0900#$' # :nodoc: #'
+  Revision = '$Date:: 2014-08-27 21:21:41 +0900#$' # :nodoc: #'
 
   # Returns revision information for the erb.rb module.
   def self.version
@@ -548,7 +548,7 @@ class ERB
       def initialize(compiler, enc=nil)
         @compiler = compiler
         @line = []
-        @script = enc ? "#coding:#{enc.to_s}\n" : ""
+        @script = enc ? "#coding:#{enc}\n" : ""
         @compiler.pre_cmd.each do |x|
           push(x)
         end
@@ -717,7 +717,7 @@ class ERB
         comment = $1 if comment[/-\*-\s*(.*?)\s*-*-$/]
         if %r"coding\s*[=:]\s*([[:alnum:]\-_]+)" =~ comment
           enc = $1.sub(/-(?:mac|dos|unix)/i, '')
-          enc = Encoding.find(enc)
+          Encoding.find(enc)
         end
       end
     end

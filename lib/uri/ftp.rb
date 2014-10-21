@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: ftp.rb 40202 2013-04-09 00:29:54Z hsbt $
+# Revision:: $Id: ftp.rb 46489 2014-06-22 00:21:57Z naruse $
 #
 # See URI for general documentation
 #
@@ -129,17 +129,24 @@ module URI
     # Arguments are +scheme+, +userinfo+, +host+, +port+, +registry+, +path+,
     # +opaque+, +query+ and +fragment+, in that order.
     #
-    def initialize(*arg)
-      raise InvalidURIError unless arg[5]
-      arg[5] = arg[5].sub(/^\//,'').sub(/^%2F/,'/')
-      super(*arg)
+    def initialize(scheme,
+                   userinfo, host, port, registry,
+                   path, opaque,
+                   query,
+                   fragment,
+                   parser = nil,
+                   arg_check = false)
+      raise InvalidURIError unless path
+      path = path.sub(/^\//,'')
+      path.sub!(/^%2F/,'/')
+      super(scheme, userinfo, host, port, registry, path, opaque,
+            query, fragment, parser, arg_check)
       @typecode = nil
-      tmp = @path.index(TYPECODE_PREFIX)
-      if tmp
+      if tmp = @path.index(TYPECODE_PREFIX)
         typecode = @path[tmp + TYPECODE_PREFIX.size..-1]
         @path = @path[0..tmp - 1]
 
-        if arg[-1]
+        if arg_check
           self.typecode = typecode
         else
           self.set_typecode(typecode)

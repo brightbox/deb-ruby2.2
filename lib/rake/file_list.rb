@@ -2,10 +2,10 @@ require 'rake/cloneable'
 require 'rake/file_utils_ext'
 require 'rake/pathmap'
 
-######################################################################
+
 module Rake
 
-  # #########################################################################
+  ##
   # A FileList is essentially an array with a few helper methods defined to
   # make file manipulation a bit easier.
   #
@@ -49,7 +49,7 @@ module Rake
 
     # List of methods that should not be delegated here (we define special
     # versions of them explicitly below).
-    MUST_NOT_DEFINE = %w[to_a to_ary partition *]
+    MUST_NOT_DEFINE = %w[to_a to_ary partition * <<]
 
     # List of delegated methods that return new array values which need
     # wrapping.
@@ -119,7 +119,7 @@ module Rake
         if fn.respond_to? :to_ary
           include(*fn.to_ary)
         else
-          @pending_add << fn
+          @pending_add << Rake.from_pathname(fn)
         end
       end
       @pending = true
@@ -149,13 +149,12 @@ module Rake
     #
     def exclude(*patterns, &block)
       patterns.each do |pat|
-        @exclude_patterns << pat
+        @exclude_patterns << Rake.from_pathname(pat)
       end
       @exclude_procs << block if block_given?
       resolve_exclude unless @pending
       self
     end
-
 
     # Clear all the exclude patterns so that we exclude nothing.
     def clear_exclude
@@ -164,7 +163,7 @@ module Rake
       self
     end
 
-    # Define equality.
+    # A FileList is equal through array equality.
     def ==(array)
       to_ary == array
     end
@@ -197,6 +196,12 @@ module Rake
       end
     end
 
+    def <<(obj)
+      resolve
+      @items << Rake.from_pathname(obj)
+      self
+    end
+
     # Resolve all the pending adds now.
     def resolve
       if @pending
@@ -208,7 +213,7 @@ module Rake
       self
     end
 
-    def resolve_add(fn)
+    def resolve_add(fn) # :nodoc:
       case fn
       when %r{[*?\[\{]}
         add_matching(fn)
@@ -218,7 +223,7 @@ module Rake
     end
     private :resolve_add
 
-    def resolve_exclude
+    def resolve_exclude # :nodoc:
       reject! { |fn| excluded_from_list?(fn) }
       self
     end
@@ -275,7 +280,6 @@ module Rake
     def ext(newext='')
       collect { |fn| fn.ext(newext) }
     end
-
 
     # Grep each of the files in the filelist using the given pattern. If a
     # block is given, call the block on each matching line, passing the file
@@ -348,7 +352,7 @@ module Rake
 
     # Should the given file name be excluded from the list?
     #
-    # NOTE: This method was formally named "exclude?", but Rails
+    # NOTE: This method was formerly named "exclude?", but Rails
     # introduced an exclude? method as an array method and setup a
     # conflict with file list. We renamed the method to avoid
     # confusion. If you were using "FileList#exclude?" in your user
@@ -377,7 +381,7 @@ module Rake
       proc { |fn| fn =~ /(^|[\/\\])core$/ && ! File.directory?(fn) }
     ]
 
-    def import(array)
+    def import(array) # :nodoc:
       @items = array
       self
     end
@@ -391,7 +395,7 @@ module Rake
       end
 
       # Get a sorted list of files matching the pattern. This method
-      # should be prefered to Dir[pattern] and Dir.glob(pattern) because
+      # should be preferred to Dir[pattern] and Dir.glob(pattern) because
       # the files returned are guaranteed to be sorted.
       def glob(pattern, *args)
         Dir.glob(pattern, *args).sort
@@ -411,6 +415,14 @@ module Rake
         old_length = dir.length
         dir = File.dirname(dir)
       end
+    end
+
+    # Convert Pathname and Pathname-like objects to strings;
+    # leave everything else alone
+    def from_pathname(path)    # :nodoc:
+      path = path.to_path if path.respond_to?(:to_path)
+      path = path.to_str if path.respond_to?(:to_str)
+      path
     end
   end
 end # module Rake

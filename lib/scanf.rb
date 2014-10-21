@@ -2,9 +2,9 @@
 #
 #--
 # $Release Version: 1.1.2 $
-# $Revision: 44196 $
-# $Id: scanf.rb 44196 2013-12-14 02:55:33Z nobu $
-# $Author: nobu $
+# $Revision: 44961 $
+# $Id: scanf.rb 44961 2014-02-15 01:33:03Z ryan $
+# $Author: ryan $
 #++
 #
 # == Description
@@ -603,7 +603,7 @@ class IO
   # If a block is given, the value from that is returned from
   # the yield is added to an output array.
   #
-  #   "123 456".block_scanf("%d) do |digit,| # the ',' unpacks the Array
+  #   "123 456".block_scanf("%d") do |digit,| # the ',' unpacks the Array
   #     digit + 100
   #   end
   #   # => [223, 556]

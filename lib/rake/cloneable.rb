@@ -1,9 +1,9 @@
 module Rake
-  # ##########################################################################
+  ##
   # Mixin for creating easily cloned objects.
-  #
-  module Cloneable
-    # The hook that invoked by 'clone' and 'dup' methods.
+
+  module Cloneable # :nodoc:
+    # The hook that is invoked by 'clone' and 'dup' methods.
     def initialize_copy(source)
       super
       source.instance_variables.each do |var|

@@ -2,7 +2,7 @@
 
   enum.c -
 
-  $Author: naruse $
+  $Author: knu $
   created at: Fri Oct  1 15:15:19 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -1105,6 +1105,190 @@ DEFINE_ENUMFUNCS(one)
     return Qnil;
 }
 
+struct nmin_data {
+  long n;
+  long bufmax;
+  long curlen;
+  VALUE buf;
+  int (*cmpfunc)(const void *, const void *, void *);
+  int rev; /* max if 1 */
+  int by; /* min_by if 1 */
+  const char *method;
+};
+
+static int
+nmin_cmp(const void *ap, const void *bp, void *_data)
+{
+    struct nmin_data *data = (struct nmin_data *)_data;
+    VALUE a = *(const VALUE *)ap, b = *(const VALUE *)bp;
+    VALUE cmp = rb_funcall(a, id_cmp, 1, b);
+    if (RBASIC(data->buf)->klass) {
+	rb_raise(rb_eRuntimeError, "%s reentered", data->method);
+    }
+    return rb_cmpint(cmp, a, b);
+}
+
+static int
+nmin_block_cmp(const void *ap, const void *bp, void *_data)
+{
+    struct nmin_data *data = (struct nmin_data *)_data;
+    VALUE a = *(const VALUE *)ap, b = *(const VALUE *)bp;
+    VALUE cmp = rb_yield_values(2, a, b);
+    if (RBASIC(data->buf)->klass) {
+	rb_raise(rb_eRuntimeError, "%s reentered", data->method);
+    }
+    return rb_cmpint(cmp, a, b);
+}
+
+
+static void
+nmin_filter(struct nmin_data *data)
+{
+    long n;
+    VALUE *beg;
+    int eltsize;
+    long numelts;
+
+    long left, right;
+
+    long i, j;
+
+    if (data->curlen <= data->n)
+	return;
+
+    n = data->n;
+    beg = RARRAY_PTR(data->buf);
+    eltsize = data->by ? 2 : 1;
+    numelts = data->curlen;
+
+    left = 0;
+    right = numelts-1;
+
+#define GETPTR(i) (beg+(i)*eltsize)
+
+#define SWAP(i, j) do { \
+    VALUE tmp[2]; \
+    memcpy(tmp, GETPTR(i), sizeof(VALUE)*eltsize); \
+    memcpy(GETPTR(i), GETPTR(j), sizeof(VALUE)*eltsize); \
+    memcpy(GETPTR(j), tmp, sizeof(VALUE)*eltsize); \
+} while (0)
+
+    while (1) {
+	long pivot_index = left + (right-left)/2;
+	long store_index;
+	long num_pivots = 1;
+
+	SWAP(pivot_index, right);
+	pivot_index = right;
+
+	store_index = left;
+	i = left;
+	while (i <= right-num_pivots) {
+	    int c = data->cmpfunc(GETPTR(i), GETPTR(pivot_index), data);
+	    if (data->rev)
+		c = -c;
+	    if (c == 0) {
+	        SWAP(i, right-num_pivots);
+		num_pivots++;
+		continue;
+	    }
+	    if (c < 0) {
+		SWAP(i, store_index);
+		store_index++;
+	    }
+	    i++;
+	}
+	j = store_index;
+	for (i = right; right-num_pivots < i; i--) {
+	    if (i <= j)
+	        break;
+	    SWAP(j, i);
+	    j++;
+	}
+
+	if (store_index <= n && n <= store_index+num_pivots)
+	    break;
+
+	if (n < store_index) {
+	    right = store_index-1;
+	}
+	else {
+	    left = store_index+num_pivots;
+	}
+    }
+#undef GETPTR
+#undef SWAP
+
+    data->curlen = data->n;
+    rb_ary_resize(data->buf, data->n * eltsize);
+}
+
+static VALUE
+nmin_i(VALUE i, VALUE *_data, int argc, VALUE *argv)
+{
+    struct nmin_data *data = (struct nmin_data *)_data;
+
+    ENUM_WANT_SVALUE();
+
+    if (data->by)
+	rb_ary_push(data->buf, rb_yield(i));
+    rb_ary_push(data->buf, i);
+
+    data->curlen++;
+
+    if (data->curlen == data->bufmax) {
+	nmin_filter(data);
+    }
+
+    return Qnil;
+}
+
+static VALUE
+nmin_run(VALUE obj, VALUE num, int by, int rev)
+{
+    VALUE result;
+    struct nmin_data data;
+
+    data.n = NUM2LONG(num);
+    if (data.n < 0)
+        rb_raise(rb_eArgError, "negative size (%ld)", data.n);
+    if (data.n == 0)
+        return rb_ary_new2(0);
+    if (LONG_MAX/4/(by ? 2 : 1) < data.n)
+        rb_raise(rb_eArgError, "too big size");
+    data.bufmax = data.n * 4;
+    data.curlen = 0;
+    data.buf = rb_ary_tmp_new(data.bufmax * (by ? 2 : 1));
+    data.cmpfunc = by ? nmin_cmp :
+                   rb_block_given_p() ? nmin_block_cmp :
+		   nmin_cmp;
+    data.rev = rev;
+    data.by = by;
+    data.method = rev ? (by ? "max_by" : "max")
+                      : (by ? "min_by" : "min");
+    rb_block_call(obj, id_each, 0, 0, nmin_i, (VALUE)&data);
+    nmin_filter(&data);
+    result = data.buf;
+    if (by) {
+	long i;
+	ruby_qsort(RARRAY_PTR(result),
+	           RARRAY_LEN(result)/2,
+		   sizeof(VALUE)*2,
+		   data.cmpfunc, (void *)&data);
+	for (i=1; i<RARRAY_LEN(result); i+=2) {
+	    RARRAY_PTR(result)[i/2] = RARRAY_PTR(result)[i];
+	}
+	rb_ary_resize(result, RARRAY_LEN(result)/2);
+    }
+    else {
+	ruby_qsort(RARRAY_PTR(result), RARRAY_LEN(result), sizeof(VALUE),
+		   data.cmpfunc, (void *)&data);
+    }
+    *((VALUE *)&RBASIC(result)->klass) = rb_cArray;
+    return result;
+
+}
+
 /*
  *  call-seq:
  *     enum.one? [{ |obj| block }]   -> true or false
@@ -1122,7 +1306,6 @@ DEFINE_ENUMFUNCS(one)
  *     [ nil, true, false ].one?                          #=> true
  *
  */
-
 static VALUE
 enum_one(VALUE obj)
 {
@@ -1210,8 +1393,10 @@ min_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
 
 /*
  *  call-seq:
- *     enum.min                 -> obj
- *     enum.min { |a, b| block } -> obj
+ *     enum.min                     -> obj
+ *     enum.min {| a,b | block }    -> obj
+ *     enum.min(n)                  -> array
+ *     enum.min(n) {| a,b | block } -> array
  *
  *  Returns the object in <i>enum</i> with the minimum value. The
  *  first form assumes all objects implement <code>Comparable</code>;
@@ -1220,13 +1405,26 @@ min_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *     a = %w(albatross dog horse)
  *     a.min                                   #=> "albatross"
  *     a.min { |a, b| a.length <=> b.length }  #=> "dog"
+ *
+ *  If the +n+ argument is given, minimum +n+ elements are returned
+ *  as an array.
+ *
+ *     a = %w[albatross dog horse]
+ *     a.min(2)                                  #=> ["albatross", "dog"]
+ *     a.min(2) {|a, b| a.length <=> b.length }  #=> ["dog", "horse"]
  */
 
 static VALUE
-enum_min(VALUE obj)
+enum_min(int argc, VALUE *argv, VALUE obj)
 {
     NODE *memo = NEW_MEMO(Qundef, 0, 0);
     VALUE result;
+    VALUE num;
+
+    rb_scan_args(argc, argv, "01", &num);
+
+    if (!NIL_P(num))
+       return nmin_run(obj, num, 0, 0);
 
     if (rb_block_given_p()) {
 	rb_block_call(obj, id_each, 0, 0, min_ii, (VALUE)memo);
@@ -1281,8 +1479,10 @@ max_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
 
 /*
  *  call-seq:
- *     enum.max                  -> obj
- *     enum.max { |a, b| block } -> obj
+ *     enum.max                   -> obj
+ *     enum.max { |a, b| block }  -> obj
+ *     enum.max(n)                -> obj
+ *     enum.max(n) {|a,b| block } -> obj
  *
  *  Returns the object in _enum_ with the maximum value. The
  *  first form assumes all objects implement <code>Comparable</code>;
@@ -1291,13 +1491,26 @@ max_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *     a = %w(albatross dog horse)
  *     a.max                                   #=> "horse"
  *     a.max { |a, b| a.length <=> b.length }  #=> "albatross"
+ *
+ *  If the +n+ argument is given, maximum +n+ elements are returned
+ *  as an array.
+ *
+ *     a = %w[albatross dog horse]
+ *     a.max(2)                                  #=> ["dog", "horse"]
+ *     a.max(2) {|a, b| a.length <=> b.length }  #=> ["horse", "albatross"]
  */
 
 static VALUE
-enum_max(VALUE obj)
+enum_max(int argc, VALUE *argv, VALUE obj)
 {
     NODE *memo = NEW_MEMO(Qundef, 0, 0);
     VALUE result;
+    VALUE num;
+
+    rb_scan_args(argc, argv, "01", &num);
+
+    if (!NIL_P(num))
+       return nmin_run(obj, num, 0, 1);
 
     if (rb_block_given_p()) {
 	rb_block_call(obj, id_each, 0, 0, max_ii, (VALUE)memo);
@@ -1485,8 +1698,10 @@ min_by_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
 
 /*
  *  call-seq:
- *     enum.min_by { |obj| block } -> obj
- *     enum.min_by                 -> an_enumerator
+ *     enum.min_by {|obj| block }      -> obj
+ *     enum.min_by                     -> an_enumerator
+ *     enum.min_by(n) {|obj| block }   -> array
+ *     enum.min_by(n)                  -> an_enumerator
  *
  *  Returns the object in <i>enum</i> that gives the minimum
  *  value from the given block.
@@ -1495,14 +1710,26 @@ min_by_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *
  *     a = %w(albatross dog horse)
  *     a.min_by { |x| x.length }   #=> "dog"
+ *
+ *  If the +n+ argument is given, minimum +n+ elements are returned
+ *  as an array.
+ *
+ *     a = %w[albatross dog horse]
+ *     p a.min_by(2) {|x| x.length } #=> ["dog", "horse"]
  */
 
 static VALUE
-enum_min_by(VALUE obj)
+enum_min_by(int argc, VALUE *argv, VALUE obj)
 {
     NODE *memo;
+    VALUE num;
 
-    RETURN_SIZED_ENUMERATOR(obj, 0, 0, enum_size);
+    rb_scan_args(argc, argv, "01", &num);
+
+    RETURN_SIZED_ENUMERATOR(obj, argc, argv, enum_size);
+
+    if (!NIL_P(num))
+        return nmin_run(obj, num, 1, 0);
 
     memo = NEW_MEMO(Qundef, Qnil, 0);
     rb_block_call(obj, id_each, 0, 0, min_by_i, (VALUE)memo);
@@ -1531,8 +1758,10 @@ max_by_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
 
 /*
  *  call-seq:
- *     enum.max_by { |obj| block } -> obj
- *     enum.max_by                 -> an_enumerator
+ *     enum.max_by {|obj| block }      -> obj
+ *     enum.max_by                     -> an_enumerator
+ *     enum.max_by(n) {|obj| block }   -> obj
+ *     enum.max_by(n)                  -> an_enumerator
  *
  *  Returns the object in <i>enum</i> that gives the maximum
  *  value from the given block.
@@ -1541,14 +1770,71 @@ max_by_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *
  *     a = %w(albatross dog horse)
  *     a.max_by { |x| x.length }   #=> "albatross"
+ *
+ *  If the +n+ argument is given, minimum +n+ elements are returned
+ *  as an array.
+ *
+ *     a = %w[albatross dog horse]
+ *     a.max_by(2) {|x| x.length } #=> ["horse", "albatross"]
+ *
+ *  enum.max_by(n) can be used to implement weighted random sampling.
+ *  Following example implements and use Enumerable#wsample.
+ *
+ *     module Enumerable
+ *       # weighted random sampling.
+ *       #
+ *       # Pavlos S. Efraimidis, Paul G. Spirakis
+ *       # Weighted random sampling with a reservoir
+ *       # Information Processing Letters
+ *       # Volume 97, Issue 5 (16 March 2006)
+ *       def wsample(n)
+ *         self.max_by(n) {|v| rand ** (1.0/yield(v)) }
+ *       end
+ *     end
+ *     e = (-20..20).to_a*10000
+ *     a = e.wsample(20000) {|x|
+ *       Math.exp(-(x/5.0)**2) # normal distribution
+ *     }
+ *     # a is 20000 samples from e.
+ *     p a.length #=> 20000
+ *     h = a.group_by {|x| x }
+ *     -10.upto(10) {|x| puts "*" * (h[x].length/30.0).to_i if h[x] }
+ *     #=> *
+ *     #   ***
+ *     #   ******
+ *     #   ***********
+ *     #   ******************
+ *     #   *****************************
+ *     #   *****************************************
+ *     #   ****************************************************
+ *     #   ***************************************************************
+ *     #   ********************************************************************
+ *     #   ***********************************************************************
+ *     #   ***********************************************************************
+ *     #   **************************************************************
+ *     #   ****************************************************
+ *     #   ***************************************
+ *     #   ***************************
+ *     #   ******************
+ *     #   ***********
+ *     #   *******
+ *     #   ***
+ *     #   *
+ *
  */
 
 static VALUE
-enum_max_by(VALUE obj)
+enum_max_by(int argc, VALUE *argv, VALUE obj)
 {
     NODE *memo;
+    VALUE num;
 
-    RETURN_SIZED_ENUMERATOR(obj, 0, 0, enum_size);
+    rb_scan_args(argc, argv, "01", &num);
+
+    RETURN_SIZED_ENUMERATOR(obj, argc, argv, enum_size);
+
+    if (!NIL_P(num))
+        return nmin_run(obj, num, 1, 1);
 
     memo = NEW_MEMO(Qundef, Qnil, 0);
     rb_block_call(obj, id_each, 0, 0, max_by_i, (VALUE)memo);
@@ -1816,6 +2102,9 @@ enum_each_entry(int argc, VALUE *argv, VALUE obj)
     return obj;
 }
 
+#define dont_recycle_block_arg(arity) ((arity) == 1 || (arity) < 0)
+#define nd_no_recycle u2.value
+
 static VALUE
 each_slice_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, m))
 {
@@ -1829,7 +2118,13 @@ each_slice_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, m))
 
     if (RARRAY_LEN(ary) == size) {
 	v = rb_yield(ary);
-	memo->u1.value = rb_ary_new2(size);
+
+	if (memo->nd_no_recycle) {
+	    memo->u1.value = rb_ary_new2(size);
+	}
+	else {
+	    rb_ary_clear(ary);
+	}
     }
 
     return v;
@@ -1871,11 +2166,13 @@ enum_each_slice(VALUE obj, VALUE n)
     long size = NUM2LONG(n);
     VALUE ary;
     NODE *memo;
+    int arity;
 
     if (size <= 0) rb_raise(rb_eArgError, "invalid slice size");
     RETURN_SIZED_ENUMERATOR(obj, 1, &n, enum_each_slice_size);
     ary = rb_ary_new2(size);
-    memo = NEW_MEMO(ary, 0, size);
+    arity = rb_block_arity();
+    memo = NEW_MEMO(ary, dont_recycle_block_arg(arity), size);
     rb_block_call(obj, id_each, 0, 0, each_slice_i, (VALUE)memo);
     ary = memo->u1.value;
     if (RARRAY_LEN(ary) > 0) rb_yield(ary);
@@ -1897,7 +2194,10 @@ each_cons_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
     }
     rb_ary_push(ary, i);
     if (RARRAY_LEN(ary) == size) {
-	v = rb_yield(rb_ary_dup(ary));
+	if (memo->nd_no_recycle) {
+	    ary = rb_ary_dup(ary);
+	}
+	v = rb_yield(ary);
     }
     return v;
 }
@@ -1942,10 +2242,12 @@ enum_each_cons(VALUE obj, VALUE n)
 {
     long size = NUM2LONG(n);
     NODE *memo;
+    int arity;
 
     if (size <= 0) rb_raise(rb_eArgError, "invalid size");
     RETURN_SIZED_ENUMERATOR(obj, 1, &n, enum_each_cons_size);
-    memo = NEW_MEMO(rb_ary_new2(size), 0, size);
+    arity = rb_block_arity();
+    memo = NEW_MEMO(rb_ary_new2(size), dont_recycle_block_arg(arity), size);
     rb_block_call(obj, id_each, 0, 0, each_cons_i, (VALUE)memo);
 
     return Qnil;
@@ -2078,6 +2380,7 @@ zip_i(RB_BLOCK_CALL_FUNC_ARGLIST(val, memoval))
  *     a = [ 4, 5, 6 ]
  *     b = [ 7, 8, 9 ]
  *
+ *     a.zip(b)                 #=> [[4, 7], [5, 8], [6, 9]]
  *     [1, 2, 3].zip(a, b)      #=> [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
  *     [1, 2].zip(a, b)         #=> [[1, 4, 7], [2, 5, 8]]
  *     a.zip([1, 2], [8])       #=> [[4, 1, 8], [5, 2, nil], [6, nil, nil]]
@@ -2140,6 +2443,7 @@ take_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *
  *     a = [1, 2, 3, 4, 5, 0]
  *     a.take(3)             #=> [1, 2, 3]
+ *     a.take(30)            #=> [1, 2, 3, 4, 5, 0]
  *
  */
 
@@ -2374,7 +2678,7 @@ static VALUE
 chunk_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, _argp))
 {
     struct chunk_arg *argp = MEMO_FOR(struct chunk_arg, _argp);
-    VALUE v;
+    VALUE v, s;
     VALUE alone = ID2SYM(rb_intern("_alone"));
     VALUE separator = ID2SYM(rb_intern("_separator"));
 
@@ -2398,7 +2702,7 @@ chunk_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, _argp))
             argp->prev_value = argp->prev_elts = Qnil;
         }
     }
-    else if (SYMBOL_P(v) && rb_id2name(SYM2ID(v))[0] == '_') {
+    else if (SYMBOL_P(v) && (s = rb_sym2str(v), RSTRING_PTR(s)[0] == '_')) {
 	rb_raise(rb_eRuntimeError, "symbols beginning with an underscore are reserved");
     }
     else {
@@ -2778,6 +3082,130 @@ enum_slice_before(int argc, VALUE *argv, VALUE enumerable)
     return enumerator;
 }
 
+
+struct sliceafter_arg {
+    VALUE pat;
+    VALUE pred;
+    VALUE prev_elts;
+    VALUE yielder;
+};
+
+static VALUE
+sliceafter_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, _memo))
+{
+#define UPDATE_MEMO ((void)(memo = MEMO_FOR(struct sliceafter_arg, _memo)))
+    struct sliceafter_arg *memo;
+    int split_p;
+    UPDATE_MEMO;
+
+    ENUM_WANT_SVALUE();
+
+    if (NIL_P(memo->prev_elts)) {
+        memo->prev_elts = rb_ary_new3(1, i);
+    }
+    else {
+        rb_ary_push(memo->prev_elts, i);
+    }
+
+    if (NIL_P(memo->pred)) {
+        split_p = RTEST(rb_funcall(memo->pat, id_eqq, 1, i));
+        UPDATE_MEMO;
+    }
+    else {
+        split_p = RTEST(rb_funcall(memo->pred, id_call, 1, i));
+        UPDATE_MEMO;
+    }
+
+    if (split_p) {
+        rb_funcall(memo->yielder, id_lshift, 1, memo->prev_elts);
+        UPDATE_MEMO;
+        memo->prev_elts = Qnil;
+    }
+
+    return Qnil;
+#undef UPDATE_MEMO
+}
+
+static VALUE
+sliceafter_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
+{
+    VALUE enumerable;
+    VALUE arg;
+    struct sliceafter_arg *memo = NEW_MEMO_FOR(struct sliceafter_arg, arg);
+
+    enumerable = rb_ivar_get(enumerator, rb_intern("sliceafter_enum"));
+    memo->pat = rb_ivar_get(enumerator, rb_intern("sliceafter_pat"));
+    memo->pred = rb_attr_get(enumerator, rb_intern("sliceafter_pred"));
+    memo->prev_elts = Qnil;
+    memo->yielder = yielder;
+
+    rb_block_call(enumerable, id_each, 0, 0, sliceafter_ii, arg);
+    memo = MEMO_FOR(struct sliceafter_arg, arg);
+    if (!NIL_P(memo->prev_elts))
+        rb_funcall(memo->yielder, id_lshift, 1, memo->prev_elts);
+    return Qnil;
+}
+
+/*
+ *  call-seq:
+ *     enum.slice_after(pattern)       -> an_enumerator
+ *     enum.slice_after { |elt| bool } -> an_enumerator
+ *
+ *  Creates an enumerator for each chunked elements.
+ *  The ends of chunks are defined by _pattern_ and the block.
+ *
+ *  If <code>_pattern_ === _elt_</code> returns <code>true</code> or the block
+ *  returns <code>true</code> for the element, the element is end of a
+ *  chunk.
+ *
+ *  The <code>===</code> and _block_ is called from the first element to the last
+ *  element of _enum_.
+ *
+ *  The result enumerator yields the chunked elements as an array.
+ *  So +each+ method can be called as follows:
+ *
+ *    enum.slice_after(pattern).each { |ary| ... }
+ *    enum.slice_after { |elt| bool }.each { |ary| ... }
+ *
+ *  Other methods of the Enumerator class and Enumerable module,
+ *  such as +map+, etc., are also usable.
+ *
+ *  For example, continuation lines (lines end with backslash) can be
+ *  concatenated as follows:
+ *
+ *    lines = ["foo\n", "bar\\\n", "baz\n", "\n", "qux\n"]
+ *    e = lines.slice_after(/(?<!\\)\n\z/)
+ *    p e.to_a
+ *    #=> [["foo\n"], ["bar\\\n", "baz\n"], ["\n"], ["qux\n"]]
+ *    p e.map {|ll| ll[0...-1].map {|l| l.sub(/\\\n\z/, "") }.join + ll.last }
+ *    #=>["foo\n", "barbaz\n", "\n", "qux\n"]
+ *
+ */
+
+static VALUE
+enum_slice_after(int argc, VALUE *argv, VALUE enumerable)
+{
+    VALUE enumerator;
+    VALUE pat = Qnil, pred = Qnil;
+
+    if (rb_block_given_p()) {
+        if (0 < argc)
+            rb_raise(rb_eArgError, "both pattan and block are given");
+        pred = rb_block_proc();
+    }
+    else {
+        rb_scan_args(argc, argv, "1", &pat);
+    }
+
+    enumerator = rb_obj_alloc(rb_cEnumerator);
+    rb_ivar_set(enumerator, rb_intern("sliceafter_enum"), enumerable);
+    rb_ivar_set(enumerator, rb_intern("sliceafter_pat"), pat);
+    rb_ivar_set(enumerator, rb_intern("sliceafter_pred"), pred);
+
+    rb_block_call(enumerator, idInitialize, 0, 0, sliceafter_i, enumerator);
+    return enumerator;
+}
+
 /*
  *  The <code>Enumerable</code> mixin provides collection classes with
  *  several traversal and searching methods, and with the ability to
@@ -2824,11 +3252,11 @@ Init_Enumerable(void)
     rb_define_method(rb_mEnumerable, "any?", enum_any, 0);
     rb_define_method(rb_mEnumerable, "one?", enum_one, 0);
     rb_define_method(rb_mEnumerable, "none?", enum_none, 0);
-    rb_define_method(rb_mEnumerable, "min", enum_min, 0);
-    rb_define_method(rb_mEnumerable, "max", enum_max, 0);
+    rb_define_method(rb_mEnumerable, "min", enum_min, -1);
+    rb_define_method(rb_mEnumerable, "max", enum_max, -1);
     rb_define_method(rb_mEnumerable, "minmax", enum_minmax, 0);
-    rb_define_method(rb_mEnumerable, "min_by", enum_min_by, 0);
-    rb_define_method(rb_mEnumerable, "max_by", enum_max_by, 0);
+    rb_define_method(rb_mEnumerable, "min_by", enum_min_by, -1);
+    rb_define_method(rb_mEnumerable, "max_by", enum_max_by, -1);
     rb_define_method(rb_mEnumerable, "minmax_by", enum_minmax_by, 0);
     rb_define_method(rb_mEnumerable, "member?", enum_member, 1);
     rb_define_method(rb_mEnumerable, "include?", enum_member, 1);
@@ -2846,6 +3274,7 @@ Init_Enumerable(void)
     rb_define_method(rb_mEnumerable, "cycle", enum_cycle, -1);
     rb_define_method(rb_mEnumerable, "chunk", enum_chunk, -1);
     rb_define_method(rb_mEnumerable, "slice_before", enum_slice_before, -1);
+    rb_define_method(rb_mEnumerable, "slice_after", enum_slice_after, -1);
 
     id_next = rb_intern("next");
     id_call = rb_intern("call");

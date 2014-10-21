@@ -16,10 +16,12 @@ module Psych
         def initialize
           @obj_to_id   = {}
           @obj_to_node = {}
+          @targets     = []
           @counter     = 0
         end
 
         def register target, node
+          @targets << target
           @obj_to_node[target.object_id] = node
         end
 
@@ -209,6 +211,25 @@ module Psych
         @emitter.end_mapping
       end
 
+      def visit_NameError o
+        tag = ['!ruby/exception', o.class.name].join ':'
+
+        @emitter.start_mapping nil, tag, false, Nodes::Mapping::BLOCK
+
+        {
+          'message'   => o.message.to_s,
+          'backtrace' => private_iv_get(o, 'backtrace'),
+        }.each do |k,v|
+          next unless v
+          @emitter.scalar k, nil, nil, true, false, Nodes::Scalar::ANY
+          accept v
+        end
+
+        dump_ivars o
+
+        @emitter.end_mapping
+      end
+
       def visit_Regexp o
         register o, @emitter.scalar(o.inspect, nil, '!ruby/regexp', false, false, Nodes::Scalar::ANY)
       end
@@ -289,6 +310,11 @@ module Psych
           quote = false
         elsif o =~ /\n/
           style = Nodes::Scalar::LITERAL
+        elsif o == '<<'
+          style = Nodes::Scalar::SINGLE_QUOTED
+          tag   = 'tag:yaml.org,2002:str'
+          plain = false
+          quote = false
         elsif o =~ /^\W[^"]*$/
           style = Nodes::Scalar::DOUBLE_QUOTED
         else
@@ -378,7 +404,11 @@ module Psych
       end
 
       def visit_Symbol o
-        @emitter.scalar ":#{o}", nil, nil, true, false, Nodes::Scalar::ANY
+        if o.empty?
+          @emitter.scalar "", nil, '!ruby/symbol', false, false, Nodes::Scalar::ANY
+        else
+          @emitter.scalar ":#{o}", nil, nil, true, false, Nodes::Scalar::ANY
+        end
       end
 
       private

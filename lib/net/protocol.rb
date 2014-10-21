@@ -11,7 +11,7 @@
 # modify this program under the same terms as Ruby itself,
 # Ruby Distribute License or GNU General Public License.
 #
-# $Id: protocol.rb 37563 2012-11-08 10:04:24Z naruse $
+# $Id: protocol.rb 46060 2014-05-23 12:36:30Z nobu $
 #++
 #
 # WARNING: This file is going to remove.

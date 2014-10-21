@@ -23,10 +23,8 @@ rsock_syserr_fail_host_port(int err, const char *mesg, VALUE host, VALUE port)
 {
     VALUE message;
 
-    port = rb_String(port);
-
-    message = rb_sprintf("%s for \"%s\" port %s",
-	    mesg, StringValueCStr(host), StringValueCStr(port));
+    message = rb_sprintf("%s for %+"PRIsVALUE" port % "PRIsVALUE"",
+			 mesg, host, port);
 
     rb_syserr_fail_str(err, message);
 }
@@ -43,15 +41,7 @@ rsock_syserr_fail_path(int err, const char *mesg, VALUE path)
     VALUE message;
 
     if (RB_TYPE_P(path, T_STRING)) {
-        if (memchr(RSTRING_PTR(path), '\0', RSTRING_LEN(path))) {
-            path = rb_str_inspect(path);
-            message = rb_sprintf("%s for %s", mesg,
-                    StringValueCStr(path));
-        }
-        else {
-            message = rb_sprintf("%s for \"%s\"", mesg,
-                    StringValueCStr(path));
-        }
+	message = rb_sprintf("%s for % "PRIsVALUE"", mesg, path);
 	rb_syserr_fail_str(err, message);
     }
     else {
@@ -87,7 +77,7 @@ rsock_syserr_fail_raddrinfo(int err, const char *mesg, VALUE rai)
     VALUE str, message;
 
     str = rsock_addrinfo_inspect_sockaddr(rai);
-    message = rb_sprintf("%s for %s", mesg, StringValueCStr(str));
+    message = rb_sprintf("%s for %"PRIsVALUE"", mesg, str);
 
     rb_syserr_fail_str(err, message);
 }
@@ -178,16 +168,29 @@ pair_yield(VALUE pair)
 
 #if defined HAVE_SOCKETPAIR
 
+#ifdef SOCK_CLOEXEC
 static int
 rsock_socketpair0(int domain, int type, int protocol, int sv[2])
 {
     int ret;
+    static int cloexec_state = -1; /* <0: unknown, 0: ignored, >0: working */
 
-#ifdef SOCK_CLOEXEC
-    static int try_sock_cloexec = 1;
-    if (try_sock_cloexec) {
+    if (cloexec_state > 0) { /* common path, if SOCK_CLOEXEC is defined */
         ret = socketpair(domain, type|SOCK_CLOEXEC, protocol, sv);
-        if (ret == -1 && errno == EINVAL) {
+        if (ret == 0 && (sv[0] <= 2 || sv[1] <= 2)) {
+            goto fix_cloexec; /* highly unlikely */
+        }
+        goto update_max_fd;
+    }
+    else if (cloexec_state < 0) { /* usually runs once only for detection */
+        ret = socketpair(domain, type|SOCK_CLOEXEC, protocol, sv);
+        if (ret == 0) {
+            cloexec_state = rsock_detect_cloexec(sv[0]);
+            if ((cloexec_state == 0) || (sv[0] <= 2 || sv[1] <= 2))
+                goto fix_cloexec;
+            goto update_max_fd;
+        }
+        else if (ret == -1 && errno == EINVAL) {
             /* SOCK_CLOEXEC is available since Linux 2.6.27.  Linux 2.6.18 fails with EINVAL */
             ret = socketpair(domain, type, protocol, sv);
             if (ret != -1) {
@@ -195,26 +198,41 @@ rsock_socketpair0(int domain, int type, int protocol, int sv[2])
                  * So disable SOCK_CLOEXEC only if socketpair() succeeds without SOCK_CLOEXEC.
                  * Ex. Socket.pair(:UNIX, 0xff) fails with EINVAL.
                  */
-                try_sock_cloexec = 0;
+                cloexec_state = 0;
             }
         }
     }
-    else {
+    else { /* cloexec_state == 0 */
         ret = socketpair(domain, type, protocol, sv);
     }
-#else
-    ret = socketpair(domain, type, protocol, sv);
-#endif
-
     if (ret == -1) {
         return -1;
     }
 
-    rb_fd_fix_cloexec(sv[0]);
-    rb_fd_fix_cloexec(sv[1]);
+fix_cloexec:
+    rb_maygvl_fd_fix_cloexec(sv[0]);
+    rb_maygvl_fd_fix_cloexec(sv[1]);
+
+update_max_fd:
+    rb_update_max_fd(sv[0]);
+    rb_update_max_fd(sv[1]);
 
     return ret;
 }
+#else /* !SOCK_CLOEXEC */
+static int
+rsock_socketpair0(int domain, int type, int protocol, int sv[2])
+{
+    int ret = socketpair(domain, type, protocol, sv);
+
+    if (ret == -1)
+	return -1;
+
+    rb_fd_fix_cloexec(sv[0]);
+    rb_fd_fix_cloexec(sv[1]);
+    return ret;
+}
+#endif /* !SOCK_CLOEXEC */
 
 static int
 rsock_socketpair(int domain, int type, int protocol, int sv[2])
@@ -277,8 +295,6 @@ rsock_sock_s_socketpair(int argc, VALUE *argv, VALUE klass)
     if (ret < 0) {
 	rb_sys_fail("socketpair(2)");
     }
-    rb_fd_fix_cloexec(sp[0]);
-    rb_fd_fix_cloexec(sp[1]);
 
     s1 = rsock_init_sock(rb_obj_alloc(klass), sp[0]);
     s2 = rsock_init_sock(rb_obj_alloc(klass), sp[1]);
@@ -1007,10 +1023,15 @@ sock_sysaccept(VALUE sock)
 static VALUE
 sock_gethostname(VALUE obj)
 {
-#ifndef HOST_NAME_MAX
-#  define HOST_NAME_MAX 1024
+#if defined(NI_MAXHOST)
+#  define RUBY_MAX_HOST_NAME_LEN NI_MAXHOST
+#elif defined(HOST_NAME_MAX)
+#  define RUBY_MAX_HOST_NAME_LEN HOST_NAME_MAX
+#else
+#  define RUBY_MAX_HOST_NAME_LEN 1024
 #endif
-    char buf[HOST_NAME_MAX+1];
+
+    char buf[RUBY_MAX_HOST_NAME_LEN+1];
 
     rb_secure(3);
     if (gethostname(buf, (int)sizeof buf - 1) < 0)
@@ -2022,7 +2043,7 @@ Init_socket()
      *
      * === What's a socket?
      *
-     * Sockets are endpoints of a bidirectionnal communication channel.
+     * Sockets are endpoints of a bidirectional communication channel.
      * Sockets can communicate within a process, between processes on the same
      * machine or between different machines.  There are many types of socket:
      * TCPSocket, UDPSocket or UNIXSocket for example.
@@ -2047,7 +2068,7 @@ Init_socket()
      *
      * *hostname:*
      * The identifier of a network interface:
-     * *    a string (hostname, IPv4 or IPv6 adress or +broadcast+
+     * *    a string (hostname, IPv4 or IPv6 address or +broadcast+
      *	    which specifies a broadcast address)
      * *    a zero-length string which specifies INADDR_ANY
      * *    an integer (interpreted as binary address in host byte order).

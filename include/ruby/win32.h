@@ -263,7 +263,6 @@ struct ifaddrs {
 #endif
 
 extern DWORD  rb_w32_osid(void);
-extern int    rb_w32_cmdvector(const char *, char ***);
 extern rb_pid_t  rb_w32_pipe_exec(const char *, const char *, int, int *, int *);
 extern int    flock(int fd, int oper);
 extern int    rb_w32_io_cancelable_p(int);
@@ -462,6 +461,11 @@ extern int 	 rb_w32_truncate(const char *path, off_t length);
 #define truncate truncate64
 #else
 #define truncate rb_w32_truncate
+#endif
+
+#if defined(_MSC_VER) && _MSC_VER >= 1400 && _MSC_VER < 1800
+#define strtoll  _strtoi64
+#define strtoull _strtoui64
 #endif
 
 /*
@@ -783,7 +787,7 @@ char *rb_w32_wstr_to_mbstr(UINT, const WCHAR *, int, long *);
 == ***CAUTION***
 Since this function is very dangerous, ((*NEVER*))
 * lock any HANDLEs(i.e. Mutex, Semaphore, CriticalSection and so on) or,
-* use anything like TRAP_BEG...TRAP_END block structure,
+* use anything like rb_thread_call_without_gvl,
 in asynchronous_func_t.
 */
 typedef uintptr_t (*asynchronous_func_t)(uintptr_t self, int argc, uintptr_t* argv);

@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_pkey_dh.c 45113 2014-02-22 05:56:02Z naruse $
+ * $Id: ossl_pkey_dh.c 44584 2014-01-13 05:27:23Z zzak $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.

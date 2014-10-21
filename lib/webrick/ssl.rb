@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2003 GOTOU Yuuzou All rights reserved.
 #
-# $Id: ssl.rb 38945 2013-01-26 01:12:54Z drbrain $
+# $Id: ssl.rb 44407 2013-12-25 05:10:12Z a_matsuda $
 
 require 'webrick'
 require 'openssl'
@@ -31,7 +31,7 @@ module WEBrick
     # :SSLClientCA          :: nil,
     #   Array of certificates that will be sent to the client.
     # :SSLExtraChainCert    :: nil,
-    #   Array of certificates that willbe added to the certificate chain
+    #   Array of certificates that will be added to the certificate chain
     # :SSLCACertificateFile :: nil,
     #   Path to a CA certificate file
     # :SSLCACertificatePath :: nil,

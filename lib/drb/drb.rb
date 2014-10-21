@@ -177,6 +177,9 @@ require 'drb/eq'
 #   # Not necessary for this small example, but will be required
 #   # as soon as we pass a non-marshallable object as an argument
 #   # to a dRuby call.
+#   #
+#   # Note: this must be called at least once per process to take any effect.
+#   # This is particularly important if your application forks.
 #   DRb.start_service
 #
 #   timeserver = DRbObject.new_with_uri(SERVER_URI)
@@ -992,7 +995,7 @@ module DRb
     def initialize(option)
       @option = option.to_s
     end
-    attr :option
+    attr_reader :option
     def to_s; @option; end
 
     def ==(other)
@@ -1591,16 +1594,9 @@ module DRb
 
     end
 
-    if RUBY_VERSION >= '1.8'
-      require 'drb/invokemethod'
-      class InvokeMethod
-        include InvokeMethod18Mixin
-      end
-    else
-      require 'drb/invokemethod16'
-      class InvokeMethod
-        include InvokeMethod16Mixin
-      end
+    require 'drb/invokemethod'
+    class InvokeMethod
+      include InvokeMethod18Mixin
     end
 
     # The main loop performed by a DRbServer's internal thread.

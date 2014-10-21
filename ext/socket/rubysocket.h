@@ -39,6 +39,9 @@
 #  ifdef HAVE_NETINET_TCP_H
 #    include <netinet/tcp.h>
 #  endif
+#  ifdef HAVE_NETINET_TCP_FSM_H
+#    include <netinet/tcp_fsm.h>
+#  endif
 #  ifdef HAVE_NETINET_UDP_H
 #    include <netinet/udp.h>
 #  endif
@@ -226,6 +229,7 @@ typedef union {
 #define INET_SOCKS  2
 
 extern int rsock_do_not_reverse_lookup;
+extern int rsock_cmsg_cloexec_state;
 #define FMODE_NOREVLOOKUP 0x100
 
 extern VALUE rb_cBasicSocket;
@@ -255,7 +259,6 @@ int Rconnect();
 
 #include "constdefs.h"
 
-#define BLOCKING_REGION(func, arg) (long)rb_thread_blocking_region((func), (arg), RUBY_UBF_IO, 0)
 #define BLOCKING_REGION_FD(func, arg) (long)rb_thread_io_blocking_region((func), (arg), (arg)->fd)
 
 #define SockAddrStringValue(v) rsock_sockaddr_string_value(&(v))
@@ -310,6 +313,7 @@ socklen_t rsock_unix_sockaddr_len(VALUE path);
 #endif
 
 int rsock_socket(int domain, int type, int proto);
+int rsock_detect_cloexec(int fd);
 VALUE rsock_init_sock(VALUE sock, int fd);
 VALUE rsock_sock_s_socketpair(int argc, VALUE *argv, VALUE klass);
 VALUE rsock_init_inetsock(VALUE sock, VALUE remote_host, VALUE remote_serv, VALUE local_host, VALUE local_serv, int type);
@@ -391,5 +395,21 @@ NORETURN(void rsock_sys_fail_path(const char *, VALUE));
 NORETURN(void rsock_sys_fail_sockaddr(const char *, struct sockaddr *addr, socklen_t len));
 NORETURN(void rsock_sys_fail_raddrinfo(const char *, VALUE rai));
 NORETURN(void rsock_sys_fail_raddrinfo_or_sockaddr(const char *, VALUE addr, VALUE rai));
+
+/*
+ * It is safe on Linux to attempt using a socket without waiting on it in
+ * all cases.  For some syscalls (e.g. accept/accept4), blocking on the
+ * syscall instead of relying on select/poll allows the kernel to use
+ * "wake-one" behavior and avoid the thundering herd problem.
+ * This is likely safe on all other *nix-like systems, so this whitelist
+ * can be expanded by interested parties.
+ */
+#if defined(__linux__)
+static inline int rsock_maybe_fd_writable(int fd) { return 1; }
+static inline void rsock_maybe_wait_fd(int fd) { }
+#else /* some systems (mswin/mingw) need these.  ref: r36946 */
+#  define rsock_maybe_fd_writable(fd) rb_thread_fd_writable((fd))
+#  define rsock_maybe_wait_fd(fd) rb_thread_wait_fd((fd))
+#endif
 
 #endif
