@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: http.rb 37472 2012-11-05 01:19:09Z zzak $
+# Revision:: $Id: http.rb 47072 2014-08-05 19:09:01Z naruse $
 #
 # See URI for general documentation
 #
@@ -93,12 +93,12 @@ module URI
     # Otherwise, the path is simply URI#path.
     #
     def request_uri
-      r = path_query
-      if r && r[0] != ?/
-        r = '/' + r
+      return nil unless @path
+      if @path.start_with?(?/.freeze)
+        @query ? "#@path?#@query" : @path.dup
+      else
+        @query ? "/#@path?#@query" : "/#@path"
       end
-
-      r
     end
   end
 

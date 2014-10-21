@@ -1,5 +1,5 @@
 /*
- * $Id: ossl.h 44904 2014-02-10 13:35:07Z naruse $
+ * $Id: ossl.h 44582 2014-01-13 00:57:42Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -137,8 +137,8 @@ VALUE ossl_x509name_sk2ary(STACK_OF(X509_NAME) *names);
 VALUE ossl_buf2str(char *buf, int len);
 #define ossl_str_adjust(str, p) \
 do{\
-    int len = RSTRING_LENINT(str);\
-    int newlen = rb_long2int((p) - (unsigned char*)RSTRING_PTR(str));\
+    long len = RSTRING_LEN(str);\
+    long newlen = (long)((p) - (unsigned char*)RSTRING_PTR(str));\
     assert(newlen <= len);\
     rb_str_set_len((str), newlen);\
 }while(0)

@@ -43,6 +43,7 @@ mathn/rational/rational.c
 nkf/lib
 nkf/nkf.c
 objspace/objspace.c
+objspace/objspace_dump.c
 objspace/object_tracing.c
 openssl/lib
 openssl/ossl.c
@@ -88,7 +89,6 @@ pty/lib
 pty/pty.c
 racc/cparse/cparse.c
 readline/readline.c
-refinement/refinement.c
 ripper/lib
 ripper/ripper.c
 sdbm/init.c
@@ -99,5 +99,5 @@ syslog/syslog.c
 syslog/lib
 thread/thread.c
 win32ole/lib
-win32ole/win32ole.c
+win32ole/*.c
 zlib/zlib.c

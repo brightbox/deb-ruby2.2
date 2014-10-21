@@ -55,6 +55,10 @@ VALUE rb_eMathDomainError;
  *    Math.atan2(1.0, 0.0)   #=> 1.5707963267948966
  *    Math.atan2(1.0, -1.0)  #=> 2.356194490192345
  *    Math.atan2(0.0, -1.0)  #=> 3.141592653589793
+ *    Math.atan2(INFINITY, INFINITY)   #=> 0.7853981633974483
+ *    Math.atan2(INFINITY, -INFINITY)  #=> 2.356194490192345
+ *    Math.atan2(-INFINITY, INFINITY)  #=> -0.7853981633974483
+ *    Math.atan2(-INFINITY, -INFINITY) #=> -2.356194490192345
  *
  */
 
@@ -75,7 +79,19 @@ math_atan2(VALUE obj, VALUE y, VALUE x)
 	    return DBL2NUM(M_PI);
 	return DBL2NUM(-M_PI);
     }
-    if (isinf(dx) && isinf(dy)) domain_error("atan2");
+#ifndef ATAN2_INF_C99
+    if (isinf(dx) && isinf(dy)) {
+	/* optimization for FLONUM */
+	if (dx < 0.0) {
+	    const double dz = (3.0 * M_PI / 4.0);
+	    return (dy < 0.0) ? DBL2NUM(-dz) : DBL2NUM(dz);
+	}
+	else {
+	    const double dz = (M_PI / 4.0);
+	    return (dy < 0.0) ? DBL2NUM(-dz) : DBL2NUM(dz);
+	}
+    }
+#endif
     return DBL2NUM(atan2(dy, dx));
 }
 
@@ -416,6 +432,8 @@ math_exp(VALUE obj, VALUE x)
 # define log10(x) ((x) < 0.0 ? nan("") : log10(x))
 #endif
 
+static double math_log1(VALUE x);
+
 /*
  *  call-seq:
  *     Math.log(x)          -> Float
@@ -438,15 +456,26 @@ math_exp(VALUE obj, VALUE x)
  */
 
 static VALUE
-math_log(int argc, VALUE *argv)
+math_log(int argc, const VALUE *argv, VALUE obj)
 {
     VALUE x, base;
+    double d;
+
+    rb_scan_args(argc, argv, "11", &x, &base);
+    d = math_log1(x);
+    if (argc == 2) {
+	d /= math_log1(base);
+    }
+    return DBL2NUM(d);
+}
+
+static double
+math_log1(VALUE x)
+{
     double d0, d;
     size_t numbits;
 
-    rb_scan_args(argc, argv, "11", &x, &base);
-
-    if (RB_BIGNUM_TYPE_P(x) && RBIGNUM_POSITIVE_P(x) &&
+    if (RB_BIGNUM_TYPE_P(x) && BIGNUM_POSITIVE_P(x) &&
             DBL_MAX_EXP <= (numbits = rb_absint_numwords(x, 1, NULL))) {
         numbits -= DBL_MANT_DIG;
         x = rb_big_rshift(x, SIZET2NUM(numbits));
@@ -460,15 +489,11 @@ math_log(int argc, VALUE *argv)
     /* check for domain error */
     if (d0 < 0.0) domain_error("log");
     /* check for pole error */
-    if (d0 == 0.0) return DBL2NUM(-INFINITY);
+    if (d0 == 0.0) return -INFINITY;
     d = log(d0);
     if (numbits)
         d += numbits * log(2); /* log(2**numbits) */
-    if (argc == 2) {
-	Need_Float(base);
-	d /= log(RFLOAT_VALUE(base));
-    }
-    return DBL2NUM(d);
+    return d;
 }
 
 #ifndef log2
@@ -506,7 +531,7 @@ math_log2(VALUE obj, VALUE x)
     double d0, d;
     size_t numbits;
 
-    if (RB_BIGNUM_TYPE_P(x) && RBIGNUM_POSITIVE_P(x) &&
+    if (RB_BIGNUM_TYPE_P(x) && BIGNUM_POSITIVE_P(x) &&
             DBL_MAX_EXP <= (numbits = rb_absint_numwords(x, 1, NULL))) {
         numbits -= DBL_MANT_DIG;
         x = rb_big_rshift(x, SIZET2NUM(numbits));
@@ -548,7 +573,7 @@ math_log10(VALUE obj, VALUE x)
     double d0, d;
     size_t numbits;
 
-    if (RB_BIGNUM_TYPE_P(x) && RBIGNUM_POSITIVE_P(x) &&
+    if (RB_BIGNUM_TYPE_P(x) && BIGNUM_POSITIVE_P(x) &&
             DBL_MAX_EXP <= (numbits = rb_absint_numwords(x, 1, NULL))) {
         numbits -= DBL_MANT_DIG;
         x = rb_big_rshift(x, SIZET2NUM(numbits));
@@ -893,14 +918,16 @@ exp1(exp)
 exp2(hypot)
 
 VALUE
-rb_math_log(int argc, VALUE *argv)
+rb_math_log(int argc, const VALUE *argv)
 {
-    return math_log(argc, argv);
+    return math_log(argc, argv, rb_mMath);
 }
 
 exp1(sin)
 exp1(sinh)
+#if 0
 exp1(sqrt)
+#endif
 
 
 /*

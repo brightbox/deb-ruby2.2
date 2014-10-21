@@ -3,7 +3,7 @@
 
   thread_win32.c -
 
-  $Author: usa $
+  $Author: nobu $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -479,7 +479,7 @@ native_cond_wait(rb_nativethread_cond_t *cond, rb_nativethread_lock_t *mutex)
 }
 
 static unsigned long
-abs_timespec_to_timeout_ms(struct timespec *ts)
+abs_timespec_to_timeout_ms(const struct timespec *ts)
 {
     struct timeval tv;
     struct timeval now;
@@ -495,7 +495,7 @@ abs_timespec_to_timeout_ms(struct timespec *ts)
 }
 
 static int
-native_cond_timedwait(rb_nativethread_cond_t *cond, rb_nativethread_lock_t *mutex, struct timespec *ts)
+native_cond_timedwait(rb_nativethread_cond_t *cond, rb_nativethread_lock_t *mutex, const struct timespec *ts)
 {
     unsigned long timeout_ms;
 
@@ -692,14 +692,17 @@ ubf_handle(void *ptr)
     w32_set_event(th->native_thread_data.interrupt_event);
 }
 
-static HANDLE timer_thread_id = 0;
-static HANDLE timer_thread_lock;
+static struct {
+    HANDLE id;
+    HANDLE lock;
+} timer_thread;
+#define TIMER_THREAD_CREATED_P() (timer_thread.id != 0)
 
 static unsigned long __stdcall
 timer_thread_func(void *dummy)
 {
     thread_debug("timer_thread\n");
-    while (WaitForSingleObject(timer_thread_lock, TIME_QUANTUM_USEC/1000) ==
+    while (WaitForSingleObject(timer_thread.lock, TIME_QUANTUM_USEC/1000) ==
 	   WAIT_TIMEOUT) {
 	timer_thread_function(dummy);
     }
@@ -716,13 +719,13 @@ rb_thread_wakeup_timer_thread(void)
 static void
 rb_thread_create_timer_thread(void)
 {
-    if (timer_thread_id == 0) {
-	if (!timer_thread_lock) {
-	    timer_thread_lock = CreateEvent(0, TRUE, FALSE, 0);
+    if (timer_thread.id == 0) {
+	if (!timer_thread.lock) {
+	    timer_thread.lock = CreateEvent(0, TRUE, FALSE, 0);
 	}
-	timer_thread_id = w32_create_thread(1024 + (THREAD_DEBUG ? BUFSIZ : 0),
+	timer_thread.id = w32_create_thread(1024 + (THREAD_DEBUG ? BUFSIZ : 0),
 					    timer_thread_func, 0);
-	w32_resume_thread(timer_thread_id);
+	w32_resume_thread(timer_thread.id);
     }
 }
 
@@ -731,10 +734,10 @@ native_stop_timer_thread(int close_anyway)
 {
     int stopped = --system_working <= 0;
     if (stopped) {
-	SetEvent(timer_thread_lock);
-	native_thread_join(timer_thread_id);
-	CloseHandle(timer_thread_lock);
-	timer_thread_lock = 0;
+	SetEvent(timer_thread.lock);
+	native_thread_join(timer_thread.id);
+	CloseHandle(timer_thread.lock);
+	timer_thread.lock = 0;
     }
     return stopped;
 }
@@ -742,9 +745,9 @@ native_stop_timer_thread(int close_anyway)
 static void
 native_reset_timer_thread(void)
 {
-    if (timer_thread_id) {
-	CloseHandle(timer_thread_id);
-	timer_thread_id = 0;
+    if (timer_thread.id) {
+	CloseHandle(timer_thread.id);
+	timer_thread.id = 0;
     }
 }
 

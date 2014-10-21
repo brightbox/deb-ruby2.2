@@ -9,7 +9,7 @@
   DO NOT TOUCH!
 
   If you want to fix something, you must edit 'template/opt_sc.inc.tmpl'
-  or rb/insns2vm.rb
+  or tool/insns2vm.rb
  */
 
 #define SC_STATE_SIZE 6
@@ -617,10 +617,26 @@ SC_ERROR,
 SC_ERROR,
 SC_ERROR,
 SC_ERROR,
+SC_ERROR},
+  {
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
+SC_ERROR},
+  {
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
+SC_ERROR,
 SC_ERROR}
 };
 
 static const VALUE sc_insn_next[] = {
+  SCS_XX,
+  SCS_XX,
   SCS_XX,
   SCS_XX,
   SCS_XX,

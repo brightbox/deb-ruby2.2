@@ -18,6 +18,7 @@
 # define BIGDECIMAL_ENABLE_VPRINT 1
 #endif
 #include "bigdecimal.h"
+#include "ruby/util.h"
 
 #ifndef BIGDECIMAL_DEBUG
 # define NDEBUG
@@ -71,9 +72,9 @@ static ID id_eq;
 
 /* MACRO's to guard objects from GC by keeping them in stack */
 #define ENTER(n) volatile VALUE RB_UNUSED_VAR(vStack[n]);int iStack=0
-#define PUSH(x)  vStack[iStack++] = (VALUE)(x);
-#define SAVE(p)  PUSH(p->obj);
-#define GUARD_OBJ(p,y) {p=y;SAVE(p);}
+#define PUSH(x)  (vStack[iStack++] = (VALUE)(x))
+#define SAVE(p)  PUSH((p)->obj)
+#define GUARD_OBJ(p,y) ((p)=(y), SAVE(p))
 
 #define BASE_FIG  RMPD_COMPONENT_FIGURES
 #define BASE      RMPD_BASE
@@ -85,17 +86,27 @@ static ID id_eq;
 #define DBLE_FIG (DBL_DIG+1)    /* figure of double */
 #endif
 
-#ifndef RBIGNUM_ZERO_P
-# define RBIGNUM_ZERO_P(x) rb_bigzero_p(x)
-#endif
-
 #ifndef RRATIONAL_ZERO_P
-# define RRATIONAL_ZERO_P(x) (FIXNUM_P(RRATIONAL(x)->num) && \
-			      FIX2LONG(RRATIONAL(x)->num) == 0)
+# define RRATIONAL_ZERO_P(x) (FIXNUM_P(rb_rational_num(x)) && \
+			      FIX2LONG(rb_rational_num(x)) == 0)
 #endif
 
 #ifndef RRATIONAL_NEGATIVE_P
 # define RRATIONAL_NEGATIVE_P(x) RTEST(rb_funcall((x), '<', 1, INT2FIX(0)))
+#endif
+
+#ifndef DECIMAL_SIZE_OF_BITS
+#define DECIMAL_SIZE_OF_BITS(n) (((n) * 3010 + 9998) / 9999)
+/* an approximation of ceil(n * log10(2)), upto 65536 at least */
+#endif
+
+#ifdef PRIsVALUE
+# define RB_OBJ_CLASSNAME(obj) rb_obj_class(obj)
+# define RB_OBJ_STRING(obj) (obj)
+#else
+# define PRIsVALUE "s"
+# define RB_OBJ_CLASSNAME(obj) rb_obj_classname(obj)
+# define RB_OBJ_STRING(obj) StringValueCStr(obj)
 #endif
 
 /*
@@ -224,11 +235,11 @@ again:
 	if (prec < 0) goto unable_to_coerce_without_prec;
 
 	if (orig == Qundef ? (orig = v, 1) : orig != v) {
-	    num = RRATIONAL(v)->num;
+	    num = rb_rational_num(v);
 	    pv = GetVpValueWithPrec(num, -1, must);
 	    if (pv == NULL) goto SomeOneMayDoIt;
 
-	    v = BigDecimal_div2(ToValue(pv), RRATIONAL(v)->den, LONG2NUM(prec));
+	    v = BigDecimal_div2(ToValue(pv), rb_rational_den(v), LONG2NUM(prec));
 	    goto again;
 	}
 
@@ -273,8 +284,8 @@ SomeOneMayDoIt:
 unable_to_coerce_without_prec:
     if (must) {
 	rb_raise(rb_eArgError,
-		 "%s can't be coerced into BigDecimal without a precision",
-		 rb_obj_classname(v));
+		 "%"PRIsVALUE" can't be coerced into BigDecimal without a precision",
+		 RB_OBJ_CLASSNAME(v));
     }
     return NULL;
 }
@@ -2080,7 +2091,7 @@ is_negative(VALUE x)
 	return FIX2LONG(x) < 0;
     }
     else if (RB_TYPE_P(x, T_BIGNUM)) {
-	return RBIGNUM_NEGATIVE_P(x);
+	return FIX2INT(rb_big_cmp(x, INT2FIX(0))) < 0;
     }
     else if (RB_TYPE_P(x, T_FLOAT)) {
 	return RFLOAT_VALUE(x) < 0.0;
@@ -2103,7 +2114,7 @@ is_zero(VALUE x)
 	return Qfalse;
 
       case T_RATIONAL:
-	num = RRATIONAL(x)->num;
+	num = rb_rational_num(x);
 	return FIXNUM_P(num) && FIX2LONG(num) == 0;
 
       default:
@@ -2126,8 +2137,8 @@ is_one(VALUE x)
 	return Qfalse;
 
       case T_RATIONAL:
-	num = RRATIONAL(x)->num;
-	den = RRATIONAL(x)->den;
+	num = rb_rational_num(x);
+	den = rb_rational_den(x);
 	return FIXNUM_P(den) && FIX2LONG(den) == 1 &&
 	       FIXNUM_P(num) && FIX2LONG(num) == 1;
 
@@ -2233,14 +2244,14 @@ BigDecimal_power(int argc, VALUE*argv, VALUE self)
 	break;
 
       case T_RATIONAL:
-	if (is_zero(RRATIONAL(vexp)->num)) {
+	if (is_zero(rb_rational_num(vexp))) {
 	    if (is_positive(vexp)) {
 		vexp = INT2FIX(0);
 		goto retry;
 	    }
 	}
-	else if (is_one(RRATIONAL(vexp)->den)) {
-	    vexp = RRATIONAL(vexp)->num;
+	else if (is_one(rb_rational_den(vexp))) {
+	    vexp = rb_rational_num(vexp);
 	    goto retry;
 	}
 	exp = GetVpValueWithPrec(vexp, n, 1);
@@ -2260,8 +2271,8 @@ BigDecimal_power(int argc, VALUE*argv, VALUE self)
 	/* fall through */
       default:
 	rb_raise(rb_eTypeError,
-		 "wrong argument type %s (expected scalar Numeric)",
-		 rb_obj_classname(vexp));
+		 "wrong argument type %"PRIsVALUE" (expected scalar Numeric)",
+		 RB_OBJ_CLASSNAME(vexp));
     }
 
     if (VpIsZero(x)) {
@@ -2452,6 +2463,19 @@ static Real *BigDecimal_new(int argc, VALUE *argv);
  *
  * The actual number of significant digits used in computation is usually
  * larger than the specified number.
+ *
+ * ==== Exceptions
+ *
+ * TypeError:: If the +initial+ type is neither Fixnum, Bignum, Float,
+ *             Rational, nor BigDecimal, this exception is raised.
+ *
+ * TypeError:: If the +digits+ is not a Fixnum, this exception is raised.
+ *
+ * ArgumentError:: If +initial+ is a Float, and the +digits+ is larger than
+ *                 Float::DIG + 1, this exception is raised.
+ *
+ * ArgumentError:: If the +initial+ is a Float or Rational, and the +digits+
+ *                 value is omitted, this exception is raised.
  */
 static VALUE
 BigDecimal_initialize(int argc, VALUE *argv, VALUE self)
@@ -2524,7 +2548,7 @@ BigDecimal_new(int argc, VALUE *argv)
 	if (NIL_P(nFig)) {
 	    rb_raise(rb_eArgError,
 		     "can't omit precision for a %"PRIsVALUE".",
-		     rb_obj_class(iniValue));
+		     RB_OBJ_CLASSNAME(iniValue));
 	}
 	return GetVpValueWithPrec(iniValue, mf, 1);
 
@@ -2537,7 +2561,7 @@ BigDecimal_new(int argc, VALUE *argv)
     return VpAlloc(mf, RSTRING_PTR(iniValue));
 }
 
-/* See also BigDecimal::new */
+/* See also BigDecimal.new */
 static VALUE
 BigDecimal_global_new(int argc, VALUE *argv, VALUE self)
 {
@@ -2866,8 +2890,9 @@ BigMath_s_log(VALUE klass, VALUE x, VALUE vprec)
 	goto get_vp_value;
 
       case T_BIGNUM:
-	zero = RBIGNUM_ZERO_P(x);
-	negative = RBIGNUM_NEGATIVE_P(x);
+        i = FIX2INT(rb_big_cmp(x, INT2FIX(0)));
+	zero = i == 0;
+	negative = i < 0;
 get_vp_value:
 	if (zero || negative) break;
 	vx = GetVpValue(x, 0);
@@ -2928,8 +2953,8 @@ get_vp_value:
     RB_GC_GUARD(vn) = SSIZET2NUM(n);
     expo = VpExponent10(vx);
     if (expo < 0 || expo >= 3) {
-	char buf[16];
-	snprintf(buf, 16, "1E%"PRIdVALUE, -expo);
+	char buf[DECIMAL_SIZE_OF_BITS(SIZEOF_VALUE * CHAR_BIT) + 4];
+	snprintf(buf, sizeof(buf), "1E%"PRIdVALUE, -expo);
 	x = BigDecimal_mult2(x, ToValue(VpCreateRbObject(1, buf)), vn);
     }
     else {

@@ -10,7 +10,7 @@
 **********************************************************************/
 
 /*
- * This file incldue two parts:
+ * This file include two parts:
  *
  * (1) set_trace_func internal mechanisms
  *     and C level API
@@ -212,19 +212,15 @@ rb_remove_event_hook_with_data(rb_event_hook_func_t func, VALUE data)
     return remove_event_hook(&GET_VM()->event_hooks, func, data);
 }
 
-static int
-clear_trace_func_i(st_data_t key, st_data_t val, st_data_t flag)
-{
-    rb_thread_t *th;
-    GetThreadPtr((VALUE)key, th);
-    rb_threadptr_remove_event_hook(th, 0, Qundef);
-    return ST_CONTINUE;
-}
-
 void
 rb_clear_trace_func(void)
 {
-    st_foreach(GET_VM()->living_threads, clear_trace_func_i, (st_data_t) 0);
+    rb_vm_t *vm = GET_VM();
+    rb_thread_t *th = 0;
+
+    list_for_each(&vm->living_threads, th, vmlt_node) {
+	rb_threadptr_remove_event_hook(th, 0, Qundef);
+    }
     rb_remove_event_hook(0);
 }
 
@@ -704,7 +700,7 @@ symbol2event_flag(VALUE v)
 #undef C
     CONST_ID(id, "a_call"); if (sym == ID2SYM(id)) return RUBY_EVENT_CALL | RUBY_EVENT_B_CALL | RUBY_EVENT_C_CALL;
     CONST_ID(id, "a_return"); if (sym == ID2SYM(id)) return RUBY_EVENT_RETURN | RUBY_EVENT_B_RETURN | RUBY_EVENT_C_RETURN;
-    rb_raise(rb_eArgError, "unknown event: %s", rb_id2name(SYM2ID(sym)));
+    rb_raise(rb_eArgError, "unknown event: %"PRIsVALUE, rb_sym2str(sym));
 }
 
 static rb_tp_t *
@@ -1318,6 +1314,48 @@ tracepoint_inspect(VALUE self)
     }
 }
 
+static void
+tracepoint_stat_event_hooks(VALUE hash, VALUE key, rb_event_hook_t *hook)
+{
+    int active = 0, deleted = 0;
+
+    while (hook) {
+	if (hook->hook_flags & RUBY_EVENT_HOOK_FLAG_DELETED) {
+	    deleted++;
+	}
+	else {
+	    active++;
+	}
+	hook = hook->next;
+    }
+
+    rb_hash_aset(hash, key, rb_ary_new3(2, INT2FIX(active), INT2FIX(deleted)));
+}
+
+/*
+ * call-seq:
+ *	TracePoint.stat -> obj
+ *
+ *  Returns internal information of TracePoint.
+ *
+ *  The contents of the returned value are implementation specific.
+ *  It may be changed in future.
+ *
+ *  This method is only for debugging TracePoint itself.
+ */
+
+static VALUE
+tracepoint_stat_s(VALUE self)
+{
+    rb_vm_t *vm = GET_VM();
+    VALUE stat = rb_hash_new();
+
+    tracepoint_stat_event_hooks(stat, vm->self, vm->event_hooks.hooks);
+    /* TODO: thread local hooks */
+
+    return stat;
+}
+
 static void Init_postponed_job(void);
 
 /* This function is called from inits.c */
@@ -1410,6 +1448,8 @@ Init_vm_trace(void)
     rb_define_method(rb_cTracePoint, "self", tracepoint_attr_self, 0);
     rb_define_method(rb_cTracePoint, "return_value", tracepoint_attr_return_value, 0);
     rb_define_method(rb_cTracePoint, "raised_exception", tracepoint_attr_raised_exception, 0);
+
+    rb_define_singleton_method(rb_cTracePoint, "stat", tracepoint_stat_s, 0);
 
     /* initialized for postponed job */
 

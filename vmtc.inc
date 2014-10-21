@@ -82,6 +82,8 @@ static const void *const insns_address_table[] = {
   LABEL_PTR(opt_ltlt),
   LABEL_PTR(opt_aref),
   LABEL_PTR(opt_aset),
+  LABEL_PTR(opt_aset_with),
+  LABEL_PTR(opt_aref_with),
   LABEL_PTR(opt_length),
   LABEL_PTR(opt_size),
   LABEL_PTR(opt_empty_p),

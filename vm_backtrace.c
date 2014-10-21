@@ -72,10 +72,8 @@ struct valued_frame_info {
 static void
 location_mark(void *ptr)
 {
-    if (ptr) {
-	struct valued_frame_info *vfi = (struct valued_frame_info *)ptr;
-	rb_gc_mark(vfi->btobj);
-    }
+    struct valued_frame_info *vfi = (struct valued_frame_info *)ptr;
+    rb_gc_mark(vfi->btobj);
 }
 
 static void
@@ -93,15 +91,6 @@ location_mark_entry(rb_backtrace_location_t *fi)
     }
 }
 
-static void
-location_free(void *ptr)
-{
-    if (ptr) {
-	rb_backtrace_location_t *fi = (rb_backtrace_location_t *)ptr;
-	ruby_xfree(fi);
-    }
-}
-
 static size_t
 location_memsize(const void *ptr)
 {
@@ -111,7 +100,7 @@ location_memsize(const void *ptr)
 
 static const rb_data_type_t location_data_type = {
     "frame_info",
-    {location_mark, location_free, location_memsize,},
+    {location_mark, RUBY_TYPED_DEFAULT_FREE, location_memsize,},
     NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
@@ -378,26 +367,22 @@ typedef struct rb_backtrace_struct {
 static void
 backtrace_mark(void *ptr)
 {
-    if (ptr) {
-	rb_backtrace_t *bt = (rb_backtrace_t *)ptr;
-	size_t i, s = bt->backtrace_size;
+    rb_backtrace_t *bt = (rb_backtrace_t *)ptr;
+    size_t i, s = bt->backtrace_size;
 
-	for (i=0; i<s; i++) {
-	    location_mark_entry(&bt->backtrace[i]);
-	}
-	rb_gc_mark(bt->strary);
-	rb_gc_mark(bt->locary);
+    for (i=0; i<s; i++) {
+	location_mark_entry(&bt->backtrace[i]);
     }
+    rb_gc_mark(bt->strary);
+    rb_gc_mark(bt->locary);
 }
 
 static void
 backtrace_free(void *ptr)
 {
-   if (ptr) {
-       rb_backtrace_t *bt = (rb_backtrace_t *)ptr;
-       if (bt->backtrace) ruby_xfree(bt->backtrace_base);
-       ruby_xfree(bt);
-   }
+   rb_backtrace_t *bt = (rb_backtrace_t *)ptr;
+   if (bt->backtrace) ruby_xfree(bt->backtrace_base);
+   ruby_xfree(bt);
 }
 
 static size_t
@@ -766,7 +751,7 @@ void
 rb_backtrace_print_as_bugreport(void)
 {
     struct oldbt_arg arg;
-    int i;
+    int i = 0;
 
     arg.func = oldbt_bugreport;
     arg.data = (int *)&i;
@@ -820,7 +805,7 @@ rb_make_backtrace(void)
 }
 
 static VALUE
-vm_backtrace_to_ary(rb_thread_t *th, int argc, VALUE *argv, int lev_default, int lev_plus, int to_str)
+vm_backtrace_to_ary(rb_thread_t *th, int argc, const VALUE *argv, int lev_default, int lev_plus, int to_str)
 {
     VALUE level, vn;
     long lev, n;
@@ -891,7 +876,7 @@ vm_backtrace_to_ary(rb_thread_t *th, int argc, VALUE *argv, int lev_default, int
 }
 
 static VALUE
-thread_backtrace_to_ary(int argc, VALUE *argv, VALUE thval, int to_str)
+thread_backtrace_to_ary(int argc, const VALUE *argv, VALUE thval, int to_str)
 {
     rb_thread_t *th;
     GetThreadPtr(thval, th);
@@ -903,13 +888,13 @@ thread_backtrace_to_ary(int argc, VALUE *argv, VALUE thval, int to_str)
 }
 
 VALUE
-rb_vm_thread_backtrace(int argc, VALUE *argv, VALUE thval)
+rb_vm_thread_backtrace(int argc, const VALUE *argv, VALUE thval)
 {
     return thread_backtrace_to_ary(argc, argv, thval, 1);
 }
 
 VALUE
-rb_vm_thread_backtrace_locations(int argc, VALUE *argv, VALUE thval)
+rb_vm_thread_backtrace_locations(int argc, const VALUE *argv, VALUE thval)
 {
     return thread_backtrace_to_ary(argc, argv, thval, 0);
 }

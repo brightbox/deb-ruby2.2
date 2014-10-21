@@ -28,7 +28,7 @@ class Time
             datetime = apply_offset(*(datetime + [off]))
             datetime << usec
             time = Time.utc(*datetime)
-            time.localtime unless zone_utc?(zone)
+            force_zone!(time, zone, off)
             time
           else
             datetime << usec
@@ -105,7 +105,7 @@ module RSS
   end
 
   # Some tags must only exist a specific number of times in a given RSS feed.
-  # If a feed has too many occurances of one of these tags, a TooMuchTagError
+  # If a feed has too many occurrences of one of these tags, a TooMuchTagError
   # will be raised.
   class TooMuchTagError < InvalidRSSError
     attr_reader :tag, :parent

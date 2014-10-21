@@ -1,7 +1,7 @@
 #
 #   frame.rb -
 #   	$Release Version: 0.9$
-#   	$Revision: 38515 $
+#   	$Revision: 47112 $
 #   	by Keiju ISHITSUKA(Nihon Rational Software Co.,Ltd)
 #
 # --
@@ -31,9 +31,9 @@ module IRB
     def trace_func(event, file, line, id, binding)
       case event
       when 'call', 'class'
-	@frames.push binding
+        @frames.push binding
       when 'return', 'end'
-	@frames.pop
+        @frames.pop
       end
     end
 

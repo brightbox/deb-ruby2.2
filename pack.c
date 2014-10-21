@@ -2,7 +2,7 @@
 
   pack.c -
 
-  $Author: glass $
+  $Author: nobu $
   created at: Thu Feb 10 15:17:05 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -70,14 +70,6 @@ static const char endstr[] = "sSiIlLqQ";
 # define NATINT_LEN(type,len) ((int)sizeof(type))
 #endif
 
-#if SIZEOF_LONG == 8
-# define INT64toNUM(x) LONG2NUM(x)
-# define UINT64toNUM(x) ULONG2NUM(x)
-#elif defined(HAVE_LONG_LONG) && SIZEOF_LONG_LONG == 8
-# define INT64toNUM(x) LL2NUM(x)
-# define UINT64toNUM(x) ULL2NUM(x)
-#endif
-
 #define define_swapx(x, xtype)		\
 static xtype				\
 TOKEN_PASTE(swap,x)(xtype z)		\
@@ -99,38 +91,6 @@ TOKEN_PASTE(swap,x)(xtype z)		\
     xfree(zp);				\
     return r;				\
 }
-
-#if SIZEOF_SHORT == 2
-# define swaps(x)	swap16(x)
-#elif SIZEOF_SHORT == 4
-# define swaps(x)	swap32(x)
-#else
-  define_swapx(s,short)
-#endif
-
-#if SIZEOF_INT == 2
-# define swapi(x)	swap16(x)
-#elif SIZEOF_INT == 4
-# define swapi(x)	swap32(x)
-#else
-  define_swapx(i,int)
-#endif
-
-#if SIZEOF_LONG == 4
-# define swapl(x)	swap32(x)
-#elif SIZEOF_LONG == 8
-# define swapl(x)        swap64(x)
-#else
-  define_swapx(l,long)
-#endif
-
-#ifdef HAVE_LONG_LONG
-# if SIZEOF_LONG_LONG == 8
-#  define swapll(x)        swap64(x)
-# else
-   define_swapx(ll,LONG_LONG)
-# endif
-#endif
 
 #if SIZEOF_FLOAT == 4 && defined(HAVE_INT32_T)
 #   define swapf(x)	swap32(x)
@@ -233,6 +193,45 @@ static void encodes(VALUE,const char*,long,int,int);
 static void qpencode(VALUE,VALUE,long);
 
 static unsigned long utf8_to_uv(const char*,long*);
+
+static ID id_associated;
+
+static void
+str_associate(VALUE str, VALUE add)
+{
+    VALUE assoc;
+
+    assoc = rb_attr_get(str, id_associated);
+    if (RB_TYPE_P(assoc, T_ARRAY)) {
+	/* already associated */
+	rb_ary_concat(assoc, add);
+    }
+    else {
+	rb_ivar_set(str, id_associated, add);
+    }
+}
+
+static VALUE
+str_associated(VALUE str)
+{
+    VALUE assoc = rb_attr_get(str, id_associated);
+    if (NIL_P(assoc)) assoc = Qfalse;
+    return assoc;
+}
+
+void
+rb_str_associate(VALUE str, VALUE add)
+{
+    rb_warn("rb_str_associate() is only for internal use and deprecated; do not use");
+    str_associate(str, add);
+}
+
+VALUE
+rb_str_associated(VALUE str)
+{
+    rb_warn("rb_str_associated() is only for internal use and deprecated; do not use");
+    return str_associated(str);
+}
 
 /*
  *  call-seq:
@@ -871,12 +870,12 @@ pack_pack(VALUE ary, VALUE fmt)
 		}
 		else {
 		    t = StringValuePtr(from);
+		    rb_obj_taint(from);
 		}
 		if (!associates) {
 		    associates = rb_ary_new();
 		}
 		rb_ary_push(associates, from);
-		rb_obj_taint(from);
 		rb_str_buf_cat(res, (char*)&t, sizeof(char*));
 	    }
 	    break;
@@ -921,7 +920,7 @@ pack_pack(VALUE ary, VALUE fmt)
     }
 
     if (associates) {
-	rb_str_associate(res, associates);
+	str_associate(res, associates);
     }
     OBJ_INFECT(res, fmt);
     switch (enc_info) {
@@ -946,10 +945,10 @@ static const char b64_table[] =
 static void
 encodes(VALUE str, const char *s, long len, int type, int tail_lf)
 {
-    enum {buff_size = 4096, encoded_unit = 4};
+    enum {buff_size = 4096, encoded_unit = 4, input_unit = 3};
     char buff[buff_size + 1];	/* +1 for tail_lf */
     long i = 0;
-    const char *trans = type == 'u' ? uu_table : b64_table;
+    const char *const trans = type == 'u' ? uu_table : b64_table;
     char padding;
 
     if (type == 'u') {
@@ -959,14 +958,14 @@ encodes(VALUE str, const char *s, long len, int type, int tail_lf)
     else {
 	padding = '=';
     }
-    while (len >= 3) {
-        while (len >= 3 && buff_size-i >= encoded_unit) {
+    while (len >= input_unit) {
+        while (len >= input_unit && buff_size-i >= encoded_unit) {
             buff[i++] = trans[077 & (*s >> 2)];
             buff[i++] = trans[077 & (((*s << 4) & 060) | ((s[1] >> 4) & 017))];
             buff[i++] = trans[077 & (((s[1] << 2) & 074) | ((s[2] >> 6) & 03))];
             buff[i++] = trans[077 & s[2]];
-            s += 3;
-            len -= 3;
+            s += input_unit;
+            len -= input_unit;
         }
         if (buff_size-i < encoded_unit) {
             rb_str_buf_cat(str, buff, i);
@@ -1803,7 +1802,7 @@ pack_unpack(VALUE str, VALUE fmt)
 		    VALUE a;
 		    const VALUE *p, *pend;
 
-		    if (!(a = rb_str_associated(str))) {
+		    if (!(a = str_associated(str))) {
 			rb_raise(rb_eArgError, "no associated pointer");
 		    }
 		    p = RARRAY_CONST_PTR(a);
@@ -1812,7 +1811,7 @@ pack_unpack(VALUE str, VALUE fmt)
 			if (RB_TYPE_P(*p, T_STRING) && RSTRING_PTR(*p) == t) {
 			    if (len < RSTRING_LEN(*p)) {
 				tmp = rb_tainted_str_new(t, len);
-				rb_str_associate(tmp, a);
+				str_associate(tmp, a);
 			    }
 			    else {
 				tmp = *p;
@@ -1846,7 +1845,7 @@ pack_unpack(VALUE str, VALUE fmt)
 			VALUE a;
 			const VALUE *p, *pend;
 
-			if (!(a = rb_str_associated(str))) {
+			if (!(a = str_associated(str))) {
 			    rb_raise(rb_eArgError, "no associated pointer");
 			}
 			p = RARRAY_CONST_PTR(a);
@@ -1893,8 +1892,6 @@ pack_unpack(VALUE str, VALUE fmt)
 
     return ary;
 }
-
-#define BYTEWIDTH 8
 
 int
 rb_uv_to_utf8(char buf[6], unsigned long uv)
@@ -2008,4 +2005,6 @@ Init_pack(void)
 {
     rb_define_method(rb_cArray, "pack", pack_pack, 1);
     rb_define_method(rb_cString, "unpack", pack_unpack, 1);
+
+    id_associated = rb_make_internal_id();
 }

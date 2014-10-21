@@ -92,6 +92,8 @@ static const char *const insn_name_info[] = {
   "opt_ltlt",
   "opt_aref",
   "opt_aset",
+  "opt_aset_with",
+  "opt_aref_with",
   "opt_length",
   "opt_size",
   "opt_empty_p",
@@ -181,6 +183,8 @@ static const char *const insn_operand_info[] = {
   "C", 
   "C", 
   "C", 
+  "CV", 
+  "CV", 
   "C", 
   "C", 
   "C", 
@@ -270,6 +274,8 @@ static const int insn_len_info[] = {
   2,
   2,
   2,
+  3,
+  3,
   2,
   2,
   2,
@@ -346,6 +352,8 @@ static const int insn_stack_push_num_info[] = {
   1,
   1,
   0,
+  1,
+  1,
   1,
   1,
   1,
@@ -633,6 +641,12 @@ insn_stack_increase(int depth, int insn, VALUE *opes)
         }
         case BIN(opt_aset):{
           return depth + -2;
+        }
+        case BIN(opt_aset_with):{
+          return depth + -1;
+        }
+        case BIN(opt_aref_with):{
+          return depth + 0;
         }
         case BIN(opt_length):{
           return depth + 0;

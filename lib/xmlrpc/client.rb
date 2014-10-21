@@ -4,7 +4,7 @@
 # Released under the same term of license as Ruby.
 #
 # History
-#   $Id: client.rb 45112 2014-02-22 05:46:06Z naruse $
+#   $Id: client.rb 46311 2014-06-02 00:43:29Z tmm1 $
 #
 require "xmlrpc/parser"
 require "xmlrpc/create"
@@ -245,7 +245,7 @@ module XMLRPC # :nodoc:
     # * Date, Time, XMLRPC::DateTime
     # * XMLRPC::Base64
     # * A Ruby object which class includes XMLRPC::Marshallable
-    #   (only if Config::ENABLE_MARSHALLABLE is +true+).
+    #   (only if Config::ENABLE_MARSHALLING is +true+).
     #   That object is converted into a hash, with one additional key/value
     #   pair <code>___class___</code> which contains the class name
     #   for restoring that object later.

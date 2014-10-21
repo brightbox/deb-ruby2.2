@@ -1,7 +1,7 @@
 #
 #   shell/command-controller.rb -
 #       $Release Version: 0.7 $
-#       $Revision: 42961 $
+#       $Revision: 47246 $
 #       by Keiju ISHITSUKA(keiju@ruby-lang.org)
 #
 # --
@@ -24,7 +24,6 @@ class Shell
   # Alternatively, you can execute any command via
   # Shell::CommandProcessor#system even if it is not defined.
   class CommandProcessor
-#    include Error
 
     #
     # initialize of Shell and related classes.
@@ -121,11 +120,10 @@ class Shell
           end
           f
         else
-          f = File.open(path, mode, perm, &b)
+          File.open(path, mode, perm, &b)
         end
       end
     end
-    #  public :open
 
     # call-seq:
     #   unlink(path)
@@ -650,7 +648,6 @@ class Shell
         ["mtime", ["FILENAME"]],
         ["readlink", ["FILENAME"]],
         ["rename", ["FILENAME_FROM", "FILENAME_TO"]],
-        #      ["size", ["FILENAME"]],
         ["split", ["pathname"]],
         ["stat", ["FILENAME"]],
         ["symlink", ["FILENAME_O", "FILENAME_N"]],

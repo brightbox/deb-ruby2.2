@@ -42,6 +42,8 @@ v_others = []
 vars = {}
 continued_name = nil
 continued_line = nil
+install_name = nil
+so_name = nil
 File.foreach "config.status" do |line|
   next if /^#/ =~ line
   name = nil
@@ -73,10 +75,10 @@ File.foreach "config.status" do |line|
     case name
     when /^(?:ac_.*|configure_input|(?:top_)?srcdir|\w+OBJS)$/; next
     when /^(?:X|(?:MINI|RUN|BASE)RUBY$)/; next
-    when /^(?:MAJOR|MINOR|TEENY)$/; next
+    when /^(?:MAJOR|MINOR|TEENY)$/; vars[name] = val; next
     when /^LIBRUBY_D?LD/; next
-    when /^RUBY_INSTALL_NAME$/; next if $install_name
-    when /^RUBY_SO_NAME$/; next if $so_name
+    when /^RUBY_INSTALL_NAME$/; next vars[name] = (install_name = val).dup if $install_name
+    when /^RUBY_SO_NAME$/; next vars[name] = (so_name = val).dup if $so_name
     when /^arch$/; if val.empty? then val = arch else arch = val end
     when /^sitearch$/; val = '$(arch)' if val.empty?
     end
@@ -165,10 +167,10 @@ def vars.expand(val, config = self)
   val.replace(newval) unless newval == val
   val
 end
-vars["prefix"] = ""
-vars["exec_prefix"] = ""
-prefix = vars.expand(vars["rubyarchdir"])
-print "  TOPDIR = File.dirname(__FILE__).chomp!(#{prefix.dump})\n"
+prefix = vars.expand(vars["prefix"] ||= "")
+rubyarchdir = vars.expand(vars["rubyarchdir"] ||= "")
+relative_archdir = rubyarchdir.rindex(prefix, 0) ? rubyarchdir[prefix.size..-1] : rubyarchdir
+print "  TOPDIR = File.dirname(__FILE__).chomp!(#{relative_archdir.dump})\n"
 print "  DESTDIR = ", (drive ? "TOPDIR && TOPDIR[/\\A[a-z]:/i] || " : ""), "'' unless defined? DESTDIR\n"
 print <<'ARCH' if universal
   arch_flag = ENV['ARCHFLAGS'] || ((e = ENV['RC_ARCHS']) && e.split.uniq.map {|a| "-arch #{a}"}.join(' '))
@@ -215,10 +217,16 @@ end
 v_others.compact!
 
 if $install_name
+  if install_name and vars.expand("$(RUBY_INSTALL_NAME)") == $install_name
+    $install_name = install_name
+  end
   v_fast << "  CONFIG[\"ruby_install_name\"] = \"" + $install_name + "\"\n"
   v_fast << "  CONFIG[\"RUBY_INSTALL_NAME\"] = \"" + $install_name + "\"\n"
 end
 if $so_name
+  if so_name and vars.expand("$(RUBY_SO_NAME)") == $so_name
+    $so_name = so_name
+  end
   v_fast << "  CONFIG[\"RUBY_SO_NAME\"] = \"" + $so_name + "\"\n"
 end
 
@@ -259,7 +267,6 @@ print <<EOS
     )
   end
 end
-autoload :Config, "rbconfig/obsolete.rb" # compatibility for ruby-1.8.4 and older.
 CROSS_COMPILING = nil unless defined? CROSS_COMPILING
 EOS
 

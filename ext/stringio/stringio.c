@@ -2,7 +2,7 @@
 
   stringio.c -
 
-  $Author: ko1 $
+  $Author: nobu $
   $RoughId: stringio.c,v 1.13 2002/03/14 03:24:18 nobu Exp $
   created at: Tue Feb 19 04:10:38 JST 2002
 
@@ -1499,6 +1499,16 @@ strio_set_encoding(int argc, VALUE *argv, VALUE self)
 
 /*
  * Pseudo I/O on String object.
+ *
+ * Commonly used to simulate `$stdio` or `$stderr`
+ *
+ * === Examples
+ *
+ *   require 'stringio'
+ *
+ *   io = StringIO.new
+ *   io.puts "Hello World"
+ *   io.string #=> "Hello World"
  */
 void
 Init_stringio()

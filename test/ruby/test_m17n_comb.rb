@@ -1,4 +1,5 @@
 require 'test/unit'
+require 'etc'
 require_relative 'allpairs'
 
 class TestM17NComb < Test::Unit::TestCase
@@ -730,12 +731,11 @@ class TestM17NComb < Test::Unit::TestCase
   end
 
   def test_str_crypt
-    begin
-      # glibc 2.16 or later denies salt contained other than [0-9A-Za-z./] #7312
-      glibcpath = `ldd #{RbConfig.ruby}`[/\S+\/libc.so\S+/]
-      glibcver = `#{glibcpath}`[/\AGNU C Library.*version ([0-9.]+)/, 1].split('.').map(&:to_i)
-      strict_crypt = (glibcver <=> [2, 16]) > -1
-    rescue
+    strict_crypt = nil
+    # glibc 2.16 or later denies salt contained other than [0-9A-Za-z./] #7312
+    if defined? Etc::CS_GNU_LIBC_VERSION
+      glibcver = Etc.confstr(Etc::CS_GNU_LIBC_VERSION).scan(/\d+/).map(&:to_i)
+      strict_crypt = (glibcver <=> [2, 16]) >= 0
     end
 
     combination(STRINGS, STRINGS) {|str, salt|
@@ -1042,25 +1042,26 @@ class TestM17NComb < Test::Unit::TestCase
 
   def test_str_scan
     combination(STRINGS, STRINGS) {|s1, s2|
+      desc = proc {"#{s1.dump}.scan(#{s2.dump})"}
       if !s2.valid_encoding?
-        assert_raise(RegexpError) { s1.scan(s2) }
+        assert_raise(RegexpError, desc) { s1.scan(s2) }
         next
       end
       if !s1.ascii_only? && !s2.ascii_only? && s1.encoding != s2.encoding
         if s1.valid_encoding?
-          assert_raise(Encoding::CompatibilityError) { s1.scan(s2) }
+          assert_raise(Encoding::CompatibilityError, desc) { s1.scan(s2) }
         else
-          assert_match(/invalid byte sequence/, assert_raise(ArgumentError) { s1.scan(s2) }.message)
+          assert_raise_with_message(ArgumentError, /invalid byte sequence/, desc) { s1.scan(s2) }
         end
         next
       end
       if !s1.valid_encoding?
-        assert_raise(ArgumentError) { s1.scan(s2) }
+        assert_raise(ArgumentError, desc) { s1.scan(s2) }
         next
       end
       r = enccall(s1, :scan, s2)
       r.each {|t|
-        assert_equal(s2, t)
+        assert_equal(s2, t, desc)
       }
     }
   end

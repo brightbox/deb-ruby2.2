@@ -2,6 +2,45 @@
 
 VALUE rb_cSockOpt;
 
+#define pack_var(v) rb_str_new((const char *)&(v), sizeof(v))
+
+#define CAT(x,y) x##y
+#define XCAT(x,y) CAT(x,y)
+
+#if defined(__linux__) || \
+    defined(__GNU__) /* GNU/Hurd */ || \
+    defined(__FreeBSD__) || \
+    defined(__DragonFly__) || \
+    defined(__APPLE__) || \
+    defined(_WIN32) || \
+    defined(__CYGWIN__)
+# define TYPE_IP_MULTICAST_LOOP int
+# define TYPE_IP_MULTICAST_TTL int
+#else
+/* The original IP multicast implementation by Steve Deering
+ * NetBSD
+ * OpenBSD
+ * SunOS
+ */
+# define TYPE_IP_MULTICAST_LOOP byte
+# define TYPE_IP_MULTICAST_TTL byte
+# define USE_INSPECT_BYTE 1
+#endif
+
+static VALUE
+sockopt_pack_byte(VALUE value)
+{
+    char i = NUM2CHR(rb_to_int(value));
+    return pack_var(i);
+}
+
+static VALUE
+sockopt_pack_int(VALUE value)
+{
+    int i = NUM2INT(rb_to_int(value));
+    return pack_var(i);
+}
+
 static VALUE
 constant_to_sym(int constant, ID (*intern_const)(int))
 {
@@ -148,8 +187,6 @@ sockopt_data(VALUE self)
  *
  * Creates a new Socket::Option object which contains a byte as data.
  *
- * The size and endian is dependent on the platform.
- *
  *   p Socket::Option.byte(:INET, :SOCKET, :KEEPALIVE, 1)
  *   #=> #<Socket::Option: INET SOCKET KEEPALIVE 1>
  */
@@ -159,8 +196,7 @@ sockopt_s_byte(VALUE klass, VALUE vfamily, VALUE vlevel, VALUE voptname, VALUE v
     int family = rsock_family_arg(vfamily);
     int level = rsock_level_arg(family, vlevel);
     int optname = rsock_optname_arg(family, level, voptname);
-    unsigned char i = (unsigned char)NUM2CHR(vint);
-    return rsock_sockopt_new(family, level, optname, rb_str_new((char*)&i, sizeof(i)));
+    return rsock_sockopt_new(family, level, optname, sockopt_pack_byte(vint));
 }
 
 /*
@@ -168,8 +204,6 @@ sockopt_s_byte(VALUE klass, VALUE vfamily, VALUE vlevel, VALUE voptname, VALUE v
  *   sockopt.byte => integer
  *
  * Returns the data in _sockopt_ as an byte.
- *
- * The size and endian is dependent on the platform.
  *
  *   sockopt = Socket::Option.byte(:INET, :SOCKET, :KEEPALIVE, 1)
  *   p sockopt.byte => 1
@@ -203,8 +237,7 @@ sockopt_s_int(VALUE klass, VALUE vfamily, VALUE vlevel, VALUE voptname, VALUE vi
     int family = rsock_family_arg(vfamily);
     int level = rsock_level_arg(family, vlevel);
     int optname = rsock_optname_arg(family, level, voptname);
-    int i = NUM2INT(vint);
-    return rsock_sockopt_new(family, level, optname, rb_str_new((char*)&i, sizeof(i)));
+    return rsock_sockopt_new(family, level, optname, sockopt_pack_int(vint));
 }
 
 /*
@@ -252,7 +285,7 @@ sockopt_s_bool(VALUE klass, VALUE vfamily, VALUE vlevel, VALUE voptname, VALUE v
     int level = rsock_level_arg(family, vlevel);
     int optname = rsock_optname_arg(family, level, voptname);
     int i = RTEST(vbool) ? 1 : 0;
-    return rsock_sockopt_new(family, level, optname, rb_str_new((char*)&i, sizeof(i)));
+    return rsock_sockopt_new(family, level, optname, pack_var(i));
 }
 
 /*
@@ -302,7 +335,7 @@ sockopt_s_linger(VALUE klass, VALUE vonoff, VALUE vsecs)
     else
         l.l_onoff = RTEST(vonoff) ? 1 : 0;
     l.l_linger = NUM2INT(vsecs);
-    return rsock_sockopt_new(AF_UNSPEC, SOL_SOCKET, SO_LINGER, rb_str_new((char*)&l, sizeof(l)));
+    return rsock_sockopt_new(AF_UNSPEC, SOL_SOCKET, SO_LINGER, pack_var(l));
 }
 
 /*
@@ -356,14 +389,10 @@ sockopt_linger(VALUE self)
 static VALUE
 sockopt_s_ipv4_multicast_loop(VALUE klass, VALUE value)
 {
+
 #if defined(IPPROTO_IP) && defined(IP_MULTICAST_LOOP)
-# if defined(__NetBSD__) || defined(__OpenBSD__)
-    unsigned char i = NUM2CHR(rb_to_int(value));
-# else
-    int i = NUM2INT(rb_to_int(value));
-# endif
-    return rsock_sockopt_new(AF_INET, IPPROTO_IP, IP_MULTICAST_LOOP,
-	    rb_str_new((char*)&i, sizeof(i)));
+    VALUE o = XCAT(sockopt_pack_,TYPE_IP_MULTICAST_LOOP)(value);
+    return rsock_sockopt_new(AF_INET, IPPROTO_IP, IP_MULTICAST_LOOP, o);
 #else
 # error IPPROTO_IP or IP_MULTICAST_LOOP is not implemented
 #endif
@@ -387,22 +416,15 @@ sockopt_ipv4_multicast_loop(VALUE self)
 
 #if defined(IPPROTO_IP) && defined(IP_MULTICAST_LOOP)
     if (family == AF_INET && level == IPPROTO_IP && optname == IP_MULTICAST_LOOP) {
-# if defined(__NetBSD__) || defined(__OpenBSD__)
-	return sockopt_byte(self);
-# else
-	return sockopt_int(self);
-# endif
+	return XCAT(sockopt_,TYPE_IP_MULTICAST_LOOP)(self);
     }
 #endif
     rb_raise(rb_eTypeError, "ipv4_multicast_loop socket option expected");
     UNREACHABLE;
 }
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
-# define inspect_ipv4_multicast_loop(a,b,c,d) inspect_byte(a,b,c,d)
-#else
-# define inspect_ipv4_multicast_loop(a,b,c,d) inspect_int(a,b,c,d)
-#endif
+#define inspect_ipv4_multicast_loop(a,b,c,d) \
+  XCAT(inspect_,TYPE_IP_MULTICAST_LOOP)(a,b,c,d)
 
 /*
  * call-seq:
@@ -420,13 +442,8 @@ static VALUE
 sockopt_s_ipv4_multicast_ttl(VALUE klass, VALUE value)
 {
 #if defined(IPPROTO_IP) && defined(IP_MULTICAST_TTL)
-# if defined(__NetBSD__) || defined(__OpenBSD__)
-    unsigned char i = NUM2CHR(rb_to_int(value));
-# else
-    int i = NUM2INT(rb_to_int(value));
-# endif
-    return rsock_sockopt_new(AF_INET, IPPROTO_IP, IP_MULTICAST_TTL,
-	    rb_str_new((char*)&i, sizeof(i)));
+    VALUE o = XCAT(sockopt_pack_,TYPE_IP_MULTICAST_TTL)(value);
+    return rsock_sockopt_new(AF_INET, IPPROTO_IP, IP_MULTICAST_TTL, o);
 #else
 # error IPPROTO_IP or IP_MULTICAST_TTL is not implemented
 #endif
@@ -450,22 +467,15 @@ sockopt_ipv4_multicast_ttl(VALUE self)
 
 #if defined(IPPROTO_IP) && defined(IP_MULTICAST_TTL)
     if (family == AF_INET && level == IPPROTO_IP && optname == IP_MULTICAST_TTL) {
-# if defined(__NetBSD__) || defined(__OpenBSD__)
-	return sockopt_byte(self);
-# else
-	return sockopt_int(self);
-# endif
+	return XCAT(sockopt_,TYPE_IP_MULTICAST_TTL)(self);
     }
 #endif
     rb_raise(rb_eTypeError, "ipv4_multicast_ttl socket option expected");
     UNREACHABLE;
 }
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
-# define inspect_ipv4_multicast_ttl(a,b,c,d) inspect_byte(a,b,c,d)
-#else
-# define inspect_ipv4_multicast_ttl(a,b,c,d) inspect_int(a,b,c,d)
-#endif
+#define inspect_ipv4_multicast_ttl(a,b,c,d) \
+    XCAT(inspect_,TYPE_IP_MULTICAST_TTL)(a,b,c,d)
 
 static int
 inspect_int(int level, int optname, VALUE data, VALUE ret)
@@ -481,7 +491,7 @@ inspect_int(int level, int optname, VALUE data, VALUE ret)
     }
 }
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
+#ifdef USE_INSPECT_BYTE
 static int
 inspect_byte(int level, int optname, VALUE data, VALUE ret)
 {
@@ -590,6 +600,15 @@ inspect_timeval_as_interval(int level, int optname, VALUE data, VALUE ret)
  *   IP Multicast Extensions for 4.3BSD UNIX and related systems
  *   (MULTICAST 1.2 Release)
  *   http://www.kohala.com/start/mcast.api.txt
+ *
+ * There are 2 socket options which takes a u_char (unsigned char).
+ *
+ *   IP_MULTICAST_TTL
+ *   IP_MULTICAST_LOOP
+ *
+ * However Linux and FreeBSD setsockname accepts int argument
+ * as well as u_char.
+ * Their getsockname returns int.
  *
  * There are 3 socket options which takes a struct.
  *
@@ -781,6 +800,328 @@ inspect_ipv6_mreq(int level, int optname, VALUE data, VALUE ret)
             rb_str_catf(ret, " %s", addrbuf);
         rb_if_indextoname(" ", " interface:", s.ipv6mr_interface, ifbuf, sizeof(ifbuf));
         rb_str_cat2(ret, ifbuf);
+        return 1;
+    }
+    else {
+        return 0;
+    }
+}
+#endif
+
+#if defined(IPPROTO_TCP) && defined(TCP_INFO) && defined(HAVE_TYPE_STRUCT_TCP_INFO)
+
+#ifdef __FreeBSD__
+# ifndef HAVE_CONST_TCP_ESTABLISHED
+#  define TCP_ESTABLISHED TCPS_ESTABLISHED
+# endif
+# ifndef HAVE_CONST_TCP_SYN_SENT
+#  define TCP_SYN_SENT TCPS_SYN_SENT
+# endif
+# ifndef HAVE_CONST_TCP_SYN_RECV
+#  define TCP_SYN_RECV TCPS_SYN_RECEIVED
+# endif
+# ifndef HAVE_CONST_TCP_FIN_WAIT1
+#  define TCP_FIN_WAIT1 TCPS_FIN_WAIT_1
+# endif
+# ifndef HAVE_CONST_TCP_FIN_WAIT2
+#  define TCP_FIN_WAIT2 TCPS_FIN_WAIT_2
+# endif
+# ifndef HAVE_CONST_TCP_TIME_WAIT
+#  define TCP_TIME_WAIT TCPS_TIME_WAIT
+# endif
+# ifndef HAVE_CONST_TCP_CLOSE
+#  define TCP_CLOSE TCPS_CLOSED
+# endif
+# ifndef HAVE_CONST_TCP_CLOSE_WAIT
+#  define TCP_CLOSE_WAIT TCPS_CLOSE_WAIT
+# endif
+# ifndef HAVE_CONST_TCP_LAST_ACK
+#  define TCP_LAST_ACK TCPS_LAST_ACK
+# endif
+# ifndef HAVE_CONST_TCP_LISTEN
+#  define TCP_LISTEN TCPS_LISTEN
+# endif
+# ifndef HAVE_CONST_TCP_CLOSING
+#  define TCP_CLOSING TCPS_CLOSING
+# endif
+#endif
+
+#if defined(HAVE_CONST_TCP_ESTABLISHED) && !defined(TCP_ESTABLISHED)
+# define TCP_ESTABLISHED TCP_ESTABLISHED
+#endif
+#if defined(HAVE_CONST_TCP_SYN_SENT) && !defined(TCP_SYN_SENT)
+# define TCP_SYN_SENT TCP_SYN_SENT
+#endif
+#if defined(HAVE_CONST_TCP_SYN_RECV) && !defined(TCP_SYN_RECV)
+# define TCP_SYN_RECV TCP_SYN_RECV
+#endif
+#if defined(HAVE_CONST_TCP_FIN_WAIT1) && !defined(TCP_FIN_WAIT1)
+# define TCP_FIN_WAIT1 TCP_FIN_WAIT1
+#endif
+#if defined(HAVE_CONST_TCP_FIN_WAIT2) && !defined(TCP_FIN_WAIT2)
+# define TCP_FIN_WAIT2 TCP_FIN_WAIT2
+#endif
+#if defined(HAVE_CONST_TCP_TIME_WAIT) && !defined(TCP_TIME_WAIT)
+# define TCP_TIME_WAIT TCP_TIME_WAIT
+#endif
+#if defined(HAVE_CONST_TCP_CLOSE) && !defined(TCP_CLOSE)
+# define TCP_CLOSE TCP_CLOSE
+#endif
+#if defined(HAVE_CONST_TCP_CLOSE_WAIT) && !defined(TCP_CLOSE_WAIT)
+# define TCP_CLOSE_WAIT TCP_CLOSE_WAIT
+#endif
+#if defined(HAVE_CONST_TCP_LAST_ACK) && !defined(TCP_LAST_ACK)
+# define TCP_LAST_ACK TCP_LAST_ACK
+#endif
+#if defined(HAVE_CONST_TCP_LISTEN) && !defined(TCP_LISTEN)
+# define TCP_LISTEN TCP_LISTEN
+#endif
+#if defined(HAVE_CONST_TCP_CLOSING) && !defined(TCP_CLOSING)
+# define TCP_CLOSING TCP_CLOSING
+#endif
+
+static void
+inspect_tcpi_options(VALUE ret, u_int8_t options)
+{
+    int sep = '=';
+
+    rb_str_cat2(ret, " options");
+#define INSPECT_TCPI_OPTION(optval, name) \
+    if (options & (optval)) { \
+        options &= ~(u_int8_t)(optval); \
+        rb_str_catf(ret, "%c%s", sep, name); \
+        sep = ','; \
+    }
+#ifdef TCPI_OPT_TIMESTAMPS /* GNU/Linux, FreeBSD */
+    INSPECT_TCPI_OPTION(TCPI_OPT_TIMESTAMPS, "TIMESTAMPS");
+#endif
+#ifdef TCPI_OPT_SACK /* GNU/Linux, FreeBSD */
+    INSPECT_TCPI_OPTION(TCPI_OPT_SACK, "SACK");
+#endif
+#ifdef TCPI_OPT_WSCALE /* GNU/Linux, FreeBSD */
+    INSPECT_TCPI_OPTION(TCPI_OPT_WSCALE, "WSCALE");
+#endif
+#ifdef TCPI_OPT_ECN /* GNU/Linux, FreeBSD */
+    INSPECT_TCPI_OPTION(TCPI_OPT_ECN, "ECN");
+#endif
+#ifdef TCPI_OPT_ECN_SEEN /* GNU/Linux */
+    INSPECT_TCPI_OPTION(TCPI_OPT_ECN_SEEN, "ECN_SEEN");
+#endif
+#ifdef TCPI_OPT_SYN_DATA /* GNU/Linux */
+    INSPECT_TCPI_OPTION(TCPI_OPT_SYN_DATA, "SYN_DATA");
+#endif
+#ifdef TCPI_OPT_TOE /* FreeBSD */
+    INSPECT_TCPI_OPTION(TCPI_OPT_TOE, "TOE");
+#endif
+#undef INSPECT_TCPI_OPTION
+
+    if (options || sep == '=') {
+        rb_str_catf(ret, "%c%u", sep, options);
+    }
+}
+
+static void
+inspect_tcpi_usec(VALUE ret, const char *prefix, u_int32_t t)
+{
+    rb_str_catf(ret, "%s%u.%06us", prefix, t / 1000000, t % 1000000);
+}
+
+#ifdef __linux__
+static void
+inspect_tcpi_msec(VALUE ret, const char *prefix, u_int32_t t)
+{
+    rb_str_catf(ret, "%s%u.%03us", prefix, t / 1000, t % 1000);
+}
+#endif
+
+#ifdef __FreeBSD__
+# define inspect_tcpi_rto(ret, t) inspect_tcpi_usec(ret, " rto=", t)
+# define inspect_tcpi_last_data_recv(ret, t) inspect_tcpi_usec(ret, " last_data_recv=", t)
+# define inspect_tcpi_rtt(ret, t) inspect_tcpi_usec(ret, " rtt=", t)
+# define inspect_tcpi_rttvar(ret, t) inspect_tcpi_usec(ret, " rttvar=", t)
+#else
+# define inspect_tcpi_rto(ret, t) inspect_tcpi_usec(ret, " rto=", t)
+# define inspect_tcpi_ato(ret, t) inspect_tcpi_usec(ret, " ato=", t)
+# define inspect_tcpi_last_data_sent(ret, t) inspect_tcpi_msec(ret, " last_data_sent=", t)
+# define inspect_tcpi_last_data_recv(ret, t) inspect_tcpi_msec(ret, " last_data_recv=", t)
+# define inspect_tcpi_last_ack_sent(ret, t) inspect_tcpi_msec(ret, " last_ack_sent=", t)
+# define inspect_tcpi_last_ack_recv(ret, t) inspect_tcpi_msec(ret, " last_ack_recv=", t)
+# define inspect_tcpi_rtt(ret, t) inspect_tcpi_usec(ret, " rtt=", t)
+# define inspect_tcpi_rttvar(ret, t) inspect_tcpi_usec(ret, " rttvar=", t)
+# define inspect_tcpi_rcv_rtt(ret, t) inspect_tcpi_usec(ret, " rcv_rtt=", t)
+#endif
+
+static int
+inspect_tcp_info(int level, int optname, VALUE data, VALUE ret)
+{
+    size_t actual_size = RSTRING_LEN(data);
+    if (sizeof(struct tcp_info) <= actual_size) {
+        struct tcp_info s;
+        memcpy((char*)&s, RSTRING_PTR(data), sizeof(s));
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_STATE
+        switch (s.tcpi_state) {
+# ifdef TCP_ESTABLISHED
+          case TCP_ESTABLISHED: rb_str_cat_cstr(ret, " state=ESTABLISHED"); break;
+# endif
+# ifdef TCP_SYN_SENT
+          case TCP_SYN_SENT: rb_str_cat_cstr(ret, " state=SYN_SENT"); break;
+# endif
+# ifdef TCP_SYN_RECV
+          case TCP_SYN_RECV: rb_str_cat_cstr(ret, " state=SYN_RECV"); break;
+# endif
+# ifdef TCP_FIN_WAIT1
+          case TCP_FIN_WAIT1: rb_str_cat_cstr(ret, " state=FIN_WAIT1"); break;
+# endif
+# ifdef TCP_FIN_WAIT2
+          case TCP_FIN_WAIT2: rb_str_cat_cstr(ret, " state=FIN_WAIT2"); break;
+# endif
+# ifdef TCP_TIME_WAIT
+          case TCP_TIME_WAIT: rb_str_cat_cstr(ret, " state=TIME_WAIT"); break;
+# endif
+# ifdef TCP_CLOSE
+          case TCP_CLOSE: rb_str_cat_cstr(ret, " state=CLOSED"); break; /* RFC 793 uses "CLOSED", not "CLOSE" */
+# endif
+# ifdef TCP_CLOSE_WAIT
+          case TCP_CLOSE_WAIT: rb_str_cat_cstr(ret, " state=CLOSE_WAIT"); break;
+# endif
+# ifdef TCP_LAST_ACK
+          case TCP_LAST_ACK: rb_str_cat_cstr(ret, " state=LAST_ACK"); break;
+# endif
+# ifdef TCP_LISTEN
+          case TCP_LISTEN: rb_str_cat_cstr(ret, " state=LISTEN"); break;
+# endif
+# ifdef TCP_CLOSING
+          case TCP_CLOSING: rb_str_cat_cstr(ret, " state=CLOSING"); break;
+# endif
+          default: rb_str_catf(ret, " state=%u", s.tcpi_state); break;
+        }
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_CA_STATE
+        switch (s.tcpi_ca_state) {
+          case TCP_CA_Open: rb_str_cat_cstr(ret, " ca_state=Open"); break;
+          case TCP_CA_Disorder: rb_str_cat_cstr(ret, " ca_state=Disorder"); break;
+          case TCP_CA_CWR: rb_str_cat_cstr(ret, " ca_state=CWR"); break;
+          case TCP_CA_Recovery: rb_str_cat_cstr(ret, " ca_state=Recovery"); break;
+          case TCP_CA_Loss: rb_str_cat_cstr(ret, " ca_state=Loss"); break;
+          default: rb_str_catf(ret, " ca_state=%u", s.tcpi_ca_state); break;
+        }
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RETRANSMITS
+        rb_str_catf(ret, " retransmits=%u", s.tcpi_retransmits);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_PROBES
+        rb_str_catf(ret, " probes=%u", s.tcpi_probes);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_BACKOFF
+        rb_str_catf(ret, " backoff=%u", s.tcpi_backoff);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_OPTIONS
+        inspect_tcpi_options(ret, s.tcpi_options);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_WSCALE
+        rb_str_catf(ret, " snd_wscale=%u", s.tcpi_snd_wscale);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_WSCALE
+        rb_str_catf(ret, " rcv_wscale=%u", s.tcpi_rcv_wscale);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTO
+        inspect_tcpi_rto(ret, s.tcpi_rto);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_ATO
+        inspect_tcpi_ato(ret, s.tcpi_ato);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_MSS
+        rb_str_catf(ret, " snd_mss=%u", s.tcpi_snd_mss);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_MSS
+        rb_str_catf(ret, " rcv_mss=%u", s.tcpi_rcv_mss);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_UNACKED
+        rb_str_catf(ret, " unacked=%u", s.tcpi_unacked);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SACKED
+        rb_str_catf(ret, " sacked=%u", s.tcpi_sacked);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_LOST
+        rb_str_catf(ret, " lost=%u", s.tcpi_lost);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RETRANS
+        rb_str_catf(ret, " retrans=%u", s.tcpi_retrans);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_FACKETS
+        rb_str_catf(ret, " fackets=%u", s.tcpi_fackets);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_LAST_DATA_SENT
+	inspect_tcpi_last_data_sent(ret, s.tcpi_last_data_sent);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_LAST_ACK_SENT
+	inspect_tcpi_last_ack_sent(ret, s.tcpi_last_ack_sent);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_LAST_DATA_RECV
+	inspect_tcpi_last_data_recv(ret, s.tcpi_last_data_recv);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_LAST_ACK_RECV
+	inspect_tcpi_last_ack_recv(ret, s.tcpi_last_ack_recv);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_PMTU
+        rb_str_catf(ret, " pmtu=%u", s.tcpi_pmtu);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_SSTHRESH
+        rb_str_catf(ret, " rcv_ssthresh=%u", s.tcpi_rcv_ssthresh);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+	inspect_tcpi_rtt(ret, s.tcpi_rtt);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR
+	inspect_tcpi_rttvar(ret, s.tcpi_rttvar);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_SSTHRESH
+        rb_str_catf(ret, " snd_ssthresh=%u", s.tcpi_snd_ssthresh);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_CWND
+        rb_str_catf(ret, " snd_cwnd=%u", s.tcpi_snd_cwnd);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_ADVMSS
+        rb_str_catf(ret, " advmss=%u", s.tcpi_advmss);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_REORDERING
+        rb_str_catf(ret, " reordering=%u", s.tcpi_reordering);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_RTT
+        inspect_tcpi_rcv_rtt(ret, s.tcpi_rcv_rtt);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_SPACE
+        rb_str_catf(ret, " rcv_space=%u", s.tcpi_rcv_space);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_TOTAL_RETRANS
+        rb_str_catf(ret, " total_retrans=%u", s.tcpi_total_retrans);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_WND
+        rb_str_catf(ret, " snd_wnd=%u", s.tcpi_snd_wnd); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_BWND
+        rb_str_catf(ret, " snd_bwnd=%u", s.tcpi_snd_bwnd); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_NXT
+        rb_str_catf(ret, " snd_nxt=%u", s.tcpi_snd_nxt); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_NXT
+        rb_str_catf(ret, " rcv_nxt=%u", s.tcpi_rcv_nxt); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_TOE_TID
+        rb_str_catf(ret, " toe_tid=%u", s.tcpi_toe_tid); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_REXMITPACK
+        rb_str_catf(ret, " snd_rexmitpack=%u", s.tcpi_snd_rexmitpack); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RCV_OOOPACK
+        rb_str_catf(ret, " rcv_ooopack=%u", s.tcpi_rcv_ooopack); /* FreeBSD */
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_SND_ZEROWIN
+        rb_str_catf(ret, " snd_zerowin=%u", s.tcpi_snd_zerowin); /* FreeBSD */
+#endif
+        if (sizeof(struct tcp_info) < actual_size)
+            rb_str_catf(ret, " (%u bytes too long)", (unsigned)(actual_size - sizeof(struct tcp_info)));
         return 1;
     }
     else {
@@ -1035,6 +1376,9 @@ sockopt_inspect(VALUE self)
             switch (optname) {
 #            if defined(TCP_NODELAY) /* POSIX */
               case TCP_NODELAY: inspected = inspect_int(level, optname, data, ret); break;
+#            endif
+#            if defined(TCP_INFO) && defined(HAVE_TYPE_STRUCT_TCP_INFO) /* Linux, FreeBSD */
+              case TCP_INFO: inspected = inspect_tcp_info(level, optname, data, ret); break;
 #            endif
             }
             break;

@@ -152,38 +152,42 @@ enum ruby_vminsn_type {
 
   BIN(opt_aset)                  = 68,
 
-  BIN(opt_length)                = 69,
+  BIN(opt_aset_with)             = 69,
 
-  BIN(opt_size)                  = 70,
+  BIN(opt_aref_with)             = 70,
 
-  BIN(opt_empty_p)               = 71,
+  BIN(opt_length)                = 71,
 
-  BIN(opt_succ)                  = 72,
+  BIN(opt_size)                  = 72,
 
-  BIN(opt_not)                   = 73,
+  BIN(opt_empty_p)               = 73,
 
-  BIN(opt_regexpmatch1)          = 74,
+  BIN(opt_succ)                  = 74,
 
-  BIN(opt_regexpmatch2)          = 75,
+  BIN(opt_not)                   = 75,
 
-  BIN(opt_call_c_function)       = 76,
+  BIN(opt_regexpmatch1)          = 76,
 
-  BIN(bitblt)                    = 77,
+  BIN(opt_regexpmatch2)          = 77,
 
-  BIN(answer)                    = 78,
+  BIN(opt_call_c_function)       = 78,
 
-  BIN(getlocal_OP__WC__0)        = 79,
+  BIN(bitblt)                    = 79,
 
-  BIN(getlocal_OP__WC__1)        = 80,
+  BIN(answer)                    = 80,
 
-  BIN(setlocal_OP__WC__0)        = 81,
+  BIN(getlocal_OP__WC__0)        = 81,
 
-  BIN(setlocal_OP__WC__1)        = 82,
+  BIN(getlocal_OP__WC__1)        = 82,
 
-  BIN(putobject_OP_INT2FIX_O_0_C_) = 83,
+  BIN(setlocal_OP__WC__0)        = 83,
 
-  BIN(putobject_OP_INT2FIX_O_1_C_) = 84,
+  BIN(setlocal_OP__WC__1)        = 84,
 
-  VM_INSTRUCTION_SIZE            = 85
+  BIN(putobject_OP_INT2FIX_O_0_C_) = 85,
+
+  BIN(putobject_OP_INT2FIX_O_1_C_) = 86,
+
+  VM_INSTRUCTION_SIZE            = 87
 };
 

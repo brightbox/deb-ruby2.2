@@ -72,7 +72,7 @@ require 'psych/class_loader'
 # ==== Exception handling
 #
 #   begin
-#     # The second argument chnages only the exception contents
+#     # The second argument changes only the exception contents
 #     Psych.parse("--- `", "file.txt")
 #   rescue Psych::SyntaxError => ex
 #     ex.file    # => 'file.txt'
@@ -136,7 +136,7 @@ require 'psych/class_loader'
 # ==== Exception handling
 #
 #   begin
-#     # The second argument chnages only the exception contents
+#     # The second argument changes only the exception contents
 #     Psych.parse("--- `", "file.txt")
 #   rescue Psych::SyntaxError => ex
 #     ex.file    # => 'file.txt'
@@ -217,7 +217,7 @@ require 'psych/class_loader'
 
 module Psych
   # The version is Psych you're using
-  VERSION         = '2.0.5'
+  VERSION         = '2.0.6'
 
   # The version of libyaml Psych is using
   LIBYAML_VERSION = Psych.libyaml_version.join '.'

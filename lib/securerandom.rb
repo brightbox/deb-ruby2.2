@@ -8,6 +8,10 @@ end
 # This library is an interface for secure random number generator which is
 # suitable for generating session key in HTTP cookies, etc.
 #
+# You can use this library in your application by requiring it:
+#
+#   require 'securerandom'
+#
 # It supports following secure random number generators.
 #
 # * openssl
@@ -17,6 +21,8 @@ end
 # === Examples
 #
 # Hexadecimal string.
+#
+#   require 'securerandom'
 #
 #   p SecureRandom.hex(10) #=> "52750b30ffbc7de3b362"
 #   p SecureRandom.hex(10) #=> "92b15d6c8dc4beb5f559"
@@ -208,21 +214,29 @@ module SecureRandom
   #
   def self.random_number(n=0)
     if 0 < n
-      hex = n.to_s(16)
-      hex = '0' + hex if (hex.length & 1) == 1
-      bin = [hex].pack("H*")
-      mask = bin[0].ord
-      mask |= mask >> 1
-      mask |= mask >> 2
-      mask |= mask >> 4
-      begin
-        rnd = SecureRandom.random_bytes(bin.length)
-        rnd[0] = (rnd[0].ord & mask).chr
-      end until rnd < bin
-      rnd.unpack("H*")[0].hex
+      if defined? OpenSSL::BN
+        OpenSSL::BN.rand_range(n).to_i
+      else
+        hex = n.to_s(16)
+        hex = '0' + hex if (hex.length & 1) == 1
+        bin = [hex].pack("H*")
+        mask = bin[0].ord
+        mask |= mask >> 1
+        mask |= mask >> 2
+        mask |= mask >> 4
+        begin
+          rnd = SecureRandom.random_bytes(bin.length)
+          rnd[0] = (rnd[0].ord & mask).chr
+        end until rnd < bin
+        rnd.unpack("H*")[0].hex
+      end
     else
       # assumption: Float::MANT_DIG <= 64
-      i64 = SecureRandom.random_bytes(8).unpack("Q")[0]
+      if defined? OpenSSL::BN
+        i64 = OpenSSL::BN.rand(64, -1).to_i
+      else
+        i64 = SecureRandom.random_bytes(8).unpack("Q")[0]
+      end
       Math.ldexp(i64 >> (64-Float::MANT_DIG), -Float::MANT_DIG)
     end
   end

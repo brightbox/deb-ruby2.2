@@ -798,9 +798,9 @@ class TestArray < Test::Unit::TestCase
     assert_nil(a5.flatten!(0), '[ruby-core:23382]')
     assert_equal(@cls[1, 2, 3, 4, 5, 6], a5)
 
-    assert_equal(@cls[], @cls[].flatten)
+    assert_nil(@cls[].flatten!)
     assert_equal(@cls[],
-                 @cls[@cls[@cls[@cls[],@cls[]],@cls[@cls[]],@cls[]],@cls[@cls[@cls[]]]].flatten)
+                 @cls[@cls[@cls[@cls[],@cls[]],@cls[@cls[]],@cls[]],@cls[@cls[@cls[]]]].flatten!)
 
     assert_nil(@cls[].flatten!(0), '[ruby-core:23382]')
   end
@@ -1748,6 +1748,13 @@ class TestArray < Test::Unit::TestCase
 
     bug3708 = '[ruby-dev:42067]'
     assert_equal(b, @cls[0, 1, 2, 3, 4][1, 4].permutation.to_a, bug3708)
+
+    bug9932 = '[ruby-core:63103] [Bug #9932]'
+    assert_separately([], <<-"end;") #    do
+      assert_nothing_raised(SystemStackError, "#{bug9932}") do
+        assert_equal(:ok, Array.new(100_000, nil).permutation {break :ok})
+      end
+    end;
   end
 
   def test_repeated_permutation
@@ -1773,6 +1780,12 @@ class TestArray < Test::Unit::TestCase
 
     a = @cls[0, 1, 2, 3, 4][1, 4].repeated_permutation(2)
     assert_empty(a.reject {|x| !x.include?(0)})
+
+    assert_separately([], <<-"end;") #    do
+      assert_nothing_raised(SystemStackError) do
+        assert_equal(:ok, Array.new(100_000, nil).repeated_permutation(500_000) {break :ok})
+      end
+    end;
   end
 
   def test_repeated_combination
@@ -1802,6 +1815,12 @@ class TestArray < Test::Unit::TestCase
 
     a = @cls[0, 1, 2, 3, 4][1, 4].repeated_combination(2)
     assert_empty(a.reject {|x| !x.include?(0)})
+
+    assert_separately([], <<-"end;") #    do
+      assert_nothing_raised(SystemStackError) do
+        assert_equal(:ok, Array.new(100_000, nil).repeated_combination(500_000) {break :ok})
+      end
+    end;
   end
 
   def test_take

@@ -992,8 +992,8 @@ class CSV
   HeaderConverters = {
     downcase: lambda { |h| h.encode(ConverterEncoding).downcase },
     symbol:   lambda { |h|
-      h.encode(ConverterEncoding).downcase.gsub(/\s+/, "_").
-                                           gsub(/\W+/, "").to_sym
+      h.encode(ConverterEncoding).downcase.strip.gsub(/\s+/, "_").
+                                                 gsub(/\W+/, "").to_sym
     }
   }
 
@@ -1260,7 +1260,12 @@ class CSV
       file_opts = {encoding: Encoding.default_external}.merge(file_opts)
       retry
     end
-    csv = new(f, options)
+    begin
+      csv = new(f, options)
+    rescue Exception
+      f.close
+      raise
+    end
 
     # handle blocks like Ruby's open(), not like the CSV library
     if block_given?
@@ -1396,7 +1401,7 @@ class CSV
   #                                       <tt>'</tt> as the quote character
   #                                       instead of the correct <tt>"</tt>.
   #                                       CSV will always consider a double
-  #                                       sequence this character to be an
+  #                                       sequence of this character to be an
   #                                       escaped quote. This String will be
   #                                       transcoded into the data's Encoding
   #                                       before parsing.
@@ -1484,6 +1489,10 @@ class CSV
   # so be sure to set what you want here.
   #
   def initialize(data, options = Hash.new)
+    if data.nil?
+      raise ArgumentError.new("Cannot parse nil as CSV")
+    end
+
     # build the options for this read/write
     options = DEFAULT_OPTIONS.merge(options)
 
@@ -2171,6 +2180,7 @@ class CSV
 
     fields.map.with_index do |field, index|
       converters.each do |converter|
+        break if field.nil?
         field = if converter.arity == 1  # straight field converter
           converter[field]
         else                             # FieldInfo converter

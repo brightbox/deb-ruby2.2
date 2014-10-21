@@ -2,7 +2,7 @@
 
   signal.c -
 
-  $Author: nobu $
+  $Author: ko1 $
   created at: Tue Dec 20 10:13:44 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -208,6 +208,8 @@ static const struct signals {
     {NULL, 0}
 };
 
+static const char signame_prefix[3] = "SIG";
+
 static int
 signm2signo(const char *nm)
 {
@@ -298,11 +300,17 @@ esignal_init(int argc, VALUE *argv, VALUE self)
 	}
     }
     else {
-	signm = SYMBOL_P(sig) ? rb_id2name(SYM2ID(sig)) : StringValuePtr(sig);
-	if (strncmp(signm, "SIG", 3) == 0) signm += 3;
+	int len = sizeof(signame_prefix);
+	if (SYMBOL_P(sig)) sig = rb_sym2str(sig); else StringValue(sig);
+	signm = RSTRING_PTR(sig);
+	if (strncmp(signm, signame_prefix, len) == 0) {
+	    signm += len;
+	    len = 0;
+	}
 	signo = signm2signo(signm);
 	if (!signo) {
-	    rb_raise(rb_eArgError, "unsupported name `SIG%s'", signm);
+	    rb_raise(rb_eArgError, "unsupported name `%.*s%"PRIsVALUE"'",
+		     len, signame_prefix, sig);
 	}
 	sig = rb_sprintf("SIG%s", signm);
     }
@@ -381,7 +389,7 @@ static void signal_enque(int sig);
  */
 
 VALUE
-rb_f_kill(int argc, VALUE *argv)
+rb_f_kill(int argc, const VALUE *argv)
 {
 #ifndef HAVE_KILLPG
 #define killpg(pg, sig) kill(-(pg), (sig))
@@ -389,7 +397,7 @@ rb_f_kill(int argc, VALUE *argv)
     int negative = 0;
     int sig;
     int i;
-    volatile VALUE str;
+    VALUE str;
     const char *s;
 
     rb_secure(2);
@@ -401,21 +409,24 @@ rb_f_kill(int argc, VALUE *argv)
 	break;
 
       case T_SYMBOL:
-	s = rb_id2name(SYM2ID(argv[0]));
-	if (!s) rb_raise(rb_eArgError, "bad signal");
+	str = rb_sym2str(argv[0]);
 	goto str_signal;
 
       case T_STRING:
-	s = RSTRING_PTR(argv[0]);
+	str = argv[0];
       str_signal:
+	s = RSTRING_PTR(str);
 	if (s[0] == '-') {
 	    negative++;
 	    s++;
 	}
-	if (strncmp("SIG", s, 3) == 0)
+	if (strncmp(signame_prefix, s, sizeof(signame_prefix)) == 0)
 	    s += 3;
-	if ((sig = signm2signo(s)) == 0)
-	    rb_raise(rb_eArgError, "unsupported name `SIG%s'", s);
+	if ((sig = signm2signo(s)) == 0) {
+	    long ofs = s - RSTRING_PTR(str);
+	    if (ofs) str = rb_str_subseq(str, ofs, RSTRING_LEN(str)-ofs);
+	    rb_raise(rb_eArgError, "unsupported name `SIG%"PRIsVALUE"'", str);
+	}
 
 	if (negative)
 	    sig = -sig;
@@ -424,7 +435,6 @@ rb_f_kill(int argc, VALUE *argv)
       default:
 	str = rb_check_string_type(argv[0]);
 	if (!NIL_P(str)) {
-	    s = RSTRING_PTR(str);
 	    goto str_signal;
 	}
 	rb_raise(rb_eArgError, "bad signal type %s",
@@ -500,9 +510,11 @@ typedef RETSIGTYPE (*sighandler_t)(int);
 #ifdef USE_SIGALTSTACK
 typedef void ruby_sigaction_t(int, siginfo_t*, void*);
 #define SIGINFO_ARG , siginfo_t *info, void *ctx
+#define SIGINFO_CTX ctx
 #else
 typedef RETSIGTYPE ruby_sigaction_t(int);
 #define SIGINFO_ARG
+#define SIGINFO_CTX 0
 #endif
 
 #ifdef USE_SIGALTSTACK
@@ -557,25 +569,35 @@ ruby_signal(int signum, sighandler_t handler)
 
     sigemptyset(&sigact.sa_mask);
 #ifdef USE_SIGALTSTACK
-    sigact.sa_sigaction = (ruby_sigaction_t*)handler;
-    sigact.sa_flags = SA_SIGINFO;
+    if (handler == SIG_IGN || handler == SIG_DFL) {
+        sigact.sa_handler = handler;
+        sigact.sa_flags = 0;
+    }
+    else {
+        sigact.sa_sigaction = (ruby_sigaction_t*)handler;
+        sigact.sa_flags = SA_SIGINFO;
+    }
 #else
     sigact.sa_handler = handler;
     sigact.sa_flags = 0;
 #endif
 
+    switch (signum) {
 #ifdef SA_NOCLDWAIT
-    if (signum == SIGCHLD && handler == SIG_IGN)
-	sigact.sa_flags |= SA_NOCLDWAIT;
+      case SIGCHLD:
+	if (handler == SIG_IGN)
+	    sigact.sa_flags |= SA_NOCLDWAIT;
+	break;
 #endif
 #if defined(SA_ONSTACK) && defined(USE_SIGALTSTACK)
-    if (signum == SIGSEGV
+      case SIGSEGV:
 #ifdef SIGBUS
-	|| signum == SIGBUS
+      case SIGBUS:
 #endif
-       )
 	sigact.sa_flags |= SA_ONSTACK;
+	break;
 #endif
+    }
     (void)VALGRIND_MAKE_MEM_DEFINED(&old, sizeof(old));
     if (sigaction(signum, &sigact, &old) < 0) {
 	if (errno != 0 && errno != EINVAL) {
@@ -692,17 +714,30 @@ rb_get_next_signal(void)
 
 #if defined(USE_SIGALTSTACK) || defined(_WIN32)
 NORETURN(void ruby_thread_stack_overflow(rb_thread_t *th));
-#if defined(HAVE_UCONTEXT_H) && defined __linux__ && (defined __i386__ || defined __x86_64__)
+#if !(defined(HAVE_UCONTEXT_H) && (defined __i386__ || defined __x86_64__))
+#elif defined __linux__
+# define USE_UCONTEXT_REG 1
+#elif defined __APPLE__
 # define USE_UCONTEXT_REG 1
 #endif
 #ifdef USE_UCONTEXT_REG
 static void
 check_stack_overflow(const uintptr_t addr, const ucontext_t *ctx)
 {
-# if defined REG_RSP
-    const greg_t sp = ctx->uc_mcontext.gregs[REG_RSP];
-# else
-    const greg_t sp = ctx->uc_mcontext.gregs[REG_ESP];
+# if defined __linux__
+    const mcontext_t *mctx = &ctx->uc_mcontext;
+#   if defined REG_RSP
+    const greg_t sp = mctx->gregs[REG_RSP];
+#   else
+    const greg_t sp = mctx->gregs[REG_ESP];
+#   endif
+# elif defined __APPLE__
+    const mcontext_t mctx = ctx->uc_mcontext;
+#   if defined(__LP64__)
+    const uintptr_t sp = mctx->__ss.__rsp;
+#   else
+    const uintptr_t sp = mctx->__ss.__esp;
+#   endif
 # endif
     enum {pagesize = 4096};
     const uintptr_t sp_page = (uintptr_t)sp / pagesize;
@@ -762,7 +797,7 @@ sigbus(int sig SIGINFO_ARG)
 #if defined __APPLE__
     CHECK_STACK_OVERFLOW();
 #endif
-    rb_bug("Bus Error" MESSAGE_FAULT_ADDRESS);
+    rb_bug_context(SIGINFO_CTX, "Bus Error" MESSAGE_FAULT_ADDRESS);
 }
 #endif
 
@@ -782,14 +817,14 @@ ruby_abort(void)
 }
 
 static int segv_received = 0;
-extern int ruby_disable_gc_stress;
+extern int ruby_disable_gc;
 
 static RETSIGTYPE
 sigsegv(int sig SIGINFO_ARG)
 {
     if (segv_received) {
 	ssize_t RB_UNUSED_VAR(err);
-	char msg[] = "SEGV received in SEGV handler\n";
+	static const char msg[] = "SEGV received in SEGV handler\n";
 
 	err = write(2, msg, sizeof(msg));
 	ruby_abort();
@@ -798,8 +833,8 @@ sigsegv(int sig SIGINFO_ARG)
     CHECK_STACK_OVERFLOW();
 
     segv_received = 1;
-    ruby_disable_gc_stress = 1;
-    rb_bug("Segmentation fault" MESSAGE_FAULT_ADDRESS);
+    ruby_disable_gc = 1;
+    rb_bug_context(SIGINFO_CTX, "Segmentation fault" MESSAGE_FAULT_ADDRESS);
 }
 #endif
 
@@ -950,7 +985,7 @@ trap_handler(VALUE *cmd, int sig)
     else {
 	command = rb_check_string_type(*cmd);
 	if (NIL_P(command) && SYMBOL_P(*cmd)) {
-	    command = rb_id2str(SYM2ID(*cmd));
+	    command = rb_sym2str(*cmd);
 	    if (!command) rb_raise(rb_eArgError, "bad handler");
 	}
 	if (!NIL_P(command)) {
@@ -1018,19 +1053,22 @@ trap_signm(VALUE vsig)
 	break;
 
       case T_SYMBOL:
-	s = rb_id2name(SYM2ID(vsig));
-	if (!s) rb_raise(rb_eArgError, "bad signal");
+	vsig = rb_sym2str(vsig);
+	s = RSTRING_PTR(vsig);
 	goto str_signal;
 
       default:
 	s = StringValuePtr(vsig);
 
       str_signal:
-	if (strncmp("SIG", s, 3) == 0)
+	if (strncmp(signame_prefix, s, sizeof(signame_prefix)) == 0)
 	    s += 3;
 	sig = signm2signo(s);
-	if (sig == 0 && strcmp(s, "EXIT") != 0)
-	    rb_raise(rb_eArgError, "unsupported signal SIG%s", s);
+	if (sig == 0 && strcmp(s, "EXIT") != 0) {
+	    long ofs = s - RSTRING_PTR(vsig);
+	    if (ofs) vsig = rb_str_subseq(vsig, ofs, RSTRING_LEN(vsig)-ofs);
+	    rb_raise(rb_eArgError, "unsupported signal SIG%"PRIsVALUE"", vsig);
+	}
     }
     return sig;
 }
@@ -1053,6 +1091,7 @@ trap(int sig, sighandler_t func, VALUE command)
       case 0:
       case Qtrue:
 	if (oldfunc == SIG_IGN) oldcmd = rb_str_new2("IGNORE");
+        else if (oldfunc == SIG_DFL) oldcmd = rb_str_new2("SYSTEM_DEFAULT");
 	else if (oldfunc == sighandler) oldcmd = rb_str_new2("DEFAULT");
 	else oldcmd = Qnil;
 	break;
@@ -1211,7 +1250,8 @@ init_sigchld(int sig)
     oldfunc = ruby_signal(sig, SIG_DFL);
     if (oldfunc != SIG_DFL && oldfunc != SIG_IGN) {
 	ruby_signal(sig, oldfunc);
-    } else {
+    }
+    else {
 	GET_VM()->trap_list[sig].cmd = 0;
     }
     rb_enable_interrupt();
@@ -1284,7 +1324,7 @@ Init_signal(void)
 
     rb_define_method(rb_eSignal, "initialize", esignal_init, -1);
     rb_define_method(rb_eSignal, "signo", esignal_signo, 0);
-    rb_alias(rb_eSignal, rb_intern("signm"), rb_intern("message"));
+    rb_alias(rb_eSignal, rb_intern_const("signm"), rb_intern_const("message"));
     rb_define_method(rb_eInterrupt, "initialize", interrupt_init, -1);
 
     install_sighandler(SIGINT, sighandler);

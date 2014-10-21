@@ -69,6 +69,18 @@ def system(*args)
   super
 end
 
+def atomic_write_open(filename)
+  filename_new = filename + ".new.#$$"
+  open(filename_new, "wb") do |f|
+    yield f
+  end
+  if File.binread(filename_new) != (File.binread(filename) rescue nil)
+    File.rename(filename_new, filename)
+  else
+    File.unlink(filename_new)
+  end
+end
+
 def extract_makefile(makefile, keep = true)
   m = File.read(makefile)
   if !(target = m[/^TARGET[ \t]*=[ \t]*(\S*)/, 1])
@@ -129,6 +141,16 @@ def extmake(target)
 
   FileUtils.mkpath target unless File.directory?(target)
   begin
+    # don't build if parent library isn't build
+    parent = true
+    d = target
+    until (d = File.dirname(d)) == '.'
+      if File.exist?("#{$top_srcdir}/ext/#{d}/extconf.rb")
+        parent = (/^all:\s*install/ =~ IO.read("#{d}/Makefile") rescue false)
+        break
+      end
+    end
+
     dir = Dir.pwd
     FileUtils.mkpath target unless File.directory?(target)
     Dir.chdir target
@@ -149,8 +171,8 @@ def extmake(target)
     makefile = "./Makefile"
     static = $static
     $static = nil if noinstall = File.fnmatch?("-*", target)
-    ok = File.exist?(makefile)
-    unless $ignore
+    ok = parent && File.exist?(makefile)
+    if parent && !$ignore
       rbconfig0 = RbConfig::CONFIG
       mkconfig0 = CONFIG
       rbconfig = {
@@ -219,7 +241,7 @@ def extmake(target)
 	$0 = $PROGRAM_NAME
       end
     end
-    ok &&= File.open(makefile){|f| !f.gets[DUMMY_SIGNATURE]}
+    ok &&= File.open(makefile){|f| s = f.gets and !s[DUMMY_SIGNATURE]}
     ok = yield(ok) if block_given?
     if ok
       open(makefile, "r+b") do |f|
@@ -229,7 +251,7 @@ def extmake(target)
         f.truncate(f.pos)
       end unless $static
     else
-      open(makefile, "wb") do |f|
+      atomic_write_open(makefile) do |f|
         f.puts "# " + DUMMY_SIGNATURE
 	f.print(*dummy_makefile(CONFIG["srcdir"]))
       end
@@ -276,13 +298,15 @@ def extmake(target)
     end
   ensure
     Logging::log_close
-    unless $ignore
+    if rbconfig0
       RbConfig.module_eval {
 	remove_const(:CONFIG)
 	const_set(:CONFIG, rbconfig0)
 	remove_const(:MAKEFILE_CONFIG)
 	const_set(:MAKEFILE_CONFIG, mkconfig0)
       }
+    end
+    if mkconfig0
       MakeMakefile.class_eval {
 	remove_const(:CONFIG)
 	const_set(:CONFIG, mkconfig0)
@@ -346,6 +370,9 @@ def parse_args()
     end
     opts.on('--command-output=FILE', String) do |v|
       $command_output = v
+    end
+    opts.on('--gnumake=yes|no', true) do |v|
+      $gnumake = v
     end
   end
   begin
@@ -495,6 +522,9 @@ cond = proc {|ext, *|
   }.find_all {|ext|
     with_config(ext, &cond)
   }.sort
+  if $LIBRUBYARG_SHARED.empty? and CONFIG["EXTSTATIC"] == "static"
+    exts.delete_if {|d| File.fnmatch?("-*", d)}
+  end
 end
 
 if $extout
@@ -511,7 +541,7 @@ Dir::chdir('ext')
 hdrdir = $hdrdir
 $hdrdir = ($top_srcdir = relative_from(srcdir, $topdir = "..")) + "/include"
 exts.each do |d|
-  $static = $force_static ? true : $static_ext[target]
+  $static = $force_static ? true : $static_ext[d]
 
   if $ignore or !$nodynamic or $static
     extmake(d) or abort
@@ -636,7 +666,7 @@ $mflags.unshift("topdir=#$topdir")
 ENV.delete("RUBYOPT")
 if $configure_only and $command_output
   exts.map! {|d| "ext/#{d}/."}
-  open($command_output, "wb") do |mf|
+  atomic_write_open($command_output) do |mf|
     mf.puts "V = 0"
     mf.puts "Q1 = $(V:1=)"
     mf.puts "Q = $(Q1:0=@)"
@@ -686,15 +716,25 @@ if $configure_only and $command_output
     mf.puts
     mf.puts "#{rubies.join(' ')}: $(extensions:/.=/#{$force_static ? 'static' : 'all'})"
     submake = "$(Q)$(MAKE) $(MFLAGS) $(SUBMAKEOPTS)"
-    mf.puts "all static:\n\t#{submake} #{rubies.join(' ')}\n"
+    mf.puts "all static: $(EXTOBJS)\n\t#{submake} #{rubies.join(' ')}\n"
+    $extobjs.each do |tgt|
+      mf.puts "#{tgt}: #{File.dirname(tgt)}/static"
+    end
+    mf.puts "#{rubies.join(' ')}: $(EXTOBJS)"
     rubies.each do |tgt|
       mf.puts "#{tgt}:\n\t#{submake} $@"
     end
     mf.puts
-    exec = config_string("exec") {|str| str + " "}
+    if $gnumake == "yes"
+      submake = "$(MAKE) -C $(@D)"
+    else
+      submake = "cd $(@D) && "
+      config_string("exec") {|str| submake << str << " "}
+      submake << "$(MAKE)"
+    end
     targets.each do |tgt|
       exts.each do |d|
-        mf.puts "#{d[0..-2]}#{tgt}:\n\t$(Q)cd $(@D) && #{exec}$(MAKE) $(MFLAGS) V=$(V) $(@F)"
+        mf.puts "#{d[0..-2]}#{tgt}:\n\t$(Q)#{submake} $(MFLAGS) V=$(V) $(@F)"
       end
     end
   end

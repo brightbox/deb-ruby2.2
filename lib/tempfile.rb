@@ -1,12 +1,11 @@
 #
 # tempfile - manipulates temporary files
 #
-# $Id: tempfile.rb 43758 2013-11-21 09:28:43Z nobu $
+# $Id: tempfile.rb 47301 2014-08-27 14:36:25Z glass $
 #
 
 require 'delegate'
 require 'tmpdir'
-require 'thread'
 
 # A utility class for managing temporary files. When you create a Tempfile
 # object, it will create a temporary file with a unique filename. A Tempfile
@@ -263,7 +262,11 @@ class Tempfile < DelegateClass(File)
 
   # :stopdoc:
   def inspect
-    "#<#{self.class}:#{path}>"
+    if closed?
+      "#<#{self.class}:#{path} (closed)>"
+    else
+      "#<#{self.class}:#{path}>"
+    end
   end
 
   class Remover
@@ -291,9 +294,10 @@ class Tempfile < DelegateClass(File)
       STDERR.print "done\n" if $DEBUG
     end
   end
-  # :startdoc:
 
   class << self
+    # :startdoc:
+
     # Creates a new Tempfile.
     #
     # If no block is given, this is a synonym for Tempfile.new.
@@ -376,14 +380,4 @@ def Tempfile.create(basename, *rest)
   else
     tmpfile
   end
-end
-
-if __FILE__ == $0
-#  $DEBUG = true
-  f = Tempfile.new("foo")
-  f.print("foo\n")
-  f.close
-  f.open
-  p f.gets # => "foo\n"
-  f.close!
 end

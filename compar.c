@@ -18,17 +18,16 @@ static ID cmp;
 void
 rb_cmperr(VALUE x, VALUE y)
 {
-    const char *classname;
+    VALUE classname;
 
     if (SPECIAL_CONST_P(y)) {
-	y = rb_inspect(y);
-	classname = StringValuePtr(y);
+	classname = rb_inspect(y);
     }
     else {
-	classname = rb_obj_classname(y);
+	classname = rb_obj_class(y);
     }
-    rb_raise(rb_eArgError, "comparison of %s with %s failed",
-	     rb_obj_classname(x), classname);
+    rb_raise(rb_eArgError, "comparison of %"PRIsVALUE" with %"PRIsVALUE" failed",
+	     rb_obj_class(x), classname);
 }
 
 static VALUE
@@ -54,7 +53,7 @@ rb_invcmp(VALUE x, VALUE y)
 static VALUE
 cmp_eq_recursive(VALUE arg1, VALUE arg2, int recursive)
 {
-    if (recursive) return Qfalse;
+    if (recursive) return Qnil;
     return rb_funcallv(arg1, cmp, 1, &arg2);
 }
 
@@ -71,6 +70,8 @@ cmp_eq(VALUE *a)
 static VALUE
 cmp_failed(void)
 {
+    rb_warn("Comparable#== will no more rescue exceptions of #<=> in the next release.");
+    rb_warn("Return nil in #<=> if the comparison is inappropriate or avoid such comparison.");
     return Qfalse;
 }
 

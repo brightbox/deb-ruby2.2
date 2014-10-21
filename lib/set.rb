@@ -8,7 +8,7 @@
 # All rights reserved.  You can redistribute and/or modify it under the same
 # terms as Ruby.
 #
-#   $Id: set.rb 43808 2013-11-22 23:50:06Z tmm1 $
+#   $Id: set.rb 47085 2014-08-06 11:28:21Z knu $
 #
 # == Overview
 #
@@ -91,18 +91,25 @@ class Set
 
   def do_with_enum(enum, &block) # :nodoc:
     if enum.respond_to?(:each_entry)
-      enum.each_entry(&block)
+      enum.each_entry(&block) if block
     elsif enum.respond_to?(:each)
-      enum.each(&block)
+      enum.each(&block) if block
     else
       raise ArgumentError, "value must be enumerable"
     end
   end
   private :do_with_enum
 
-  # Copy internal hash.
-  def initialize_copy(orig)
+  # Dup internal hash.
+  def initialize_dup(orig)
+    super
     @hash = orig.instance_variable_get(:@hash).dup
+  end
+
+  # Clone internal hash.
+  def initialize_clone(orig)
+    super
+    @hash = orig.instance_variable_get(:@hash).clone
   end
 
   def freeze    # :nodoc:
@@ -142,12 +149,12 @@ class Set
   def replace(enum)
     if enum.instance_of?(self.class)
       @hash.replace(enum.instance_variable_get(:@hash))
+      self
     else
+      do_with_enum(enum)
       clear
       merge(enum)
     end
-
-    self
   end
 
   # Converts the set to an array.  The order of elements is uncertain.
@@ -240,6 +247,12 @@ class Set
 
   # Returns true if the set and the given set have at least one
   # element in common.
+  #
+  # e.g.:
+  #
+  #   require 'set'
+  #   Set[1, 2, 3].intersect? Set[4, 5] # => false
+  #   Set[1, 2, 3].intersect? Set[3, 4] # => true
   def intersect?(set)
     set.is_a?(Set) or raise ArgumentError, "value must be a set"
     if size < set.size
@@ -251,6 +264,13 @@ class Set
 
   # Returns true if the set and the given set have no element in
   # common.  This method is the opposite of +intersect?+.
+  #
+  # e.g.:
+  #
+  #   require 'set'
+  #   Set[1, 2, 3].disjoint? Set[3, 4] # => false
+  #   Set[1, 2, 3].disjoint? Set[4, 5] # => true
+
   def disjoint?(set)
     !intersect?(set)
   end
@@ -528,7 +548,7 @@ class Set
 end
 
 #
-# SortedSet implements a Set that guarantees that it's element are
+# SortedSet implements a Set that guarantees that its elements are
 # yielded in sorted order (according to the return values of their
 # #<=> methods) when iterating over them.
 #
