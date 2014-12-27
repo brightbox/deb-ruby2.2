@@ -312,11 +312,11 @@ struct getnameinfo_arg
 {
     const struct sockaddr *sa;
     socklen_t salen;
+    int flags;
     char *host;
     size_t hostlen;
     char *serv;
     size_t servlen;
-    int flags;
 };
 
 static void *
@@ -716,7 +716,7 @@ get_addrinfo(VALUE self)
 
 
 static rb_addrinfo_t *
-alloc_addrinfo()
+alloc_addrinfo(void)
 {
     rb_addrinfo_t *rai = ZALLOC(rb_addrinfo_t);
     rai->inspectname = Qnil;

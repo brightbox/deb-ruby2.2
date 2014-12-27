@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509.c 25189 2009-10-02 12:04:37Z akr $
+ * $Id: ossl_x509.c 47744 2014-09-30 05:25:32Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -17,7 +17,7 @@ VALUE mX509;
   rb_define_const(mX509, "DEFAULT_" #x, rb_str_new2(X509_get_default_##i()))
 
 void
-Init_ossl_x509()
+Init_ossl_x509(void)
 {
     mX509 = rb_define_module_under(mOSSL, "X509");
 

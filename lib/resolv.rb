@@ -158,7 +158,7 @@ class Resolv
   ##
   # Indicates a timeout resolving a name or address.
 
-  class ResolvTimeout < TimeoutError; end
+  class ResolvTimeout < Timeout::Error; end
 
   ##
   # Resolv::Hosts is a hostname resolver that uses the system hosts file.
@@ -1066,6 +1066,10 @@ class Resolv
             candidates = []
           end
           candidates.concat(@search.map {|domain| Name.new(name.to_a + domain)})
+          fname = Name.create("#{name}.")
+          if !candidates.include?(fname)
+            candidates << fname
+          end
         end
         return candidates
       end

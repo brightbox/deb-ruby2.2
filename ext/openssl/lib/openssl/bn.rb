@@ -14,13 +14,20 @@
 # (See the file 'LICENCE'.)
 #
 # = Version
-# $Id: bn.rb 43663 2013-11-13 08:15:48Z zzak $
+# $Id: bn.rb 47647 2014-09-20 01:17:05Z akr $
 #
 #++
 
 module OpenSSL
   class BN
     include Comparable
+
+    def pretty_print(q)
+      q.object_group(self) {
+        q.text ' '
+        q.text to_i.to_s
+      }
+    end
   end # BN
 end # OpenSSL
 

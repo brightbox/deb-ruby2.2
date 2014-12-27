@@ -2,7 +2,7 @@
 
   intern.h -
 
-  $Author: shyouhei $
+  $Author: nobu $
   created at: Thu Jun 10 14:22:17 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -234,10 +234,12 @@ VALUE rb_enumeratorize_with_size(VALUE, VALUE, int, const VALUE *, rb_enumerator
 #define rb_enumeratorize_with_size(obj, id, argc, argv, size_fn) \
     rb_enumeratorize_with_size(obj, id, argc, argv, (rb_enumerator_size_func *)(size_fn))
 #endif
+#define SIZED_ENUMERATOR(obj, argc, argv, size_fn) \
+    rb_enumeratorize_with_size((obj), ID2SYM(rb_frame_this_func()), \
+			       (argc), (argv), (size_fn))
 #define RETURN_SIZED_ENUMERATOR(obj, argc, argv, size_fn) do {		\
 	if (!rb_block_given_p())					\
-	    return rb_enumeratorize_with_size((obj), ID2SYM(rb_frame_this_func()),\
-				    (argc), (argv), (size_fn));		\
+	    return SIZED_ENUMERATOR(obj, argc, argv, size_fn);		\
     } while (0)
 #define RETURN_ENUMERATOR(obj, argc, argv) RETURN_SIZED_ENUMERATOR(obj, argc, argv, 0)
 /* error.c */
@@ -255,13 +257,14 @@ PRINTF_ARGS(void rb_compile_error(const char*, int, const char*, ...), 3, 4);
 PRINTF_ARGS(void rb_compile_error_with_enc(const char*, int, void *, const char*, ...), 4, 5);
 PRINTF_ARGS(void rb_compile_error_append(const char*, ...), 1, 2);
 NORETURN(void rb_error_frozen(const char*));
+NORETURN(void rb_error_frozen_object(VALUE));
 void rb_error_untrusted(VALUE);
 void rb_check_frozen(VALUE);
 void rb_check_trusted(VALUE);
 #define rb_check_frozen_internal(obj) do { \
 	VALUE frozen_obj = (obj); \
 	if (OBJ_FROZEN(frozen_obj)) { \
-	    rb_error_frozen(rb_obj_classname(frozen_obj)); \
+	    rb_error_frozen_object(frozen_obj); \
 	} \
     } while (0)
 #define rb_check_trusted_internal(obj) ((void) 0)
@@ -315,6 +318,8 @@ void rb_fd_clr(int, rb_fdset_t *);
 int rb_fd_isset(int, const rb_fdset_t *);
 void rb_fd_copy(rb_fdset_t *, const fd_set *, int);
 void rb_fd_dup(rb_fdset_t *dst, const rb_fdset_t *src);
+
+struct timeval;
 int rb_fd_select(int, rb_fdset_t *, rb_fdset_t *, rb_fdset_t *, struct timeval *);
 
 #define rb_fd_ptr(f)	((f)->fdset)
@@ -368,14 +373,24 @@ VALUE rb_f_exit(int, const VALUE*);
 VALUE rb_f_abort(int, const VALUE*);
 void rb_remove_method(VALUE, const char*);
 void rb_remove_method_id(VALUE, ID);
-#define rb_disable_super(klass, name) ((void)0)
-#define rb_enable_super(klass, name) ((void)0)
+DEPRECATED(static inline void rb_disable_super(void));
+DEPRECATED(static inline void rb_enable_super(void));
+static inline void rb_disable_super(void)
+{
+    /* obsolete - no use */
+}
+static inline void rb_enable_super(void)
+{
+    rb_warning("rb_enable_super() is obsolete");
+}
+#define rb_disable_super(klass, name) rb_disable_super()
+#define rb_enable_super(klass, name) rb_enable_super()
 #define HAVE_RB_DEFINE_ALLOC_FUNC 1
 typedef VALUE (*rb_alloc_func_t)(VALUE);
 void rb_define_alloc_func(VALUE, rb_alloc_func_t);
 void rb_undef_alloc_func(VALUE);
 rb_alloc_func_t rb_get_alloc_func(VALUE);
-void rb_clear_cache(void);
+DEPRECATED(void rb_clear_cache(void));
 void rb_clear_constant_cache(void);
 void rb_clear_method_cache_by_class(VALUE);
 void rb_alias(VALUE, ID, ID);
@@ -707,6 +722,11 @@ VALUE rb_str_buf_new2(const char*);
 VALUE rb_str_tmp_new(long);
 VALUE rb_usascii_str_new(const char*, long);
 VALUE rb_usascii_str_new_cstr(const char*);
+VALUE rb_utf8_str_new(const char*, long);
+VALUE rb_utf8_str_new_cstr(const char*);
+VALUE rb_str_new_static(const char *, long);
+VALUE rb_usascii_str_new_static(const char *, long);
+VALUE rb_utf8_str_new_static(const char *, long);
 void rb_str_free(VALUE);
 void rb_str_shared_replace(VALUE, VALUE);
 VALUE rb_str_buf_append(VALUE, VALUE);
@@ -768,12 +788,31 @@ long rb_str_offset(VALUE, long);
 size_t rb_str_capacity(VALUE);
 VALUE rb_str_ellipsize(VALUE, long);
 VALUE rb_str_scrub(VALUE, VALUE);
+
 #if defined(__GNUC__) && !defined(__PCC__)
+#define rb_str_new(str, len) __extension__ (	\
+{						\
+    (__builtin_constant_p(str) && __builtin_constant_p(len)) ? \
+	rb_str_new_static((str), (len)) : \
+	rb_str_new((str), (len));	  \
+})
 #define rb_str_new_cstr(str) __extension__ (	\
 {						\
     (__builtin_constant_p(str)) ?		\
-	rb_str_new((str), (long)strlen(str)) :	\
+	rb_str_new_static((str), (long)strlen(str)) : \
 	rb_str_new_cstr(str);			\
+})
+#define rb_usascii_str_new(str, len) __extension__ ( \
+{						\
+    (__builtin_constant_p(str) && __builtin_constant_p(len)) ? \
+	rb_usascii_str_new_static((str), (len)) : \
+	rb_usascii_str_new((str), (len));	  \
+})
+#define rb_utf8_str_new(str, len) __extension__ ( \
+{						\
+    (__builtin_constant_p(str) && __builtin_constant_p(len)) ? \
+	rb_utf8_str_new_static((str), (len)) : \
+	rb_utf8_str_new((str), (len));	  \
 })
 #define rb_tainted_str_new_cstr(str) __extension__ ( \
 {					       \
@@ -784,9 +823,19 @@ VALUE rb_str_scrub(VALUE, VALUE);
 #define rb_usascii_str_new_cstr(str) __extension__ ( \
 {					       \
     (__builtin_constant_p(str)) ?	       \
-	rb_usascii_str_new((str), (long)strlen(str)) : \
+	rb_usascii_str_new_static((str), (long)strlen(str)) : \
 	rb_usascii_str_new_cstr(str);	       \
 })
+#define rb_utf8_str_new_cstr(str) __extension__ ( \
+{						\
+    (__builtin_constant_p(str)) ?		\
+	rb_utf8_str_new_static((str), (long)strlen(str)) : \
+	rb_utf8_str_new_cstr(str);		\
+})
+#define rb_str_new_literal(str) rb_str_new_static((str), sizeof(str)-1)
+#define rb_usascii_str_new_literal(str) rb_usascii_str_new_static((str), sizeof(str)-1)
+#define rb_utf8_str_new_literal(str) rb_utf8_str_new_static((str), sizeof(str)-1)
+#define rb_enc_str_new_literal(str, enc) rb_enc_str_new_static((str), sizeof(str)-1, (enc))
 #define rb_external_str_new_cstr(str) __extension__ ( \
 {						\
     (__builtin_constant_p(str)) ?		\

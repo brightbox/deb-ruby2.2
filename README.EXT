@@ -184,6 +184,10 @@ rb_str_new_cstr(const char *ptr) ::
   Creates a new Ruby string from a C string.  This is equivalent to
   rb_str_new(ptr, strlen(ptr)).
 
+rb_str_new_literal(const char *ptr) ::
+
+  Creates a new Ruby string from a C string literal.
+
 rb_tainted_str_new(const char *ptr, long len) ::
 
   Creates a new tainted Ruby string.  Strings from external data
@@ -199,9 +203,10 @@ rb_vsprintf(const char *format, va_list ap) ::
 
   Creates a new Ruby string with printf(3) format.
 
-  Note: In the format string, %i is used for Object#to_s (or Object#inspect if
-  '+' flag is set) output (and related argument must be a VALUE).  For integers
-  in format strings, use %d.
+  Note: In the format string, "%"PRIsVALUE can be used for Object#to_s
+  (or Object#inspect if '+' flag is set) output (and related argument
+  must be a VALUE).  Since it conflicts with "%i", for integers in
+  format strings, use "%d".
 
 rb_str_cat(VALUE str, const char *ptr, long len) ::
 
@@ -226,10 +231,30 @@ rb_enc_str_new_cstr(const char *ptr, rb_encoding *enc) ::
 
   Creates a new Ruby string with the specified encoding.
 
+rb_enc_str_new_literal(const char *ptr) ::
+
+  Creates a new Ruby string from a C string literal with the specified
+  encoding.
+
 rb_usascii_str_new(const char *ptr, long len) ::
 rb_usascii_str_new_cstr(const char *ptr) ::
 
   Creates a new Ruby string with encoding US-ASCII.
+
+rb_usascii_str_new_literal(const char *ptr) ::
+
+  Creates a new Ruby string from a C string literal with encoding
+  US-ASCII.
+
+rb_utf8_str_new(const char *ptr, long len) ::
+rb_utf8_str_new_cstr(const char *ptr) ::
+
+  Creates a new Ruby string with encoding UTF-8.
+
+rb_utf8_str_new_literal(const char *ptr) ::
+
+  Creates a new Ruby string from a C string literal with encoding
+  UTF-8.
 
 rb_str_resize(VALUE str, long len) ::
 
@@ -416,6 +441,11 @@ If you are overriding an existing method of any ancestor of your class,
 you may rely on:
 
   VALUE rb_call_super(int argc, const VALUE *argv)
+
+To achieve the receiver of the current scope (if no other way is
+available), you can use:
+
+  VALUE rb_current_receiver(void)
 
 === Constant Definition
 
@@ -665,7 +695,7 @@ Here's the example of an initializing function.
   Init_dbm(void)
   {
       /* define DBM class */
-      cDBM = rb_define_class("DBM", rb_cObject);
+      VALUE cDBM = rb_define_class("DBM", rb_cObject);
       /* DBM includes Enumerable module */
       rb_include_module(cDBM, rb_mEnumerable);
 
@@ -1275,6 +1305,26 @@ rb_scan_args(int argc, VALUE *argv, const char *fmt, ...) ::
   The number of given arguments, excluding an option hash or iterator
   block, is returned.
 
+int rb_get_kwargs(VALUE keyword_hash, const ID *table, int required, int optional, VALUE *values)
+
+  Retrieves argument VALUEs bound to keywords, which directed by +table+
+  into +values+.  First +required+ number of IDs referred by +table+ are
+  mandatory, and succeeding +optional+ (- +optional+ - 1 if
+  +optional+ is negative) number of IDs are optional.  If a
+  mandatory key is not contained in +keyword_hash+, raises "missing
+  keyword" +ArgumentError+.  If an optional key is not present in
+  +keyword_hash+, the corresponding element in +values+ is not changed.
+  If +optional+ is negative, rest of +keyword_hash+ are stored in the
+  next to optional +values+ as a new Hash, otherwise raises "unknown
+  keyword" +ArgumentError+.
+
+VALUE rb_extract_keywords(VALUE *original_hash)
+
+  Extracts pairs whose key is a symbol into a new hash from a hash
+  object referred by +original_hash+.  If the original hash contains
+  non-symbol keys, then they are copied to another hash and the new hash
+  is stored through +original_hash+, else 0 is stored.
+
 == Invoking Ruby method
 
 VALUE rb_funcall(VALUE recv, ID mid, int narg, ...) ::
@@ -1419,9 +1469,10 @@ void rb_bug(const char *fmt, ...) ::
   called under the situation caused by the bug in the interpreter.  No
   exception handling nor ensure execution will be done.
 
-Note: In the format string, %i is used for Object#to_s (or Object#inspect if
-'+' flag is set) output (and related argument must be a VALUE).  For integers
-in format strings, use %d.
+Note: In the format string, "%"PRIsVALUE can be used for Object#to_s
+(or Object#inspect if '+' flag is set) output (and related argument
+must be a VALUE).  Since it conflicts with "%i", for integers in
+format strings, use "%d".
 
 == Initialize and Start the Interpreter
 

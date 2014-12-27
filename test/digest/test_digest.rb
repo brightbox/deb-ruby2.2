@@ -1,7 +1,5 @@
-#!/usr/bin/env ruby
-#
 # $RoughId: test.rb,v 1.4 2001/07/13 15:38:27 knu Exp $
-# $Id: test_digest.rb 46368 2014-06-06 21:05:48Z eregon $
+# $Id: test_digest.rb 48213 2014-10-31 13:21:51Z knu $
 
 require 'test/unit'
 require 'tempfile'
@@ -196,6 +194,79 @@ module TestDigest
     def test_base
       bug3810 = '[ruby-core:32231]'
       assert_raise(NotImplementedError, bug3810) {Digest::Base.new}
+    end
+  end
+
+  class TestInitCopy < Test::Unit::TestCase
+    if defined?(Digest::MD5) and defined?(Digest::RMD160)
+      def test_initialize_copy_md5_rmd160
+        assert_separately(%w[-rdigest], <<-'end;')
+          md5 = Digest::MD5.allocate
+          rmd160 = Digest::RMD160.allocate
+          assert_raise(TypeError) {md5.__send__(:initialize_copy, rmd160)}
+        end;
+      end
+    end
+  end
+
+  class TestDigestParen < Test::Unit::TestCase
+    def test_sha2
+      assert_separately(%w[-rdigest], <<-'end;')
+        assert_nothing_raised {
+          Digest(:SHA256).new
+          Digest(:SHA384).new
+          Digest(:SHA512).new
+        }
+      end;
+    end
+
+    def test_no_lib
+      assert_separately(%w[-rdigest], <<-'end;')
+        class Digest::Nolib < Digest::Class
+        end
+
+        assert_nothing_raised {
+          Digest(:Nolib).new
+        }
+      end;
+    end
+
+    def test_no_lib_no_def
+      assert_separately(%w[-rdigest], <<-'end;')
+        assert_raise(LoadError) {
+          Digest(:Nodef).new
+        }
+      end;
+    end
+
+    def test_race
+      assert_separately(['-rdigest', "-I#{File.dirname(__FILE__)}"], <<-'end;')
+        assert_nothing_raised {
+          t = Thread.start {
+            sleep 0.1
+            Digest(:Foo).new
+          }
+          Digest(:Foo).new
+          t.join
+        }
+      end;
+    end
+
+    def test_race_mixed
+      assert_separately(['-rdigest', "-I#{File.dirname(__FILE__)}"], <<-'end;')
+        assert_nothing_raised {
+          t = Thread.start {
+            sleep 0.1
+            Digest::Foo.new
+          }
+          Digest(:Foo).new
+          begin
+            t.join
+          rescue NoMethodError, NameError
+            # NoMethodError is highly likely; NameError is listed just in case
+          end
+        }
+      end;
     end
   end
 end

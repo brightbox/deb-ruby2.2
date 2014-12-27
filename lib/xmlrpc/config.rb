@@ -1,5 +1,5 @@
 #
-# $Id: config.rb 42045 2013-07-18 13:50:32Z zzak $
+# $Id: config.rb 47902 2014-10-13 08:53:16Z hsbt $
 # Configuration file for XML-RPC for Ruby
 #
 
@@ -18,6 +18,7 @@ module XMLRPC # :nodoc:
     # * XMLParser::XMLStreamParser (fastest)
     # * XMLParser::REXMLStreamParser
     # * XMLParser::XMLScanStreamParser
+    # * XMLParser::LibXMLStreamParser
     DEFAULT_PARSER = XMLParser::REXMLStreamParser
 
     # enable <code><nil/></code> tag

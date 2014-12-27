@@ -1,5 +1,5 @@
 /*
-    $Id: strscan.c 47044 2014-08-03 01:56:31Z nobu $
+    $Id: strscan.c 48672 2014-12-01 21:30:58Z nobu $
 
     Copyright (c) 1999-2006 Minero Aoki
 
@@ -191,7 +191,7 @@ strscan_memsize(const void *ptr)
 static const rb_data_type_t strscanner_type = {
     "StringScanner",
     {strscan_mark, strscan_free, strscan_memsize},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static VALUE
@@ -251,7 +251,9 @@ strscan_init_copy(VALUE vself, VALUE vorig)
 	self->str = orig->str;
 	self->prev = orig->prev;
 	self->curr = orig->curr;
-	onig_region_copy(&self->regs, &orig->regs);
+	if (rb_reg_region_copy(&self->regs, &orig->regs))
+	    rb_memerror();
+	RB_GC_GUARD(vorig);
     }
 
     return vself;
@@ -1323,7 +1325,7 @@ inspect2(struct strscanner *p)
  * There are aliases to several of the methods.
  */
 void
-Init_strscan()
+Init_strscan(void)
 {
     ID id_scanerr = rb_intern("ScanError");
     VALUE tmp;
@@ -1338,7 +1340,7 @@ Init_strscan()
     tmp = rb_str_new2(STRSCAN_VERSION);
     rb_obj_freeze(tmp);
     rb_const_set(StringScanner, rb_intern("Version"), tmp);
-    tmp = rb_str_new2("$Id: strscan.c 47044 2014-08-03 01:56:31Z nobu $");
+    tmp = rb_str_new2("$Id: strscan.c 48672 2014-12-01 21:30:58Z nobu $");
     rb_obj_freeze(tmp);
     rb_const_set(StringScanner, rb_intern("Id"), tmp);
 

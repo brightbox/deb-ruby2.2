@@ -84,8 +84,6 @@ command to remove old versions.
   end
 
   def execute
-    hig = {}
-
     if options[:system] then
       update_rubygems
       return
@@ -203,7 +201,10 @@ command to remove old versions.
   def update_gem name, version = Gem::Requirement.default
     return if @updated.any? { |spec| spec.name == name }
 
-    @installer ||= Gem::DependencyInstaller.new options
+    update_options = options.dup
+    update_options[:prerelease] = version.prerelease?
+
+    @installer = Gem::DependencyInstaller.new update_options
 
     say "Updating #{name}"
     begin

@@ -1,5 +1,5 @@
 /*
- * $Id: ossl.c 46879 2014-07-19 16:10:58Z hsbt $
+ * $Id: ossl.c 47744 2014-09-30 05:25:32Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -361,7 +361,7 @@ ossl_exc_new(VALUE exc, const char *fmt, ...)
  * Any errors you see here are probably due to a bug in ruby's OpenSSL implementation.
  */
 VALUE
-ossl_get_errors()
+ossl_get_errors(void)
 {
     VALUE ary;
     long e;
@@ -1034,7 +1034,7 @@ static void Init_ossl_locks(void)
  *
  */
 void
-Init_openssl()
+Init_openssl(void)
 {
     /*
      * Init timezone info

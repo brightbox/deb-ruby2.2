@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509name.c 45626 2014-04-18 11:46:04Z nobu $
+ * $Id: ossl_x509name.c 48814 2014-12-12 23:59:19Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001 Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(name)) { \
 	ossl_raise(rb_eRuntimeError, "Name wasn't initialized."); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, X509_NAME_free, (name)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509name_type, (name)); \
 } while (0)
 #define GetX509Name(obj, name) do { \
-    Data_Get_Struct((obj), X509_NAME, (name)); \
+    TypedData_Get_Struct((obj), X509_NAME, &ossl_x509name_type, (name)); \
     if (!(name)) { \
 	ossl_raise(rb_eRuntimeError, "Name wasn't initialized."); \
     } \
@@ -37,6 +37,20 @@
  */
 VALUE cX509Name;
 VALUE eX509NameError;
+
+static void
+ossl_x509name_free(void *ptr)
+{
+    X509_NAME_free(ptr);
+}
+
+static const rb_data_type_t ossl_x509name_type = {
+    "OpenSSL/X509/NAME",
+    {
+	0, ossl_x509name_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * Public
@@ -426,7 +440,7 @@ ossl_x509name_to_der(VALUE self)
  */
 
 void
-Init_ossl_x509name()
+Init_ossl_x509name(void)
 {
     VALUE utf8str, ptrstr, ia5str, hash;
 

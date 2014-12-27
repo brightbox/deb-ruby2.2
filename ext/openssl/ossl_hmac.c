@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_hmac.c 46974 2014-07-27 19:37:10Z zzak $
+ * $Id: ossl_hmac.c 48793 2014-12-12 21:57:56Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -13,9 +13,9 @@
 #include "ossl.h"
 
 #define MakeHMAC(obj, klass, ctx) \
-    (obj) = Data_Make_Struct((klass), HMAC_CTX, 0, ossl_hmac_free, (ctx))
+    (obj) = TypedData_Make_Struct((klass), HMAC_CTX, &ossl_hmac_type, (ctx))
 #define GetHMAC(obj, ctx) do { \
-    Data_Get_Struct((obj), HMAC_CTX, (ctx)); \
+    TypedData_Get_Struct((obj), HMAC_CTX, &ossl_hmac_type, (ctx)); \
     if (!(ctx)) { \
 	ossl_raise(rb_eRuntimeError, "HMAC wasn't initialized"); \
     } \
@@ -39,11 +39,19 @@ VALUE eHMACError;
  * Private
  */
 static void
-ossl_hmac_free(HMAC_CTX *ctx)
+ossl_hmac_free(void *ctx)
 {
     HMAC_CTX_cleanup(ctx);
     ruby_xfree(ctx);
 }
+
+static const rb_data_type_t ossl_hmac_type = {
+    "OpenSSL/HMAC",
+    {
+	0, ossl_hmac_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 static VALUE
 ossl_hmac_alloc(VALUE klass)
@@ -327,7 +335,7 @@ ossl_hmac_s_hexdigest(VALUE klass, VALUE digest, VALUE key, VALUE data)
  * INIT
  */
 void
-Init_ossl_hmac()
+Init_ossl_hmac(void)
 {
 #if 0
     /* :nodoc: */
@@ -357,7 +365,7 @@ Init_ossl_hmac()
 #else /* NO_HMAC */
 #  warning >>> OpenSSL is compiled without HMAC support <<<
 void
-Init_ossl_hmac()
+Init_ossl_hmac(void)
 {
     rb_warning("HMAC is not available: OpenSSL is compiled without HMAC.");
 }

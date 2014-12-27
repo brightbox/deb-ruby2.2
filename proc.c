@@ -2,7 +2,7 @@
 
   proc.c - Proc, Binding, Env
 
-  $Author: normal $
+  $Author: nobu $
   created at: Wed Jan 17 12:13:14 2007
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -67,7 +67,7 @@ static const rb_data_type_t proc_data_type = {
 	RUBY_TYPED_DEFAULT_FREE,
 	proc_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 VALUE
@@ -247,6 +247,7 @@ binding_mark(void *ptr)
 	bind = ptr;
 	RUBY_MARK_UNLESS_NULL(bind->env);
 	RUBY_MARK_UNLESS_NULL(bind->path);
+	RUBY_MARK_UNLESS_NULL(bind->blockprocval);
     }
     RUBY_MARK_LEAVE("binding");
 }
@@ -264,11 +265,11 @@ const rb_data_type_t ruby_binding_data_type = {
 	binding_free,
 	binding_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
-static VALUE
-binding_alloc(VALUE klass)
+VALUE
+rb_binding_alloc(VALUE klass)
 {
     VALUE obj;
     rb_binding_t *bind;
@@ -280,12 +281,13 @@ binding_alloc(VALUE klass)
 static VALUE
 binding_dup(VALUE self)
 {
-    VALUE bindval = binding_alloc(rb_cBinding);
+    VALUE bindval = rb_binding_alloc(rb_cBinding);
     rb_binding_t *src, *dst;
     GetBindingPtr(self, src);
     GetBindingPtr(bindval, dst);
     dst->env = src->env;
     dst->path = src->path;
+    dst->blockprocval = src->blockprocval;
     dst->first_lineno = src->first_lineno;
     return bindval;
 }
@@ -300,39 +302,10 @@ binding_clone(VALUE self)
 }
 
 VALUE
-rb_binding_new_with_cfp(rb_thread_t *th, const rb_control_frame_t *src_cfp)
-{
-    rb_control_frame_t *cfp = rb_vm_get_binding_creatable_next_cfp(th, src_cfp);
-    rb_control_frame_t *ruby_level_cfp = rb_vm_get_ruby_level_next_cfp(th, src_cfp);
-    VALUE bindval, envval;
-    rb_binding_t *bind;
-
-    if (cfp == 0 || ruby_level_cfp == 0) {
-	rb_raise(rb_eRuntimeError, "Can't create Binding Object on top of Fiber.");
-    }
-
-    while (1) {
-	envval = rb_vm_make_env_object(th, cfp);
-	if (cfp == ruby_level_cfp) {
-	    break;
-	}
-	cfp = rb_vm_get_binding_creatable_next_cfp(th, RUBY_VM_PREVIOUS_CONTROL_FRAME(cfp));
-    }
-
-    bindval = binding_alloc(rb_cBinding);
-    GetBindingPtr(bindval, bind);
-    bind->env = envval;
-    bind->path = ruby_level_cfp->iseq->location.path;
-    bind->first_lineno = rb_vm_get_sourceline(ruby_level_cfp);
-
-    return bindval;
-}
-
-VALUE
 rb_binding_new(void)
 {
     rb_thread_t *th = GET_THREAD();
-    return rb_binding_new_with_cfp(th, th->cfp);
+    return rb_vm_make_binding(th, th->cfp);
 }
 
 /*
@@ -586,17 +559,14 @@ bind_receiver(VALUE bindval)
 }
 
 static VALUE
-proc_new(VALUE klass, int is_lambda)
+proc_new(VALUE klass, int8_t is_lambda)
 {
     VALUE procval = Qnil;
     rb_thread_t *th = GET_THREAD();
     rb_control_frame_t *cfp = th->cfp;
     rb_block_t *block;
 
-    if ((block = rb_vm_control_frame_block_ptr(cfp)) != 0) {
-	/* block found */
-    }
-    else {
+    if (!(block = rb_vm_control_frame_block_ptr(cfp))) {
 	cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(cfp);
 
 	if ((block = rb_vm_control_frame_block_ptr(cfp)) != 0) {
@@ -623,13 +593,7 @@ proc_new(VALUE klass, int is_lambda)
 	}
     }
 
-    procval = rb_vm_make_proc(th, block, klass);
-
-    if (is_lambda) {
-	rb_proc_t *proc;
-	GetProcPtr(procval, proc);
-	proc->is_lambda = TRUE;
-    }
+    procval = rb_vm_make_proc_lambda(th, block, klass, is_lambda);
     return procval;
 }
 
@@ -697,13 +661,6 @@ rb_block_clear_env_self(VALUE proc)
     return proc;
 }
 
-VALUE
-rb_f_lambda(void)
-{
-    rb_warn("rb_f_lambda() is deprecated; use rb_block_proc() instead");
-    return rb_block_lambda();
-}
-
 /*  Document-method: ===
  *
  *  call-seq:
@@ -762,7 +719,7 @@ proc_call(int argc, VALUE *argv, VALUE procval)
     GetProcPtr(procval, proc);
 
     iseq = proc->block.iseq;
-    if (BUILTIN_TYPE(iseq) == T_NODE || iseq->arg_block != -1) {
+    if (BUILTIN_TYPE(iseq) == T_NODE || iseq->param.flags.has_block) {
 	if (rb_block_given_p()) {
 	    rb_proc_t *passed_proc;
 	    RB_GC_GUARD(passed_procval) = rb_block_proc();
@@ -837,7 +794,7 @@ rb_proc_call_with_block(VALUE self, int argc, const VALUE *argv, VALUE pass_proc
  *  Keywords arguments will considered as a single additional argument,
  *  that argument being mandatory if any keyword argument is mandatory.
  *  A <code>proc</code> with no argument declarations
- *  is the same a block declaring <code>||</code> as its arguments.
+ *  is the same as a block declaring <code>||</code> as its arguments.
  *
  *     proc {}.arity                  #=>  0
  *     proc { || }.arity              #=>  0
@@ -874,11 +831,11 @@ proc_arity(VALUE self)
 static inline int
 rb_iseq_min_max_arity(const rb_iseq_t *iseq, int *max)
 {
-    *max = iseq->arg_rest == -1 ?
-	iseq->argc + iseq->arg_post_len + iseq->arg_opts -
-	(iseq->arg_opts > 0) + (iseq->arg_keyword != -1)
+    *max = iseq->param.flags.has_rest == FALSE ?
+      iseq->param.lead_num + iseq->param.opt_num + iseq->param.post_num +
+      (iseq->param.flags.has_kw == TRUE || iseq->param.flags.has_kwrest == TRUE)
       : UNLIMITED_ARGUMENTS;
-    return iseq->argc + iseq->arg_post_len + (iseq->arg_keyword_required > 0);
+    return iseq->param.lead_num + iseq->param.post_num + (iseq->param.flags.has_kw && iseq->param.keyword->required_num > 0);
 }
 
 static int
@@ -1160,7 +1117,7 @@ static const rb_data_type_t method_data_type = {
 	bm_free,
 	bm_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 VALUE
@@ -1719,6 +1676,7 @@ rb_mod_define_method(int argc, VALUE *argv, VALUE mod)
 	if (noex == NOEX_MODFUNC) {
 	    rb_method_entry_set(rb_singleton_class(mod), id, method->me, NOEX_PUBLIC);
 	}
+	RB_GC_GUARD(body);
     }
     else if (rb_obj_is_proc(body)) {
 	rb_proc_t *proc;
@@ -1870,9 +1828,9 @@ rb_method_call_with_block(int argc, const VALUE *argv, VALUE method, VALUE pass_
     }
     PUSH_TAG();
     if (OBJ_TAINTED(method)) {
-	const int safe_level_to_run = 4 /*SAFE_LEVEL_MAX*/;
+	const int safe_level_to_run = RUBY_SAFE_LEVEL_MAX;
 	safe = rb_safe_level();
-	if (rb_safe_level() < safe_level_to_run) {
+	if (safe < safe_level_to_run) {
 	    rb_set_safe_level_force(safe_level_to_run);
 	}
     }
@@ -2391,7 +2349,10 @@ static VALUE
 method_proc(VALUE method)
 {
     VALUE procval;
+    struct METHOD *meth;
     rb_proc_t *proc;
+    rb_env_t *env;
+
     /*
      * class Method
      *   def to_proc
@@ -2401,9 +2362,16 @@ method_proc(VALUE method)
      *   end
      * end
      */
+    TypedData_Get_Struct(method, struct METHOD, &method_data_type, meth);
     procval = rb_iterate(mlambda, 0, bmcall, method);
     GetProcPtr(procval, proc);
     proc->is_from_method = 1;
+    proc->block.self = meth->recv;
+    proc->block.klass = meth->defined_class;
+    GetEnvPtr(proc->envval, env);
+    env->block.self = meth->recv;
+    env->block.klass = meth->defined_class;
+    env->block.iseq = method_get_iseq(meth->me->def);
     return procval;
 }
 
@@ -2476,20 +2444,24 @@ proc_binding(VALUE self)
     rb_proc_t *proc;
     VALUE bindval;
     rb_binding_t *bind;
+    rb_iseq_t *iseq;
 
     GetProcPtr(self, proc);
-    if (RB_TYPE_P((VALUE)proc->block.iseq, T_NODE)) {
-	if (!IS_METHOD_PROC_NODE((NODE *)proc->block.iseq)) {
+    iseq = proc->block.iseq;
+    if (RB_TYPE_P((VALUE)iseq, T_NODE)) {
+	if (!IS_METHOD_PROC_NODE((NODE *)iseq)) {
 	    rb_raise(rb_eArgError, "Can't create Binding from C level Proc");
 	}
+	iseq = rb_method_get_iseq(RNODE(iseq)->u2.value);
     }
 
-    bindval = binding_alloc(rb_cBinding);
+    bindval = rb_binding_alloc(rb_cBinding);
     GetBindingPtr(bindval, bind);
     bind->env = proc->envval;
-    if (RUBY_VM_NORMAL_ISEQ_P(proc->block.iseq)) {
-	bind->path = proc->block.iseq->location.path;
-	bind->first_lineno = FIX2INT(rb_iseq_first_lineno(proc->block.iseq->self));
+    bind->blockprocval = proc->blockprocval;
+    if (RUBY_VM_NORMAL_ISEQ_P(iseq)) {
+	bind->path = iseq->location.path;
+	bind->first_lineno = FIX2INT(rb_iseq_first_lineno(iseq->self));
     }
     else {
 	bind->path = Qnil;

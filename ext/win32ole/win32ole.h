@@ -112,16 +112,10 @@ struct oledata {
     IDispatch *pDispatch;
 };
 
-#define OLEData_Get_Struct(obj, pole) {\
-    Data_Get_Struct(obj, struct oledata, pole);\
-    if(!pole->pDispatch) {\
-        rb_raise(rb_eRuntimeError, "failed to get Dispatch Interface");\
-    }\
-}
-
 VALUE cWIN32OLE;
 LCID cWIN32OLE_lcid;
 
+struct oledata *oledata_get_struct(VALUE obj);
 LPWSTR ole_vstr2wc(VALUE vstr);
 LONG reg_open_key(HKEY hkey, const char *name, HKEY *phkey);
 LONG reg_open_vkey(HKEY hkey, VALUE key, HKEY *phkey);
@@ -135,7 +129,7 @@ VALUE ole_wc2vstr(LPWSTR pw, BOOL isfree);
 
 #define WC2VSTR(x) ole_wc2vstr((x), TRUE)
 
-BOOL ole_initialized();
+BOOL ole_initialized(void);
 HRESULT ole_docinfo_from_type(ITypeInfo *pTypeInfo, BSTR *name, BSTR *helpstr, DWORD *helpcontext, BSTR *helpfile);
 VALUE ole_typedesc2val(ITypeInfo *pTypeInfo, TYPEDESC *pTypeDesc, VALUE typedetails);
 VALUE make_inspect(const char *class_name, VALUE detail);

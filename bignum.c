@@ -2,17 +2,16 @@
 
   bignum.c -
 
-  $Author: nobu $
+  $Author: akr $
   created at: Fri Jun 10 00:48:55 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/thread.h"
 #include "ruby/util.h"
-#include "internal.h"
 
 #ifdef HAVE_STRINGS_H
 #include <strings.h>
@@ -1650,7 +1649,7 @@ bary_mul_balance_with_mulfunc(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t 
             }
             tds = zds + n;
             MEMCPY(wds, zds + n, BDIGIT, xn);
-            mulfunc(tds, tn, xds, xn, yds + n, r, wds-xn, wn-xn);
+            mulfunc(tds, tn, xds, xn, yds + n, r, wds+xn, wn-xn);
             bary_add(zds + n, tn,
                      zds + n, tn,
                      wds, xn);
@@ -3294,7 +3293,7 @@ absint_numwords_generic(size_t numbytes, int nlz_bits_in_msbyte, size_t word_num
     static const BDIGIT char_bit[1] = { CHAR_BIT };
     BDIGIT numbytes_bary[bdigit_roomof(sizeof(numbytes))];
     BDIGIT val_numbits_bary[bdigit_roomof(sizeof(numbytes) + 1)];
-    BDIGIT nlz_bits_in_msbyte_bary[1] = { nlz_bits_in_msbyte };
+    BDIGIT nlz_bits_in_msbyte_bary[1];
     BDIGIT word_numbits_bary[bdigit_roomof(sizeof(word_numbits))];
     BDIGIT div_bary[numberof(val_numbits_bary) + BIGDIVREM_EXTRA_WORDS];
     BDIGIT mod_bary[numberof(word_numbits_bary)];
@@ -3303,6 +3302,8 @@ absint_numwords_generic(size_t numbytes, int nlz_bits_in_msbyte, size_t word_num
     size_t mod;
     int sign;
     size_t numwords;
+
+    nlz_bits_in_msbyte_bary[0] = nlz_bits_in_msbyte;
 
     /*
      * val_numbits = numbytes * CHAR_BIT - nlz_bits_in_msbyte

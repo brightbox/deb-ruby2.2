@@ -1,4 +1,4 @@
-# $Id: test_fileutils.rb 47150 2014-08-12 04:36:31Z hsbt $
+# $Id: test_fileutils.rb 48409 2014-11-13 16:05:37Z akr $
 
 require 'fileutils'
 require 'etc'
@@ -16,11 +16,12 @@ class TestFileUtils < Test::Unit::TestCase
     IO.pipe {|read, write|
       fu.instance_variable_set(:@fileutils_output, write)
       th = Thread.new { read.read }
-
-      yield
-
-      write.close
-      lines = th.value.lines.map {|l| l.chomp }
+      th2 = Thread.new {
+        yield
+        write.close
+      }
+      th_value, _ = assert_join_threads([th, th2])
+      lines = th_value.lines.map {|l| l.chomp }
       assert_equal(expected, lines)
     }
   ensure
@@ -996,8 +997,8 @@ class TestFileUtils < Test::Unit::TestCase
     # FreeBSD ufs and tmpfs don't allow to change sticky bit against
     # regular file. It's slightly strange. Anyway it's no effect bit.
     # see /usr/src/sys/ufs/ufs/ufs_chmod()
-    # NetBSD, OpenBSD and Solaris also denies it.
-    if /freebsd|netbsd|openbsd|solaris/ !~ RUBY_PLATFORM
+    # NetBSD, OpenBSD, Solaris, and AIX also deny it.
+    if /freebsd|netbsd|openbsd|solaris|aix/ !~ RUBY_PLATFORM
       chmod "u+t,o+t", 'tmp/a'
       assert_filemode 07500, 'tmp/a'
       chmod "a-t,a-s", 'tmp/a'

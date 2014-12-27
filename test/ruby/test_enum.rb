@@ -1,5 +1,5 @@
 require 'test/unit'
-require 'continuation'
+EnvUtil.suppress_warning {require 'continuation'}
 require 'stringio'
 
 class TestEnumerable < Test::Unit::TestCase
@@ -151,6 +151,7 @@ class TestEnumerable < Test::Unit::TestCase
     assert_equal(12, @obj.inject(:*))
     assert_equal(24, @obj.inject(2) {|z, x| z * x })
     assert_equal(24, @obj.inject(2, :*) {|z, x| z * x })
+    assert_equal(nil, @empty.inject() {9})
   end
 
   def test_partition
@@ -245,8 +246,8 @@ class TestEnumerable < Test::Unit::TestCase
     assert_equal("horse", ary.max)
     assert_equal("albatross", ary.max {|a,b| a.length <=> b.length })
     assert_equal(1, [3,2,1].max{|a,b| b <=> a })
-    assert_equal(%w[dog horse], ary.max(2))
-    assert_equal(%w[horse albatross],
+    assert_equal(%w[horse dog], ary.max(2))
+    assert_equal(%w[albatross horse],
                  ary.max(2) {|a,b| a.length <=> b.length })
   end
 
@@ -278,7 +279,7 @@ class TestEnumerable < Test::Unit::TestCase
     a = %w(albatross dog horse)
     assert_equal("albatross", a.max_by {|x| x.length })
     assert_equal(1, [2,3,1].max_by {|x| -x })
-    assert_equal(%w[horse albatross], a.max_by(2) {|x| x.length })
+    assert_equal(%w[albatross horse], a.max_by(2) {|x| x.length })
   end
 
   def test_minmax_by
@@ -572,6 +573,61 @@ class TestEnumerable < Test::Unit::TestCase
     lines = ["foo", "", "bar"]
     e = lines.slice_after(/\A\s*\z/)
     assert_equal([["foo", ""], ["bar"]], e.to_a)
+  end
+
+  def test_slice_when_0
+    e = [].slice_when {|a, b| flunk "should not be called" }
+    assert_equal([], e.to_a)
+  end
+
+  def test_slice_when_1
+    e = [1].slice_when {|a, b| flunk "should not be called" }
+    assert_equal([[1]], e.to_a)
+  end
+
+  def test_slice_when_2
+    e = [1,2].slice_when {|a,b|
+      assert_equal(1, a)
+      assert_equal(2, b)
+      true
+    }
+    assert_equal([[1], [2]], e.to_a)
+
+    e = [1,2].slice_when {|a,b|
+      assert_equal(1, a)
+      assert_equal(2, b)
+      false
+    }
+    assert_equal([[1, 2]], e.to_a)
+  end
+
+  def test_slice_when_3
+    block_invocations = [
+      lambda {|a, b|
+        assert_equal(1, a)
+        assert_equal(2, b)
+        true
+      },
+      lambda {|a, b|
+        assert_equal(2, a)
+        assert_equal(3, b)
+        false
+      }
+    ]
+    e = [1,2,3].slice_when {|a,b|
+      block_invocations.shift.call(a, b)
+    }
+    assert_equal([[1], [2, 3]], e.to_a)
+    assert_equal([], block_invocations)
+  end
+
+  def test_slice_when_noblock
+    assert_raise(ArgumentError) { [].slice_when }
+  end
+
+  def test_slice_when_contiguously_increasing_integers
+    e = [1,4,9,10,11,12,15,16,19,20,21].slice_when {|i, j| i+1 != j }
+    assert_equal([[1], [4], [9,10,11,12], [15,16], [19,20,21]], e.to_a)
   end
 
   def test_detect

@@ -2,7 +2,7 @@
 
   io/wait.c -
 
-  $Author: zzak $
+  $Author: usa $
   created at: Tue Jul 14 21:53:18 2009
 
   All the files in this distribution are covered under the Ruby's
@@ -79,7 +79,10 @@ rb_io_nonblock_set(VALUE io, VALUE nb)
 {
     rb_io_t *fptr;
     GetOpenFile(io, fptr);
-    io_nonblock_set(fptr->fd, io_nonblock_mode(fptr->fd), RTEST(nb));
+    if (RTEST(nb))
+	rb_io_set_nonblock(fptr);
+    else
+	io_nonblock_set(fptr->fd, io_nonblock_mode(fptr->fd), RTEST(nb));
     return io;
 }
 

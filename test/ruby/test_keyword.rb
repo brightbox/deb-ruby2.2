@@ -1,5 +1,4 @@
 require 'test/unit'
-require_relative 'envutil'
 
 class TestKeywordArguments < Test::Unit::TestCase
   def f1(str: "foo", num: 424242)
@@ -311,11 +310,16 @@ class TestKeywordArguments < Test::Unit::TestCase
     feature7701 = '[ruby-core:51454] [Feature #7701] required keyword argument'
     o = Object.new
     assert_nothing_raised(SyntaxError, feature7701) do
-      eval("def o.foo(a:) a; end")
+      eval("def o.foo(a:) a; end", nil, "xyzzy")
       eval("def o.bar(a:,**b) [a, b]; end")
     end
     assert_raise_with_message(ArgumentError, /missing keyword/, feature7701) {o.foo}
     assert_raise_with_message(ArgumentError, /unknown keyword/, feature7701) {o.foo(a:0, b:1)}
+    begin
+      o.foo(a: 0, b: 1)
+    rescue => e
+      assert_equal('xyzzy', e.backtrace_locations[0].path)
+    end
     assert_equal(42, o.foo(a: 42), feature7701)
     assert_equal([[:keyreq, :a]], o.method(:foo).parameters, feature7701)
 
@@ -325,7 +329,9 @@ class TestKeywordArguments < Test::Unit::TestCase
     assert_equal([[:keyreq, :a], [:keyrest, :b]], o.method(:bar).parameters, feature7701)
     assert_raise_with_message(ArgumentError, /missing keyword/, bug8139) {o.bar(c: bug8139)}
     assert_raise_with_message(ArgumentError, /missing keyword/, bug8139) {o.bar}
+  end
 
+  def test_required_keyword_with_newline
     bug9669 = '[ruby-core:61658] [Bug #9669]'
     assert_nothing_raised(SyntaxError, bug9669) do
       eval(<<-'end;', nil, __FILE__, __LINE__)
@@ -335,6 +341,7 @@ class TestKeywordArguments < Test::Unit::TestCase
       end;
     end
     assert_equal(42, bug9669.foo(a: 42))
+    o = nil
     assert_nothing_raised(SyntaxError, bug9669) do
       eval(<<-'end;', nil, __FILE__, __LINE__)
         o = {
@@ -346,13 +353,30 @@ class TestKeywordArguments < Test::Unit::TestCase
     assert_equal({a: 1}, o, bug9669)
   end
 
+  def test_required_keyword_with_reserved
+    bug10279 = '[ruby-core:65211] [Bug #10279]'
+    h = nil
+    assert_nothing_raised(SyntaxError, bug10279) do
+      break eval(<<-'end;', nil, __FILE__, __LINE__)
+        h = {a: if true then 42 end}
+      end;
+    end
+    assert_equal({a: 42}, h, bug10279)
+  end
+
   def test_block_required_keyword
     feature7701 = '[ruby-core:51454] [Feature #7701] required keyword argument'
     b = assert_nothing_raised(SyntaxError, feature7701) do
-      break eval("proc {|a:| a}", nil, __FILE__, __LINE__)
+      break eval("proc {|a:| a}", nil, 'xyzzy', __LINE__)
     end
     assert_raise_with_message(ArgumentError, /missing keyword/, feature7701) {b.call}
     assert_raise_with_message(ArgumentError, /unknown keyword/, feature7701) {b.call(a:0, b:1)}
+    begin
+      b.call(a: 0, b: 1)
+    rescue => e
+      assert_equal('xyzzy', e.backtrace_locations[0].path)
+    end
+
     assert_equal(42, b.call(a: 42), feature7701)
     assert_equal([[:keyreq, :a]], b.parameters, feature7701)
 
@@ -490,5 +514,29 @@ class TestKeywordArguments < Test::Unit::TestCase
       GC.start
       tap { prc.call }
     }, bug8964
+  end
+
+  def test_dynamic_symbol_keyword
+    bug10266 = '[ruby-dev:48564] [Bug #10266]'
+    assert_separately(['-', bug10266], <<-'end;') #    do
+      bug = ARGV.shift
+      "hoge".to_sym
+      assert_nothing_raised(bug) {eval("def a(hoge:); end")}
+    end;
+  end
+
+  def test_unknown_keyword_with_block
+    bug10413 = '[ruby-core:65837] [Bug #10413]'
+    class << (o = Object.new)
+      def bar(k2: 'v2')
+      end
+
+      def foo
+        bar(k1: 1)
+      end
+    end
+    assert_raise_with_message(ArgumentError, /unknown keyword: k1/, bug10413) {
+      o.foo {raise "unreachable"}
+    }
   end
 end

@@ -2,7 +2,7 @@
 
   io.c -
 
-  $Author: normal $
+  $Author: nobu $
   created at: Fri Oct 15 18:08:59 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -11,11 +11,10 @@
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/thread.h"
 #include "dln.h"
-#include "internal.h"
 #include "id.h"
 #include <ctype.h>
 #include <errno.h>
@@ -32,9 +31,7 @@
 #if defined HAVE_NET_SOCKET_H
 # include <net/socket.h>
 #elif defined HAVE_SYS_SOCKET_H
-# ifndef __native_client__
-#  include <sys/socket.h>
-# endif
+# include <sys/socket.h>
 #endif
 
 #if defined(__BOW__) || defined(__CYGWIN__) || defined(_WIN32) || defined(__EMX__) || defined(__BEOS__) || defined(__HAIKU__)
@@ -53,9 +50,6 @@
 #if defined(HAVE_SYS_IOCTL_H) && !defined(_WIN32)
 #include <sys/ioctl.h>
 #endif
-#if defined(__native_client__) && defined(NACL_NEWLIB)
-# include "nacl/ioctl.h"
-#endif
 #if defined(HAVE_FCNTL_H) || defined(_WIN32)
 #include <fcntl.h>
 #elif defined(HAVE_SYS_FCNTL_H)
@@ -71,6 +65,10 @@
 # define PRI_OFF_T_PREFIX "l"
 #else
 # define PRI_OFF_T_PREFIX ""
+#endif
+
+#ifdef HAVE_SYS_TIME_H
+# include <sys/time.h>
 #endif
 
 #include <sys/stat.h>
@@ -131,6 +129,13 @@
 off_t __syscall(quad_t number, ...);
 #endif
 
+#ifdef __native_client__
+# undef F_GETFD
+# ifdef NACL_NEWLIB
+#  undef HAVE_IOCTL
+# endif
+#endif
+
 #define IO_RBUF_CAPA_MIN  8192
 #define IO_CBUF_CAPA_MIN  (128*1024)
 #define IO_RBUF_CAPA_FOR(fptr) (NEED_READCONV(fptr) ? IO_CBUF_CAPA_MIN : IO_RBUF_CAPA_MIN)
@@ -147,9 +152,6 @@ VALUE rb_eEOFError;
 VALUE rb_eIOError;
 VALUE rb_mWaitReadable;
 VALUE rb_mWaitWritable;
-extern VALUE rb_eEAGAIN;
-extern VALUE rb_eEWOULDBLOCK;
-extern VALUE rb_eEINPROGRESS;
 
 static VALUE rb_eEAGAINWaitReadable;
 static VALUE rb_eEAGAINWaitWritable;
@@ -169,9 +171,10 @@ VALUE rb_default_rs;
 
 static VALUE argf;
 
+#define id_exception idException
 static ID id_write, id_read, id_getc, id_flush, id_readpartial, id_set_encoding;
 static VALUE sym_mode, sym_perm, sym_extenc, sym_intenc, sym_encoding, sym_open_args;
-static VALUE sym_textmode, sym_binmode, sym_autoclose, sym_exception;
+static VALUE sym_textmode, sym_binmode, sym_autoclose;
 static VALUE sym_SET, sym_CUR, sym_END;
 #ifdef SEEK_DATA
 static VALUE sym_DATA;
@@ -243,7 +246,7 @@ rb_fd_fix_cloexec(int fd)
 static int
 rb_fix_detect_o_cloexec(int fd)
 {
-#ifdef O_CLOEXEC
+#if defined(O_CLOEXEC) && defined(F_GETFD)
     int flags = fcntl(fd, F_GETFD);
 
     if (flags == -1)
@@ -903,29 +906,6 @@ io_alloc(VALUE klass)
 #   define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
 #endif
 
-static int
-wsplit_p(rb_io_t *fptr)
-{
-#if defined(HAVE_FCNTL) && defined(F_GETFL) && defined(O_NONBLOCK)
-    int r;
-#endif
-
-    if (!(fptr->mode & FMODE_WSPLIT_INITIALIZED)) {
-        struct stat buf;
-        if (fstat(fptr->fd, &buf) == 0 &&
-            !S_ISREG(buf.st_mode)
-#if defined(HAVE_FCNTL) && defined(F_GETFL) && defined(O_NONBLOCK)
-            && (r = fcntl(fptr->fd, F_GETFL)) != -1 &&
-            !(r & O_NONBLOCK)
-#endif
-            ) {
-            fptr->mode |= FMODE_WSPLIT;
-        }
-        fptr->mode |= FMODE_WSPLIT_INITIALIZED;
-    }
-    return fptr->mode & FMODE_WSPLIT;
-}
-
 struct io_internal_read_struct {
     int fd;
     void *buf;
@@ -1023,22 +1003,11 @@ rb_writev_internal(int fd, const struct iovec *iov, int iovcnt)
 }
 #endif
 
-static long
-io_writable_length(rb_io_t *fptr, long l)
-{
-    if (PIPE_BUF < l &&
-        !rb_thread_alone() &&
-        wsplit_p(fptr)) {
-        l = PIPE_BUF;
-    }
-    return l;
-}
-
 static VALUE
 io_flush_buffer_sync(void *arg)
 {
     rb_io_t *fptr = arg;
-    long l = io_writable_length(fptr, fptr->wbuf.len);
+    long l = fptr->wbuf.len;
     ssize_t r = write(fptr->fd, fptr->wbuf.ptr+fptr->wbuf.off, (size_t)l);
 
     if (fptr->wbuf.len <= r) {
@@ -1270,6 +1239,9 @@ io_binwrite_string(VALUE arg)
 
 	r = rb_writev_internal(fptr->fd, iov, 2);
 
+        if (r == -1)
+            return -1;
+
 	if (fptr->wbuf.len <= r) {
 	    r -= fptr->wbuf.len;
 	    fptr->wbuf.off = 0;
@@ -1282,8 +1254,7 @@ io_binwrite_string(VALUE arg)
 	}
     }
     else {
-	long l = io_writable_length(fptr, p->length);
-	r = rb_write_internal(fptr->fd, p->ptr, l);
+	r = rb_write_internal(fptr->fd, p->ptr, p->length);
     }
 
     return r;
@@ -1317,8 +1288,7 @@ io_binwrite_string(VALUE arg)
     if (fptr->stdio_file != stderr && !rb_thread_fd_writable(fptr->fd))
 	rb_io_check_closed(fptr);
 
-    l = io_writable_length(p->fptr, p->length);
-    return rb_write_internal(p->fptr->fd, p->ptr, l);
+    return rb_write_internal(p->fptr->fd, p->ptr, p->length);
 }
 #endif
 
@@ -2465,6 +2435,11 @@ read_all(rb_io_t *fptr, long siz, VALUE str)
 void
 rb_io_set_nonblock(rb_io_t *fptr)
 {
+#ifdef _WIN32
+    if (rb_w32_set_nonblock(fptr->fd) != 0) {
+	rb_sys_fail_path(fptr->pathv);
+    }
+#else
     int oflags;
 #ifdef F_GETFL
     oflags = fcntl(fptr->fd, F_GETFL);
@@ -2480,6 +2455,7 @@ rb_io_set_nonblock(rb_io_t *fptr)
             rb_sys_fail_path(fptr->pathv);
         }
     }
+#endif
 }
 
 void
@@ -2633,7 +2609,7 @@ get_kwargs_exception(VALUE opts)
     VALUE except;
 
     if (!ids[0])
-	ids[0] = sym_exception;
+	ids[0] = id_exception;
 
     rb_get_kwargs(opts, ids, 0, 1, &except);
     return except;
@@ -2829,7 +2805,7 @@ rb_io_write_nonblock(int argc, VALUE *argv, VALUE io)
  *  <i>length</i> must be a non-negative integer or <code>nil</code>.
  *
  *  If <i>length</i> is a positive integer,
- *  it try to read <i>length</i> bytes without any conversion (binary mode).
+ *  it tries to read <i>length</i> bytes without any conversion (binary mode).
  *  It returns <code>nil</code> or a string whose length is 1 to <i>length</i> bytes.
  *  <code>nil</code> means it met EOF at beginning.
  *  The 1 to <i>length</i>-1 bytes string means it met EOF after reading the result.
@@ -4251,6 +4227,9 @@ maygvl_fclose(FILE *file, int keepgvl)
     return (int)(intptr_t)rb_thread_call_without_gvl(nogvl_fclose, file, RUBY_UBF_IO, 0);
 }
 
+static void free_io_buffer(rb_io_buffer_t *buf);
+static void clear_codeconv(rb_io_t *fptr);
+
 static void
 fptr_finalize(rb_io_t *fptr, int noraise)
 {
@@ -4312,6 +4291,9 @@ fptr_finalize(rb_io_t *fptr, int noraise)
             rb_exc_raise(err);
         }
     }
+    free_io_buffer(&fptr->rbuf);
+    free_io_buffer(&fptr->wbuf);
+    clear_codeconv(fptr);
 }
 
 static void
@@ -4326,16 +4308,22 @@ rb_io_fptr_cleanup(rb_io_t *fptr, int noraise)
 }
 
 static void
+free_io_buffer(rb_io_buffer_t *buf)
+{
+    if (buf->ptr) {
+        ruby_sized_xfree(buf->ptr, (size_t)buf->capa);
+        buf->ptr = NULL;
+    }
+}
+
+static void
 clear_readconv(rb_io_t *fptr)
 {
     if (fptr->readconv) {
         rb_econv_close(fptr->readconv);
         fptr->readconv = NULL;
     }
-    if (fptr->cbuf.ptr) {
-        free(fptr->cbuf.ptr);
-        fptr->cbuf.ptr = NULL;
-    }
+    free_io_buffer(&fptr->cbuf);
 }
 
 static void
@@ -4363,20 +4351,12 @@ rb_io_fptr_finalize(rb_io_t *fptr)
     if (0 <= fptr->fd)
 	rb_io_fptr_cleanup(fptr, TRUE);
     fptr->write_lock = 0;
-    if (fptr->rbuf.ptr) {
-        free(fptr->rbuf.ptr);
-        fptr->rbuf.ptr = 0;
-    }
-    if (fptr->wbuf.ptr) {
-        free(fptr->wbuf.ptr);
-        fptr->wbuf.ptr = 0;
-    }
+    free_io_buffer(&fptr->rbuf);
+    free_io_buffer(&fptr->wbuf);
     clear_codeconv(fptr);
     free(fptr);
     return 1;
 }
-
-size_t rb_econv_memsize(rb_econv_t *);
 
 RUBY_FUNC_EXPORTED size_t
 rb_io_memsize(const rb_io_t *fptr)
@@ -4743,8 +4723,6 @@ rb_io_sysread(int argc, VALUE *argv, VALUE io)
     if (READ_DATA_BUFFERED(fptr)) {
 	rb_raise(rb_eIOError, "sysread for buffered IO");
     }
-
-    n = fptr->fd;
 
     /*
      * FIXME: removing rb_thread_wait_fd() here changes sysread semantics
@@ -5861,19 +5839,20 @@ linux_get_maxfd(void)
 void
 rb_close_before_exec(int lowfd, int maxhint, VALUE noclose_fds)
 {
+#if defined(HAVE_FCNTL) && defined(F_GETFD) && defined(F_SETFD) && defined(FD_CLOEXEC)
     int fd, ret;
     int max = (int)max_file_descriptor;
-#ifdef F_MAXFD
+# ifdef F_MAXFD
     /* F_MAXFD is available since NetBSD 2.0. */
     ret = fcntl(0, F_MAXFD); /* async-signal-safe */
     if (ret != -1)
         maxhint = max = ret;
-#elif defined(__linux__)
+# elif defined(__linux__)
     ret = linux_get_maxfd();
     if (maxhint < ret)
         maxhint = ret;
     /* maxhint = max = ret; if (ret == -1) abort(); // test */
-#endif
+# endif
     if (max < maxhint)
         max = maxhint;
     for (fd = lowfd; fd <= max; fd++) {
@@ -5884,12 +5863,13 @@ rb_close_before_exec(int lowfd, int maxhint, VALUE noclose_fds)
 	if (ret != -1 && !(ret & FD_CLOEXEC)) {
             fcntl(fd, F_SETFD, ret|FD_CLOEXEC); /* async-signal-safe */
         }
-#define CONTIGUOUS_CLOSED_FDS 20
+# define CONTIGUOUS_CLOSED_FDS 20
         if (ret != -1) {
 	    if (max < fd + CONTIGUOUS_CLOSED_FDS)
 		max = fd + CONTIGUOUS_CLOSED_FDS;
 	}
     }
+#endif
 }
 
 static int
@@ -6221,7 +6201,7 @@ pipe_open_s(VALUE prog, const char *modestr, int fmode, convconfig_t *convconfig
  *  If a block is given, Ruby will run the command as a child connected
  *  to Ruby with a pipe. Ruby's end of the pipe will be passed as a
  *  parameter to the block.
- *  At the end of block, Ruby close the pipe and sets <code>$?</code>.
+ *  At the end of block, Ruby closes the pipe and sets <code>$?</code>.
  *  In this case <code>IO.popen</code> returns
  *  the value of the block.
  *
@@ -7280,6 +7260,11 @@ rb_write_error_str(VALUE mesg)
     /* a stopgap measure for the time being */
     if (rb_stderr == orig_stderr || RFILE(orig_stderr)->fptr->fd < 0) {
 	size_t len = (size_t)RSTRING_LEN(mesg);
+#ifdef _WIN32
+	if (isatty(fileno(stderr))) {
+	    if (rb_w32_write_console(mesg, fileno(stderr)) > 0) return;
+	}
+#endif
 	if (fwrite(RSTRING_PTR(mesg), sizeof(char), len, stderr) < len) {
 	    RB_GC_GUARD(mesg);
 	    return;
@@ -7295,9 +7280,9 @@ static void
 must_respond_to(ID mid, VALUE val, ID id)
 {
     if (!rb_respond_to(val, mid)) {
-	rb_raise(rb_eTypeError, "%s must have %s method, %s given",
-		 rb_id2name(id), rb_id2name(mid),
-		 rb_obj_classname(val));
+	rb_raise(rb_eTypeError, "%"PRIsVALUE" must have %"PRIsVALUE" method, %"PRIsVALUE" given",
+		 rb_id2str(id), rb_id2str(mid),
+		 rb_obj_class(val));
     }
 }
 
@@ -7366,6 +7351,60 @@ rb_io_stdio_file(rb_io_t *fptr)
         fptr->stdio_file = rb_fdopen(fptr->fd, rb_io_oflags_modestr(oflags));
     }
     return fptr->stdio_file;
+}
+
+static inline void
+rb_io_buffer_init(rb_io_buffer_t *buf)
+{
+    buf->ptr = NULL;
+    buf->off = 0;
+    buf->len = 0;
+    buf->capa = 0;
+}
+
+static inline rb_io_t *
+rb_io_fptr_new(void)
+{
+    rb_io_t *fp = ALLOC(rb_io_t);
+    fp->fd = -1;
+    fp->stdio_file = NULL;
+    fp->mode = 0;
+    fp->pid = 0;
+    fp->lineno = 0;
+    fp->pathv = Qnil;
+    fp->finalize = 0;
+    rb_io_buffer_init(&fp->wbuf);
+    rb_io_buffer_init(&fp->rbuf);
+    rb_io_buffer_init(&fp->cbuf);
+    fp->readconv = NULL;
+    fp->writeconv = NULL;
+    fp->writeconv_asciicompat = Qnil;
+    fp->writeconv_pre_ecflags = 0;
+    fp->writeconv_pre_ecopts = Qnil;
+    fp->writeconv_initialized = 0;
+    fp->tied_io_for_writing = 0;
+    fp->encs.enc = NULL;
+    fp->encs.enc2 = NULL;
+    fp->encs.ecflags = 0;
+    fp->encs.ecopts = Qnil;
+    fp->write_lock = 0;
+    return fp;
+}
+
+rb_io_t *
+rb_io_make_open_file(VALUE obj)
+{
+    rb_io_t *fp = 0;
+
+    Check_Type(obj, T_FILE);
+    if (RFILE(obj)->fptr) {
+	rb_io_close(obj);
+	rb_io_fptr_finalize(RFILE(obj)->fptr);
+	RFILE(obj)->fptr = 0;
+    }
+    fp = rb_io_fptr_new();
+    RFILE(obj)->fptr = fp;
+    return fp;
 }
 
 /*
@@ -7719,7 +7758,7 @@ argf_memsize(const void *ptr)
 static const rb_data_type_t argf_type = {
     "ARGF",
     {argf_mark, argf_free, argf_memsize},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static inline void
@@ -8805,6 +8844,7 @@ rb_f_select(int argc, VALUE *argv, VALUE obj)
 # define NUM2IOCTLREQ(num) NUM2INT(num)
 #endif
 
+#ifdef HAVE_IOCTL
 struct ioctl_arg {
     int		fd;
     ioctl_req_t	cmd;
@@ -8833,6 +8873,7 @@ do_ioctl(int fd, ioctl_req_t cmd, long narg)
 
     return retval;
 }
+#endif
 
 #define DEFULT_IOCTL_NARG_LEN (256)
 
@@ -8885,6 +8926,14 @@ typedef long fcntl_arg_t;
 #else
 /* posix */
 typedef int fcntl_arg_t;
+#endif
+
+#if defined __native_client__ && !defined __GLIBC__
+// struct flock is currently missing the NaCl newlib headers
+// TODO(sbc): remove this once it gets added.
+#undef F_GETLK
+#undef F_SETLK
+#undef F_SETLKW
 #endif
 
 static long
@@ -9058,6 +9107,7 @@ setup_narg(ioctl_req_t cmd, VALUE *argp, int io_p)
     return narg;
 }
 
+#ifdef HAVE_IOCTL
 static VALUE
 rb_ioctl(VALUE io, VALUE req, VALUE arg)
 {
@@ -9101,6 +9151,9 @@ rb_io_ioctl(int argc, VALUE *argv, VALUE io)
     rb_scan_args(argc, argv, "11", &req, &arg);
     return rb_ioctl(io, req, arg);
 }
+#else
+#define rb_io_ioctl rb_f_notimplement
+#endif
 
 #ifdef HAVE_FCNTL
 struct fcntl_arg {
@@ -9159,16 +9212,6 @@ rb_fcntl(VALUE io, VALUE req, VALUE arg)
 	if (RSTRING_PTR(arg)[RSTRING_LEN(arg)-1] != 17)
 	    rb_raise(rb_eArgError, "return value overflowed string");
 	RSTRING_PTR(arg)[RSTRING_LEN(arg)-1] = '\0';
-    }
-
-    if (cmd == F_SETFL) {
-	if (narg & O_NONBLOCK) {
-	    fptr->mode |= FMODE_WSPLIT_INITIALIZED;
-	    fptr->mode &= ~FMODE_WSPLIT;
-	}
-	else {
-	    fptr->mode &= ~(FMODE_WSPLIT_INITIALIZED|FMODE_WSPLIT);
-	}
     }
 
     return INT2NUM(retval);
@@ -10251,9 +10294,9 @@ maygvl_copy_stream_read(int has_gvl, struct copy_stream_struct *stp, char *buf, 
             goto retry_read;
 #ifdef ENOSYS
 	  case ENOSYS:
-#endif
             stp->notimp = "pread";
             return -1;
+#endif
         }
         stp->syserr = offset == (off_t)-1 ?  "read" : "pread";
         stp->error_no = errno;
@@ -12250,7 +12293,7 @@ Init_IO(void)
 
 #if 0
     /* Hack to get rdoc to regard ARGF as a class: */
-    rb_cARGF = rb_define_class("ARGF", rb_cObject);
+    rb_cARGF = rb_define_class("ARGF.class", rb_cObject);
 #endif
 
     rb_cARGF = rb_class_new(rb_cObject);
@@ -12373,5 +12416,4 @@ Init_IO(void)
 #ifdef SEEK_HOLE
     sym_HOLE = ID2SYM(rb_intern("HOLE"));
 #endif
-    sym_exception = ID2SYM(rb_intern("exception"));
 }

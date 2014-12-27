@@ -1,7 +1,6 @@
 require 'test/unit'
 require 'timeout'
 require 'tempfile'
-require_relative 'envutil'
 
 class TestSignal < Test::Unit::TestCase
   def test_signal
@@ -169,6 +168,22 @@ class TestSignal < Test::Unit::TestCase
     end
   end if Process.respond_to?(:kill)
 
+  %w"KILL STOP".each do |sig|
+    if Signal.list.key?(sig)
+      define_method("test_trap_uncatchable_#{sig}") do
+        assert_raise(Errno::EINVAL, "SIG#{sig} is not allowed to be caught") { Signal.trap(sig) {} }
+      end
+    end
+  end
+
+  def test_sigexit
+    assert_in_out_err([], 'Signal.trap(:EXIT) {print "OK"}', ["OK"])
+    assert_in_out_err([], 'Signal.trap("EXIT") {print "OK"}', ["OK"])
+    assert_in_out_err([], 'Signal.trap(:SIGEXIT) {print "OK"}', ["OK"])
+    assert_in_out_err([], 'Signal.trap("SIGEXIT") {print "OK"}', ["OK"])
+    assert_in_out_err([], 'Signal.trap(0) {print "OK"}', ["OK"])
+  end
+
   def test_kill_immediately_before_termination
     Signal.list[sig = "USR1"] or sig = "INT"
     assert_in_out_err(["-e", <<-"end;"], "", %w"foo")
@@ -183,31 +198,6 @@ class TestSignal < Test::Unit::TestCase
       assert_equal("SYSTEM_DEFAULT", trap(:QUIT, "DEFAULT"))
     End
   end if Signal.list.key?('QUIT')
-
-  def test_signal_requiring
-    t = Tempfile.new(%w"require_ensure_test .rb")
-    t.puts "sleep"
-    t.close
-    error = IO.popen([EnvUtil.rubybin, "-e", <<EOS, t.path, :err => File::NULL]) do |child|
-trap(:INT, "DEFAULT")
-th = Thread.new do
-  begin
-    require ARGV[0]
-  ensure
-    err = $! ? [$!, $!.backtrace] : $!
-    Marshal.dump(err, STDOUT)
-    STDOUT.flush
-  end
-end
-Thread.pass while th.running?
-Process.kill(:INT, $$)
-th.join
-EOS
-      Marshal.load(child)
-    end
-    t.close!
-    assert_nil(error)
-  end if Process.respond_to?(:kill)
 
   def test_reserved_signal
     assert_raise(ArgumentError) {
@@ -288,5 +278,17 @@ EOS
         Process.kill(:INT, $$)
       end
     end;
+
+    if trap = Signal.list['TRAP']
+      bug9820 = '[ruby-dev:48592] [Bug #9820]'
+      status = assert_in_out_err(['-e', 'Process.kill(:TRAP, $$)'])
+      assert_predicate(status, :signaled?, bug9820)
+      assert_equal(trap, status.termsig, bug9820)
+    end
+
+    if Signal.list['CONT']
+      bug9820 = '[ruby-dev:48606] [Bug #9820]'
+      assert_ruby_status(['-e', 'Process.kill(:CONT, $$)'])
+    end
   end if Process.respond_to?(:kill)
 end

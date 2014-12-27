@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_cipher.c 46804 2014-07-13 08:51:23Z hsbt $
+ * $Id: ossl_cipher.c 48923 2014-12-23 02:42:16Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -11,13 +11,13 @@
 #include "ossl.h"
 
 #define WrapCipher(obj, klass, ctx) \
-    (obj) = Data_Wrap_Struct((klass), 0, ossl_cipher_free, (ctx))
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_cipher_type, (ctx))
 #define MakeCipher(obj, klass, ctx) \
-    (obj) = Data_Make_Struct((klass), EVP_CIPHER_CTX, 0, ossl_cipher_free, (ctx))
+    (obj) = TypedData_Make_Struct((klass), EVP_CIPHER_CTX, &ossl_cipher_type, (ctx))
 #define AllocCipher(obj, ctx) \
-    memset(DATA_PTR(obj) = (ctx) = ALLOC(EVP_CIPHER_CTX), 0, sizeof(EVP_CIPHER_CTX))
+    (DATA_PTR(obj) = (ctx) = ZALLOC(EVP_CIPHER_CTX))
 #define GetCipherInit(obj, ctx) do { \
-    Data_Get_Struct((obj), EVP_CIPHER_CTX, (ctx)); \
+    TypedData_Get_Struct((obj), EVP_CIPHER_CTX, &ossl_cipher_type, (ctx)); \
 } while (0)
 #define GetCipher(obj, ctx) do { \
     GetCipherInit((obj), (ctx)); \
@@ -37,6 +37,15 @@ VALUE cCipher;
 VALUE eCipherError;
 
 static VALUE ossl_cipher_alloc(VALUE klass);
+static void ossl_cipher_free(void *ptr);
+static size_t ossl_cipher_memsize(const void *ptr);
+
+static const rb_data_type_t ossl_cipher_type = {
+    "OpenSSL/Cipher",
+    {0, ossl_cipher_free, ossl_cipher_memsize,},
+    0, 0,
+    RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * PUBLIC
@@ -70,12 +79,20 @@ ossl_cipher_new(const EVP_CIPHER *cipher)
  * PRIVATE
  */
 static void
-ossl_cipher_free(EVP_CIPHER_CTX *ctx)
+ossl_cipher_free(void *ptr)
 {
+    EVP_CIPHER_CTX *ctx = ptr;
     if (ctx) {
 	EVP_CIPHER_CTX_cleanup(ctx);
 	ruby_xfree(ctx);
     }
+}
+
+static size_t
+ossl_cipher_memsize(const void *ptr)
+{
+    const EVP_CIPHER_CTX *ctx = ptr;
+    return ctx ? sizeof(*ctx) : 0;
 }
 
 static VALUE
@@ -329,6 +346,33 @@ ossl_cipher_pkcs5_keyivgen(int argc, VALUE *argv, VALUE self)
     return Qnil;
 }
 
+static int
+ossl_cipher_update_long(EVP_CIPHER_CTX *ctx, unsigned char *out, long *out_len_ptr,
+			const unsigned char *in, long in_len)
+{
+    int out_part_len;
+    long out_len = 0;
+#define UPDATE_LENGTH_LIMIT INT_MAX
+
+#if SIZEOF_LONG > UPDATE_LENGTH_LIMIT
+    if (in_len > UPDATE_LENGTH_LIMIT) {
+	const int in_part_len = (UPDATE_LENGTH_LIMIT / 2 + 1) & ~1;
+	do {
+	    if (!EVP_CipherUpdate(ctx, out ? (out + out_len) : 0,
+				  &out_part_len, in, in_part_len))
+		return 0;
+	    out_len += out_part_len;
+	    in += in_part_len;
+	} while ((in_len -= in_part_len) > UPDATE_LENGTH_LIMIT);
+    }
+#endif
+    if (!EVP_CipherUpdate(ctx, out ? (out + out_len) : 0,
+			  &out_part_len, in, (int)in_len))
+	return 0;
+    if (out_len_ptr) *out_len_ptr = out_len += out_part_len;
+    return 1;
+}
+
 /*
  *  call-seq:
  *     cipher.update(data [, buffer]) -> string or buffer
@@ -347,17 +391,21 @@ ossl_cipher_update(int argc, VALUE *argv, VALUE self)
 {
     EVP_CIPHER_CTX *ctx;
     unsigned char *in;
-    int in_len, out_len;
+    long in_len, out_len;
     VALUE data, str;
 
     rb_scan_args(argc, argv, "11", &data, &str);
 
     StringValue(data);
     in = (unsigned char *)RSTRING_PTR(data);
-    if ((in_len = RSTRING_LENINT(data)) == 0)
+    if ((in_len = RSTRING_LEN(data)) == 0)
         ossl_raise(rb_eArgError, "data must not be empty");
     GetCipher(self, ctx);
     out_len = in_len+EVP_CIPHER_CTX_block_size(ctx);
+    if (out_len <= 0) {
+	ossl_raise(rb_eRangeError,
+		   "data too big to make output buffer: %ld bytes", in_len);
+    }
 
     if (NIL_P(str)) {
         str = rb_str_new(0, out_len);
@@ -366,7 +414,7 @@ ossl_cipher_update(int argc, VALUE *argv, VALUE self)
         rb_str_resize(str, out_len);
     }
 
-    if (!EVP_CipherUpdate(ctx, (unsigned char *)RSTRING_PTR(str), &out_len, in, in_len))
+    if (!ossl_cipher_update_long(ctx, (unsigned char *)RSTRING_PTR(str), &out_len, in, in_len))
 	ossl_raise(eCipherError, NULL);
     assert(out_len < RSTRING_LEN(str));
     rb_str_set_len(str, out_len);
@@ -506,17 +554,16 @@ ossl_cipher_set_auth_data(VALUE self, VALUE data)
 {
     EVP_CIPHER_CTX *ctx;
     unsigned char *in;
-    int in_len;
-    int out_len;
+    long in_len, out_len;
 
     StringValue(data);
 
     in = (unsigned char *) RSTRING_PTR(data);
-    in_len = RSTRING_LENINT(data);
+    in_len = RSTRING_LEN(data);
 
     GetCipher(self, ctx);
 
-    if (!EVP_CipherUpdate(ctx, NULL, &out_len, in, in_len))
+    if (!ossl_cipher_update_long(ctx, NULL, &out_len, in, in_len))
         ossl_raise(eCipherError, "couldn't set additional authenticated data");
 
     return data;
