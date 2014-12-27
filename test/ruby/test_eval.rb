@@ -1,5 +1,4 @@
 require 'test/unit'
-require_relative 'envutil'
 
 class TestEval < Test::Unit::TestCase
 
@@ -189,6 +188,15 @@ class TestEval < Test::Unit::TestCase
         assert_equal 15,  o.instance_eval { Const }
       }
     end
+  end
+
+  def test_instance_eval_block_self
+    # instance_eval(&block)'s self must not be sticky (jruby/jruby#2060)
+    pr = proc { self }
+    assert_equal self, pr.call
+    o = Object.new
+    assert_equal o, o.instance_eval(&pr)
+    assert_equal self, pr.call
   end
 
   def test_instance_eval_cvar
@@ -483,5 +491,20 @@ class TestEval < Test::Unit::TestCase
            o.method(:bar).source_location[0]
 
     assert_same a, b
+  end
+
+  def test_gced_binding_block
+    assert_normal_exit %q{
+      def m
+        binding
+      end
+      GC.stress = true
+      b = nil
+      tap do
+        b = m {}
+      end
+      0.times.to_a
+      b.eval('yield')
+    }, '[Bug #10368]'
   end
 end

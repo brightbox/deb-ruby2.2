@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509ext.c 31166 2011-03-24 07:29:21Z naruse $
+ * $Id: ossl_x509ext.c 48813 2014-12-12 23:46:42Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(ext)) { \
 	ossl_raise(rb_eRuntimeError, "EXT wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, X509_EXTENSION_free, (ext)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509ext_type, (ext)); \
 } while (0)
 #define GetX509Ext(obj, ext) do { \
-    Data_Get_Struct((obj), X509_EXTENSION, (ext)); \
+    TypedData_Get_Struct((obj), X509_EXTENSION, &ossl_x509ext_type, (ext)); \
     if (!(ext)) { \
 	ossl_raise(rb_eRuntimeError, "EXT wasn't initialized!"); \
     } \
@@ -30,10 +30,10 @@
     if (!((ctx) = OPENSSL_malloc(sizeof(X509V3_CTX)))) \
         ossl_raise(rb_eRuntimeError, "CTX wasn't allocated!"); \
     X509V3_set_ctx((ctx), NULL, NULL, NULL, NULL, 0); \
-    (obj) = Data_Wrap_Struct((klass), 0, ossl_x509extfactory_free, (ctx)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509extfactory_type, (ctx)); \
 } while (0)
 #define GetX509ExtFactory(obj, ctx) do { \
-    Data_Get_Struct((obj), X509V3_CTX, (ctx)); \
+    TypedData_Get_Struct((obj), X509V3_CTX, &ossl_x509extfactory_type, (ctx)); \
     if (!(ctx)) { \
 	ossl_raise(rb_eRuntimeError, "CTX wasn't initialized!"); \
     } \
@@ -45,6 +45,20 @@
 VALUE cX509Ext;
 VALUE cX509ExtFactory;
 VALUE eX509ExtError;
+
+static void
+ossl_x509ext_free(void *ptr)
+{
+    X509_EXTENSION_free(ptr);
+}
+
+static const rb_data_type_t ossl_x509ext_type = {
+    "OpenSSL/X509/EXTENSION",
+    {
+	0, ossl_x509ext_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * Public
@@ -98,10 +112,18 @@ DupX509ExtPtr(VALUE obj)
  * Ext factory
  */
 static void
-ossl_x509extfactory_free(X509V3_CTX *ctx)
+ossl_x509extfactory_free(void *ctx)
 {
     OPENSSL_free(ctx);
 }
+
+static const rb_data_type_t ossl_x509extfactory_type = {
+    "OpenSSL/X509/EXTENSION/Factory",
+    {
+	0, ossl_x509extfactory_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 static VALUE
 ossl_x509extfactory_alloc(VALUE klass)
@@ -436,7 +458,7 @@ ossl_x509ext_to_der(VALUE obj)
  * INIT
  */
 void
-Init_ossl_x509ext()
+Init_ossl_x509ext(void)
 {
     eX509ExtError = rb_define_class_under(mX509, "ExtensionError", eOSSLError);
 

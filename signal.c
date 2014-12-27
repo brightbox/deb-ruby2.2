@@ -2,7 +2,7 @@
 
   signal.c -
 
-  $Author: ko1 $
+  $Author: nobu $
   created at: Tue Dec 20 10:13:44 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -11,16 +11,21 @@
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "vm_core.h"
 #include <signal.h>
 #include <stdio.h>
 #include <errno.h>
 #include "ruby_atomic.h"
 #include "eval_intern.h"
-#include "internal.h"
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+#ifdef HAVE_SYS_UIO_H
+#include <sys/uio.h>
+#endif
+#ifdef HAVE_UCONTEXT_H
+#include <ucontext.h>
 #endif
 
 #ifdef HAVE_VALGRIND_MEMCHECK_H
@@ -258,6 +263,18 @@ ruby_signal_name(int no)
     return signo2signm(no);
 }
 
+static VALUE
+rb_signo2signm(int signo)
+{
+    const char *const signm = signo2signm(signo);
+    if (signm) {
+	return rb_sprintf("SIG%s", signm);
+    }
+    else {
+	return rb_sprintf("SIG%u", signo);
+    }
+}
+
 /*
  * call-seq:
  *    SignalException.new(sig_name)              ->  signal_exception
@@ -290,13 +307,7 @@ esignal_init(int argc, VALUE *argv, VALUE self)
 	    sig = argv[1];
 	}
 	else {
-	    signm = signo2signm(signo);
-	    if (signm) {
-		sig = rb_sprintf("SIG%s", signm);
-	    }
-	    else {
-		sig = rb_sprintf("SIG%u", signo);
-	    }
+	    sig = rb_signo2signm(signo);
 	}
     }
     else {
@@ -351,6 +362,7 @@ ruby_default_signal(int sig)
     raise(sig);
 }
 
+static RETSIGTYPE sighandler(int sig);
 static int signal_ignored(int sig);
 static void signal_enque(int sig);
 
@@ -364,6 +376,8 @@ static void signal_enque(int sig);
  *  a POSIX signal name (either with or without a +SIG+ prefix). If _signal_ is
  *  negative (or starts with a minus sign), kills process groups instead of
  *  processes. Not all signals are available on all platforms.
+ *  The keys and values of +Signal.list+ are known signal names and numbers,
+ *  respectively.
  *
  *     pid = fork do
  *        Signal.trap("HUP") { puts "Ouch!"; exit }
@@ -459,6 +473,7 @@ rb_f_kill(int argc, const VALUE *argv)
 	    rb_pid_t pid = NUM2PIDT(argv[i]);
 
 	    if ((sig != 0) && (self != -1) && (pid == self)) {
+		int t;
 		/*
 		 * When target pid is self, many caller assume signal will be
 		 * delivered immediately and synchronously.
@@ -477,7 +492,12 @@ rb_f_kill(int argc, const VALUE *argv)
 		    ruby_kill(pid, sig);
 		    break;
 		  default:
-		    if (signal_ignored(sig)) break;
+		    t = signal_ignored(sig);
+		    if (t) {
+			if (t < 0 && kill(pid, sig))
+			    rb_sys_fail(0);
+			break;
+		    }
 		    signal_enque(sig);
 		    wakeup = 1;
 		}
@@ -522,7 +542,7 @@ int
 rb_sigaltstack_size(void)
 {
     /* XXX: BSD_vfprintf() uses >1500KiB stack and x86-64 need >5KiB stack. */
-    int size = 8192;
+    int size = 16*1024;
 
 #ifdef MINSIGSTKSZ
     if (size < MINSIGSTKSZ)
@@ -600,9 +620,7 @@ ruby_signal(int signum, sighandler_t handler)
     }
     (void)VALGRIND_MAKE_MEM_DEFINED(&old, sizeof(old));
     if (sigaction(signum, &sigact, &old) < 0) {
-	if (errno != 0 && errno != EINVAL) {
-	    rb_bug_errno("sigaction", errno);
-	}
+	return SIG_ERR;
     }
     if (old.sa_flags & SA_SIGINFO)
 	return (sighandler_t)old.sa_sigaction;
@@ -614,6 +632,17 @@ sighandler_t
 posix_signal(int signum, sighandler_t handler)
 {
     return ruby_signal(signum, handler);
+}
+
+#elif defined _WIN32
+static inline sighandler_t
+ruby_signal(int signum, sighandler_t handler)
+{
+    if (signum == SIGKILL) {
+	errno = EINVAL;
+	return SIG_ERR;
+    }
+    return signal(signum, handler);
 }
 
 #else /* !POSIX_SIGNAL */
@@ -634,16 +663,19 @@ ruby_nativethread_signal(int signum, sighandler_t handler)
 static int
 signal_ignored(int sig)
 {
+    sighandler_t func;
 #ifdef POSIX_SIGNAL
     struct sigaction old;
     (void)VALGRIND_MAKE_MEM_DEFINED(&old, sizeof(old));
     if (sigaction(sig, NULL, &old) < 0) return FALSE;
-    return old.sa_handler == SIG_IGN;
+    func = old.sa_handler;
 #else
     sighandler_t old = signal(sig, SIG_DFL);
     signal(sig, old);
-    return old == SIG_IGN;
+    func = old;
 #endif
+    if (func == SIG_IGN) return 1;
+    return func == sighandler ? 0 : -1;
 }
 
 static void
@@ -711,32 +743,45 @@ rb_get_next_signal(void)
     return sig;
 }
 
+#if defined SIGSEGV || defined SIGBUS || defined SIGILL || defined SIGFPE
+static const char *received_signal;
+# define clear_received_signal() (void)(received_signal = 0)
+#else
+# define clear_received_signal() ((void)0)
+#endif
 
 #if defined(USE_SIGALTSTACK) || defined(_WIN32)
 NORETURN(void ruby_thread_stack_overflow(rb_thread_t *th));
-#if !(defined(HAVE_UCONTEXT_H) && (defined __i386__ || defined __x86_64__))
-#elif defined __linux__
-# define USE_UCONTEXT_REG 1
-#elif defined __APPLE__
-# define USE_UCONTEXT_REG 1
-#endif
-#ifdef USE_UCONTEXT_REG
+# if !(defined(HAVE_UCONTEXT_H) && (defined __i386__ || defined __x86_64__ || defined __amd64__))
+# elif defined __linux__
+#   define USE_UCONTEXT_REG 1
+# elif defined __APPLE__
+#   define USE_UCONTEXT_REG 1
+# elif defined __FreeBSD__
+#   define USE_UCONTEXT_REG 1
+# endif
+# ifdef USE_UCONTEXT_REG
 static void
 check_stack_overflow(const uintptr_t addr, const ucontext_t *ctx)
 {
+    const DEFINE_MCONTEXT_PTR(mctx, ctx);
 # if defined __linux__
-    const mcontext_t *mctx = &ctx->uc_mcontext;
 #   if defined REG_RSP
     const greg_t sp = mctx->gregs[REG_RSP];
 #   else
     const greg_t sp = mctx->gregs[REG_ESP];
 #   endif
 # elif defined __APPLE__
-    const mcontext_t mctx = ctx->uc_mcontext;
 #   if defined(__LP64__)
     const uintptr_t sp = mctx->__ss.__rsp;
 #   else
     const uintptr_t sp = mctx->__ss.__esp;
+#   endif
+# elif defined __FreeBSD__
+#   if defined(__amd64__)
+    const __register_t sp = mctx->mc_rsp;
+#   else
+    const __register_t sp = mctx->mc_esp;
 #   endif
 # endif
     enum {pagesize = 4096};
@@ -753,42 +798,51 @@ check_stack_overflow(const uintptr_t addr, const ucontext_t *ctx)
 	     * place. */
 	    th->tag = th->tag->prev;
 	}
+	clear_received_signal();
 	ruby_thread_stack_overflow(th);
     }
 }
-#else
+# else
 static void
 check_stack_overflow(const void *addr)
 {
     int ruby_stack_overflowed_p(const rb_thread_t *, const void *);
     rb_thread_t *th = ruby_current_thread;
     if (ruby_stack_overflowed_p(th, addr)) {
+	clear_received_signal();
 	ruby_thread_stack_overflow(th);
     }
 }
-#endif
-#ifdef _WIN32
-#define CHECK_STACK_OVERFLOW() check_stack_overflow(0)
+# endif
+# ifdef _WIN32
+#   define CHECK_STACK_OVERFLOW() check_stack_overflow(0)
+# else
+#   define FAULT_ADDRESS info->si_addr
+#   ifdef USE_UCONTEXT_REG
+#     define CHECK_STACK_OVERFLOW() check_stack_overflow((uintptr_t)FAULT_ADDRESS, ctx)
+#   else
+#     define CHECK_STACK_OVERFLOW() check_stack_overflow(FAULT_ADDRESS)
+#   endif
+#   define MESSAGE_FAULT_ADDRESS " at %p", FAULT_ADDRESS
+# endif
 #else
-#define FAULT_ADDRESS info->si_addr
-# ifdef USE_UCONTEXT_REG
-# define CHECK_STACK_OVERFLOW() check_stack_overflow((uintptr_t)FAULT_ADDRESS, ctx)
-#else
-# define CHECK_STACK_OVERFLOW() check_stack_overflow(FAULT_ADDRESS)
-#endif
-#define MESSAGE_FAULT_ADDRESS " at %p", FAULT_ADDRESS
-#endif
-#else
-#define CHECK_STACK_OVERFLOW() (void)0
+# define CHECK_STACK_OVERFLOW() (void)0
 #endif
 #ifndef MESSAGE_FAULT_ADDRESS
-#define MESSAGE_FAULT_ADDRESS
+# define MESSAGE_FAULT_ADDRESS
 #endif
+
+#if defined SIGSEGV || defined SIGBUS || defined SIGILL || defined SIGFPE
+NOINLINE(static void check_reserved_signal_(const char *name, size_t name_len));
+/* noinine to reduce stack usage in signal handers */
+
+#define check_reserved_signal(name) check_reserved_signal_(name, sizeof(name)-1)
 
 #ifdef SIGBUS
 static RETSIGTYPE
 sigbus(int sig SIGINFO_ARG)
 {
+    check_reserved_signal("BUS");
 /*
  * Mac OS X makes KERN_PROTECTION_FAILURE when thread touch guard page.
  * and it's delivered as SIGBUS instead of SIGSEGV to userland. It's crazy
@@ -801,7 +855,6 @@ sigbus(int sig SIGINFO_ARG)
 }
 #endif
 
-#ifdef SIGSEGV
 static void
 ruby_abort(void)
 {
@@ -816,25 +869,61 @@ ruby_abort(void)
 
 }
 
-static int segv_received = 0;
-extern int ruby_disable_gc;
-
+#ifdef SIGSEGV
 static RETSIGTYPE
 sigsegv(int sig SIGINFO_ARG)
 {
-    if (segv_received) {
-	ssize_t RB_UNUSED_VAR(err);
-	static const char msg[] = "SEGV received in SEGV handler\n";
+    check_reserved_signal("SEGV");
+    CHECK_STACK_OVERFLOW();
+    rb_bug_context(SIGINFO_CTX, "Segmentation fault" MESSAGE_FAULT_ADDRESS);
+}
+#endif
 
-	err = write(2, msg, sizeof(msg));
+#ifdef SIGILL
+static RETSIGTYPE
+sigill(int sig SIGINFO_ARG)
+{
+    check_reserved_signal("ILL");
+#if defined __APPLE__
+    CHECK_STACK_OVERFLOW();
+#endif
+    rb_bug_context(SIGINFO_CTX, "Illegal instruction" MESSAGE_FAULT_ADDRESS);
+}
+#endif
+
+static void
+check_reserved_signal_(const char *name, size_t name_len)
+{
+    const char *prev = ATOMIC_PTR_EXCHANGE(received_signal, name);
+
+    if (prev) {
+	ssize_t RB_UNUSED_VAR(err);
+#define NOZ(name, str) name[sizeof(str)-1] = str
+	static const char NOZ(msg1, " received in ");
+	static const char NOZ(msg2, " handler\n");
+
+#ifdef HAVE_WRITEV
+	struct iovec iov[4];
+
+	iov[0].iov_base = (void *)name;
+	iov[0].iov_len = name_len;
+	iov[1].iov_base = (void *)msg1;
+	iov[1].iov_len = sizeof(msg1);
+	iov[2].iov_base = (void *)prev;
+	iov[2].iov_len = strlen(prev);
+	iov[3].iov_base = (void *)msg2;
+	iov[3].iov_len = sizeof(msg2);
+	err = writev(2, iov, 4);
+#else
+	err = write(2, name, name_len);
+	err = write(2, msg1, sizeof(msg1));
+	err = write(2, prev, strlen(prev));
+	err = write(2, msg2, sizeof(msg2));
+#endif
 	ruby_abort();
     }
 
-    CHECK_STACK_OVERFLOW();
-
-    segv_received = 1;
     ruby_disable_gc = 1;
-    rb_bug_context(SIGINFO_CTX, "Segmentation fault" MESSAGE_FAULT_ADDRESS);
 }
 #endif
 
@@ -1085,7 +1174,13 @@ trap(int sig, sighandler_t func, VALUE command)
      * atomically. In current implementation, we only need to don't call
      * RUBY_VM_CHECK_INTS().
      */
-    oldfunc = ruby_signal(sig, func);
+    if (sig == 0) {
+	oldfunc = SIG_ERR;
+    }
+    else {
+	oldfunc = ruby_signal(sig, func);
+	if (oldfunc == SIG_ERR) rb_sys_fail_str(rb_signo2signm(sig));
+    }
     oldcmd = vm->trap_list[sig].cmd;
     switch (oldcmd) {
       case 0:
@@ -1225,37 +1320,42 @@ sig_list(void)
     return h;
 }
 
-static void
+static int
 install_sighandler(int signum, sighandler_t handler)
 {
     sighandler_t old;
 
-    /* At this time, there is no subthread. Then sigmask guarantee atomics. */
-    rb_disable_interrupt();
     old = ruby_signal(signum, handler);
+    if (old == SIG_ERR) return -1;
     /* signal handler should be inherited during exec. */
     if (old != SIG_DFL) {
 	ruby_signal(signum, old);
     }
-    rb_enable_interrupt();
+    return 0;
 }
+#ifndef __native_client__
+#  define install_sighandler(signum, handler) (install_sighandler(signum, handler) ? rb_bug(#signum) : (void)0)
+#endif
 
 #if defined(SIGCLD) || defined(SIGCHLD)
-static void
+static int
 init_sigchld(int sig)
 {
     sighandler_t oldfunc;
 
-    rb_disable_interrupt();
     oldfunc = ruby_signal(sig, SIG_DFL);
+    if (oldfunc == SIG_ERR) return -1;
     if (oldfunc != SIG_DFL && oldfunc != SIG_IGN) {
 	ruby_signal(sig, oldfunc);
     }
     else {
 	GET_VM()->trap_list[sig].cmd = 0;
     }
-    rb_enable_interrupt();
+    return 0;
 }
+#  ifndef __native_client__
+#    define init_sigchld(signum) (init_sigchld(signum) ? rb_bug(#signum) : (void)0)
+#  endif
 #endif
 
 void
@@ -1327,6 +1427,9 @@ Init_signal(void)
     rb_alias(rb_eSignal, rb_intern_const("signm"), rb_intern_const("message"));
     rb_define_method(rb_eInterrupt, "initialize", interrupt_init, -1);
 
+    /* At this time, there is no subthread. Then sigmask guarantee atomics. */
+    rb_disable_interrupt();
+
     install_sighandler(SIGINT, sighandler);
 #ifdef SIGHUP
     install_sighandler(SIGHUP, sighandler);
@@ -1351,6 +1454,9 @@ Init_signal(void)
 #ifdef SIGBUS
 	install_sighandler(SIGBUS, (sighandler_t)sigbus);
 #endif
+#ifdef SIGILL
+	install_sighandler(SIGILL, (sighandler_t)sigill);
+#endif
 #ifdef SIGSEGV
 # ifdef USE_SIGALTSTACK
 	rb_register_sigaltstack(GET_THREAD());
@@ -1367,4 +1473,6 @@ Init_signal(void)
 #elif defined(SIGCHLD)
     init_sigchld(SIGCHLD);
 #endif
+
+    rb_enable_interrupt();
 }

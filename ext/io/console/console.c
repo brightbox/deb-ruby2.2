@@ -3,17 +3,7 @@
  * console IO module
  */
 #include "ruby.h"
-#ifdef HAVE_RUBY_IO_H
 #include "ruby/io.h"
-#else
-#include "rubyio.h"
-/* assumes rb_io_t doesn't have pathv */
-#include "util.h"		/* for ruby_strdup() */
-#endif
-
-#ifndef HAVE_RB_IO_T
-typedef OpenFile rb_io_t;
-#endif
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -23,10 +13,6 @@ typedef OpenFile rb_io_t;
 #endif
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
-#endif
-
-#ifndef RB_TYPE_P
-#define RB_TYPE_P(obj, type) (TYPE(obj) == type)
 #endif
 
 #if defined HAVE_TERMIOS_H
@@ -91,11 +77,7 @@ getattr(int fd, conmode *t)
 #define SET_LAST_ERROR (0)
 #endif
 
-#ifndef InitVM
-#define InitVM(ext) {void InitVM_##ext(void);InitVM_##ext();}
-#endif
-
-static ID id_getc, id_console;
+static ID id_getc, id_console, id_close;
 
 typedef struct {
     int vmin;
@@ -107,23 +89,7 @@ rawmode_opt(int argc, VALUE *argv, rawmode_arg_t *opts)
 {
     rawmode_arg_t *optp = NULL;
     VALUE vopts;
-#ifdef HAVE_RB_SCAN_ARGS_OPTIONAL_HASH
     rb_scan_args(argc, argv, "0:", &vopts);
-#else
-    vopts = Qnil;
-    if (argc > 0) {
-	vopts = argv[--argc];
-	if (!NIL_P(vopts)) {
-# ifdef HAVE_RB_CHECK_HASH_TYPE
-	    vopts = rb_check_hash_type(vopts);
-	    if (NIL_P(vopts)) ++argc;
-# else
-	    Check_Type(vopts, T_HASH);
-# endif
-	}
-    }
-    rb_scan_args(argc, argv, "0");
-#endif
     if (!NIL_P(vopts)) {
 	VALUE vmin = rb_hash_aref(vopts, ID2SYM(rb_intern("min")));
 	VALUE vtime = rb_hash_aref(vopts, ID2SYM(rb_intern("time")));
@@ -232,15 +198,8 @@ set_ttymode(int fd, conmode *t, void (*setter)(conmode *, void *), void *arg)
     return setattr(fd, &r);
 }
 
-#ifdef GetReadFile
-#define GetReadFD(fptr) fileno(GetReadFile(fptr))
-#else
 #define GetReadFD(fptr) ((fptr)->fd)
-#endif
 
-#ifdef GetWriteFile
-#define GetWriteFD(fptr) fileno(GetWriteFile(fptr))
-#else
 static inline int
 get_write_fd(const rb_io_t *fptr)
 {
@@ -251,7 +210,6 @@ get_write_fd(const rb_io_t *fptr)
     return ofptr->fd;
 }
 #define GetWriteFD(fptr) get_write_fd(fptr)
-#endif
 
 #define FD_PER_IO 2
 
@@ -671,27 +629,49 @@ console_ioflush(VALUE io)
 /*
  * call-seq:
  *   IO.console      -> #<File:/dev/tty>
+ *   IO.console(sym, *args)
  *
  * Returns an File instance opened console.
+ *
+ * If +sym+ is given, it will be sent to the opened console with
+ * +args+ and the result will be returned instead of the console IO
+ * itself.
  *
  * You must require 'io/console' to use this method.
  */
 static VALUE
-console_dev(VALUE klass)
+console_dev(int argc, VALUE *argv, VALUE klass)
 {
     VALUE con = 0;
     rb_io_t *fptr;
+    VALUE sym = 0;
 
+    rb_check_arity(argc, 0, 1);
+    if (argc) {
+	Check_Type(sym = argv[0], T_SYMBOL);
+	--argc;
+	++argv;
+    }
     if (klass == rb_cIO) klass = rb_cFile;
     if (rb_const_defined(klass, id_console)) {
 	con = rb_const_get(klass, id_console);
-	if (RB_TYPE_P(con, T_FILE)) {
-	    if ((fptr = RFILE(con)->fptr) && GetReadFD(fptr) != -1)
-		return con;
+	if (!RB_TYPE_P(con, T_FILE) ||
+	    (!(fptr = RFILE(con)->fptr) || GetReadFD(fptr) == -1)) {
+	    rb_const_remove(klass, id_console);
+	    con = 0;
 	}
-	rb_mod_remove_const(klass, ID2SYM(id_console));
     }
-    {
+    if (sym) {
+	if (sym == ID2SYM(id_close) && !argc) {
+	    if (con) {
+		rb_io_close(con);
+		rb_const_remove(klass, id_console);
+		con = 0;
+	    }
+	    return Qnil;
+	}
+    }
+    if (!con) {
 	VALUE args[2];
 #if defined HAVE_TERMIOS_H || defined HAVE_TERMIO_H || defined HAVE_SGTTY_H
 # define CONSOLE_DEVICE "/dev/tty"
@@ -729,24 +709,19 @@ console_dev(VALUE klass)
 	args[0] = INT2NUM(fd);
 	con = rb_class_new_instance(2, args, klass);
 	GetOpenFile(con, fptr);
-#ifdef HAVE_RUBY_IO_H
 	fptr->pathv = rb_obj_freeze(rb_str_new2(CONSOLE_DEVICE));
-#else
-	fptr->path = ruby_strdup(CONSOLE_DEVICE);
-#endif
 #ifdef CONSOLE_DEVICE_FOR_WRITING
 	GetOpenFile(out, ofptr);
-# ifdef HAVE_RB_IO_GET_WRITE_IO
 	ofptr->pathv = fptr->pathv;
 	fptr->tied_io_for_writing = out;
-# else
-	fptr->f2 = ofptr->f;
-	ofptr->f = 0;
-# endif
 	ofptr->mode |= FMODE_SYNC;
 #endif
 	fptr->mode |= FMODE_SYNC;
 	rb_const_set(klass, id_console, con);
+    }
+    if (sym) {
+	/* TODO: avoid inadvertent pindown */
+	return rb_funcall(con, SYM2ID(sym), argc, argv);
     }
     return con;
 }
@@ -771,6 +746,7 @@ Init_console(void)
 {
     id_getc = rb_intern("getc");
     id_console = rb_intern("console");
+    id_close = rb_intern("close");
     InitVM(console);
 }
 
@@ -790,7 +766,7 @@ InitVM_console(void)
     rb_define_method(rb_cIO, "iflush", console_iflush, 0);
     rb_define_method(rb_cIO, "oflush", console_oflush, 0);
     rb_define_method(rb_cIO, "ioflush", console_ioflush, 0);
-    rb_define_singleton_method(rb_cIO, "console", console_dev, 0);
+    rb_define_singleton_method(rb_cIO, "console", console_dev, -1);
     {
 	VALUE mReadable = rb_define_module_under(rb_cIO, "generic_readable");
 	rb_define_method(mReadable, "getch", io_getch, -1);

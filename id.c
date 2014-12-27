@@ -55,6 +55,9 @@ Init_id(void)
     REGISTER_SYMID(idTo_i, "to_i");
     REGISTER_SYMID(idBt, "bt");
     REGISTER_SYMID(idBt_locations, "bt_locations");
+    REGISTER_SYMID(idCall, "call");
+    REGISTER_SYMID(idMesg, "mesg");
+    REGISTER_SYMID(idException, "exception");
     REGISTER_SYMID(idUScore, "_");
     REGISTER_SYMID(idNULL, ""/*NULL*/"");
     REGISTER_SYMID(idEmptyP, "empty?");

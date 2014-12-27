@@ -2,7 +2,7 @@
 
   array.c -
 
-  $Author: ko1 $
+  $Author: nobu $
   created at: Fri Aug  6 09:46:12 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -11,11 +11,9 @@
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/util.h"
 #include "ruby/st.h"
-#include "ruby/encoding.h"
-#include "internal.h"
 #include "probes.h"
 #include "id.h"
 
@@ -474,16 +472,13 @@ ary_new(VALUE klass, long capa)
 	RUBY_DTRACE_ARRAY_CREATE(capa, rb_sourcefile(), rb_sourceline());
     }
 
+    ary = ary_alloc(klass);
     if (capa > RARRAY_EMBED_LEN_MAX) {
 	ptr = ALLOC_N(VALUE, capa);
-	ary = ary_alloc(klass);
         FL_UNSET_EMBED(ary);
         ARY_SET_PTR(ary, ptr);
         ARY_SET_CAPA(ary, capa);
         ARY_SET_HEAP_LEN(ary, 0);
-    }
-    else {
-	ary = ary_alloc(klass);
     }
 
     return ary;
@@ -502,7 +497,7 @@ rb_ary_new(void)
 }
 
 VALUE
-rb_ary_new_from_args(long n, ...)
+(rb_ary_new_from_args)(long n, ...)
 {
     va_list ar;
     VALUE ary;
@@ -1606,6 +1601,7 @@ rb_ary_splice(VALUE ary, long beg, long len, VALUE rpl)
 	    MEMMOVE(RARRAY_PTR(ary) + beg, RARRAY_CONST_PTR(rpl), VALUE, rlen);
 	}
     }
+    RB_GC_GUARD(rpl);
 }
 
 void
@@ -3529,6 +3525,13 @@ rb_ary_fill(int argc, VALUE *argv, VALUE ary)
  *     c                         #=> [ "a", "b", "c", "d", "e", "f" ]
  *     a                         #=> [ "a", "b", "c" ]
  *
+ *  Note that
+ *     x += y
+ *  is the same as
+ *     x = x + y
+ *  This means that it produces a new array. As a consequence,
+ *  repeated use of <code>+=</code> on arrays can be quite inefficient.
+ *
  *  See also Array#concat.
  */
 
@@ -3846,9 +3849,15 @@ VALUE
 rb_ary_includes(VALUE ary, VALUE item)
 {
     long i;
+    VALUE e;
 
     for (i=0; i<RARRAY_LEN(ary); i++) {
-	if (rb_equal(RARRAY_AREF(ary, i), item)) {
+	e = RARRAY_AREF(ary, i);
+	switch (rb_equal_opt(e, item)) {
+	  case Qundef:
+	    if (rb_equal(e, item)) return Qtrue;
+	    break;
+	  case Qtrue:
 	    return Qtrue;
 	}
     }
@@ -3982,6 +3991,7 @@ ary_recycle_hash(VALUE hash)
 	RHASH(hash)->ntbl = 0;
 	st_free_table(tbl);
     }
+    RB_GC_GUARD(hash);
 }
 
 /*
@@ -4005,7 +4015,7 @@ static VALUE
 rb_ary_diff(VALUE ary1, VALUE ary2)
 {
     VALUE ary3;
-    volatile VALUE hash;
+    VALUE hash;
     long i;
 
     hash = ary_make_hash(to_ary(ary2));

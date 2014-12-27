@@ -49,6 +49,8 @@ extern "C" {
 #define PRINTF_ARGS(decl, string_index, first_to_check) decl
 #endif
 
+#define RUBY_MACRO_SELECT(base, n) TOKEN_PASTE(base, n)
+
 #ifdef HAVE_INTRINSICS_H
 # include <intrinsics.h>
 #endif
@@ -121,20 +123,21 @@ typedef char ruby_check_sizeof_voidp[SIZEOF_VOIDP == sizeof(void*) ? 1 : -1];
 #define PRI_64_PREFIX PRI_LL_PREFIX
 #endif
 
+#define RUBY_PRI_VALUE_MARK "\v"
 #if defined PRIdPTR && !defined PRI_VALUE_PREFIX
 #define PRIdVALUE PRIdPTR
 #define PRIoVALUE PRIoPTR
 #define PRIuVALUE PRIuPTR
 #define PRIxVALUE PRIxPTR
 #define PRIXVALUE PRIXPTR
-#define PRIsVALUE PRIiPTR
+#define PRIsVALUE PRIiPTR"" RUBY_PRI_VALUE_MARK
 #else
 #define PRIdVALUE PRI_VALUE_PREFIX"d"
 #define PRIoVALUE PRI_VALUE_PREFIX"o"
 #define PRIuVALUE PRI_VALUE_PREFIX"u"
 #define PRIxVALUE PRI_VALUE_PREFIX"x"
 #define PRIXVALUE PRI_VALUE_PREFIX"X"
-#define PRIsVALUE PRI_VALUE_PREFIX"i"
+#define PRIsVALUE PRI_VALUE_PREFIX"i" RUBY_PRI_VALUE_MARK
 #endif
 #ifndef PRI_VALUE_PREFIX
 # define PRI_VALUE_PREFIX ""
@@ -228,7 +231,7 @@ typedef char ruby_check_sizeof_voidp[SIZEOF_VOIDP == sizeof(void*) ? 1 : -1];
 #define FIXNUM_MAX (LONG_MAX>>1)
 #define FIXNUM_MIN RSHIFT((long)LONG_MIN,1)
 
-#define INT2FIX(i) ((VALUE)(((SIGNED_VALUE)(i))<<1 | FIXNUM_FLAG))
+#define INT2FIX(i) (((VALUE)(i))<<1 | FIXNUM_FLAG)
 #define LONG2FIX(i) INT2FIX(i)
 #define rb_fix_new(v) INT2FIX(v)
 VALUE rb_int2inum(SIGNED_VALUE);
@@ -486,6 +489,18 @@ enum ruby_value_type {
 static inline int rb_type(VALUE obj);
 #define TYPE(x) rb_type((VALUE)(x))
 
+#define RB_FLOAT_TYPE_P(obj) (FLONUM_P(obj) || (!SPECIAL_CONST_P(obj) && BUILTIN_TYPE(obj) == T_FLOAT))
+
+#define RB_TYPE_P(obj, type) ( \
+	((type) == T_FIXNUM) ? FIXNUM_P(obj) : \
+	((type) == T_TRUE) ? ((obj) == Qtrue) : \
+	((type) == T_FALSE) ? ((obj) == Qfalse) : \
+	((type) == T_NIL) ? ((obj) == Qnil) : \
+	((type) == T_UNDEF) ? ((obj) == Qundef) : \
+	((type) == T_SYMBOL) ? SYMBOL_P(obj) : \
+	((type) == T_FLOAT) ? RB_FLOAT_TYPE_P(obj) : \
+	(!SPECIAL_CONST_P(obj) && BUILTIN_TYPE(obj) == (type)))
+
 /* RB_GC_GUARD_PTR() is an intermediate macro, and has no effect by
  * itself.  don't use it directly */
 #ifdef __GNUC__
@@ -531,6 +546,13 @@ void rb_check_safe_obj(VALUE);
     StringValue(v);\
     rb_check_safe_obj(v);\
 } while (0)
+#if defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))
+void rb_check_safe_str(VALUE) __attribute__((error("rb_check_safe_str() and Check_SafeStr() are obsolete; use SafeStringValue() instead")));
+# define Check_SafeStr(v) rb_check_safe_str((VALUE)(v))
+#else
+# define rb_check_safe_str(x) [<"rb_check_safe_str() is obsolete; use SafeStringValue() instead">]
+# define Check_SafeStr(v) [<"Check_SafeStr() is obsolete; use SafeStringValue() instead">]
+#endif
 
 VALUE rb_str_export(VALUE);
 #define ExportStringValue(v) do {\
@@ -555,11 +577,24 @@ int ruby_safe_level_4_warning(void) __attribute__((warning("$SAFE=4 is obsolete"
 # ifdef RUBY_EXPORT
 #   define ruby_safe_level_4_warning() ruby_safe_level_4_error()
 # endif
-#define RUBY_SAFE_LEVEL_INVALID_P(level) \
+#if defined(HAVE_BUILTIN___BUILTIN_CHOOSE_EXPR_CONSTANT_P)
+# define RUBY_SAFE_LEVEL_INVALID_P(level) \
+    __extension__(\
+	__builtin_choose_expr(\
+	    __builtin_constant_p(level), \
+	    ((level) < 0 || RUBY_SAFE_LEVEL_MAX < (level)), 0))
+# define RUBY_SAFE_LEVEL_CHECK(level, type) \
+    __extension__(__builtin_choose_expr(RUBY_SAFE_LEVEL_INVALID_P(level), ruby_safe_level_4_##type(), (level)))
+#else
+/* in gcc 4.8 or earlier, __builtin_choose_expr() does not consider
+ * __builtin_constant_p(variable) a constant expression.
+ */
+# define RUBY_SAFE_LEVEL_INVALID_P(level) \
     __extension__(__builtin_constant_p(level) && \
 		  ((level) < 0 || RUBY_SAFE_LEVEL_MAX < (level)))
-#define RUBY_SAFE_LEVEL_CHECK(level, type) \
+# define RUBY_SAFE_LEVEL_CHECK(level, type) \
     (RUBY_SAFE_LEVEL_INVALID_P(level) ? ruby_safe_level_4_##type() : (level))
+#endif
 #define rb_secure(level) rb_secure(RUBY_SAFE_LEVEL_CHECK(level, warning))
 #define rb_set_safe_level(level) rb_set_safe_level(RUBY_SAFE_LEVEL_CHECK(level, error))
 #endif
@@ -966,6 +1001,13 @@ struct RTypedData {
 */
 typedef void (*RUBY_DATA_FUNC)(void*);
 
+#ifndef RUBY_UNTYPED_DATA_WARNING
+# if defined RUBY_EXPORT
+#   define RUBY_UNTYPED_DATA_WARNING 1
+# else
+#   define RUBY_UNTYPED_DATA_WARNING 0
+# endif
+#endif
 VALUE rb_data_object_alloc(VALUE,void*,RUBY_DATA_FUNC,RUBY_DATA_FUNC);
 VALUE rb_data_typed_object_alloc(VALUE klass, void *datap, const rb_data_type_t *);
 int rb_typeddata_inherited_p(const rb_data_type_t *child, const rb_data_type_t *parent);
@@ -979,7 +1021,8 @@ void *rb_check_typeddata(VALUE, const rb_data_type_t *);
 
 /* bits for rb_data_type_struct::flags */
 #define RUBY_TYPED_FREE_IMMEDIATELY  1 /* TYPE field */
-#define RUBY_TYPED_WB_PROTECTED      FL_WB_PROTECTED
+#define RUBY_TYPED_WB_PROTECTED      FL_WB_PROTECTED /* THIS FLAG DEPENDS ON Ruby version */
+#define RUBY_TYPED_PROMOTED1         FL_PROMOTED1    /* THIS FLAG DEPENDS ON Ruby version */
 
 #define Data_Wrap_Struct(klass,mark,free,sval)\
     rb_data_object_alloc((klass),(sval),(RUBY_DATA_FUNC)(mark),(RUBY_DATA_FUNC)(free))
@@ -997,14 +1040,11 @@ void *rb_check_typeddata(VALUE, const rb_data_type_t *);
     TypedData_Wrap_Struct((klass),(data_type),(sval))\
 )
 
-#define Data_Get_Struct(obj,type,sval) do {\
-    Check_Type((obj), T_DATA); \
-    (sval) = (type*)DATA_PTR(obj);\
-} while (0)
+#define Data_Get_Struct(obj,type,sval) \
+    ((sval) = (type*)rb_data_object_get(obj))
 
-#define TypedData_Get_Struct(obj,type,data_type,sval) do {\
-    (sval) = (type*)rb_check_typeddata((obj), (data_type)); \
-} while (0)
+#define TypedData_Get_Struct(obj,type,data_type,sval) \
+    ((sval) = (type*)rb_check_typeddata((obj), (data_type)))
 
 #define RSTRUCT_EMBED_LEN_MAX 3
 struct RStruct {
@@ -1108,17 +1148,62 @@ struct RStruct {
 #define OBJ_FREEZE_RAW(x) (RBASIC(x)->flags |= FL_FREEZE)
 #define OBJ_FREEZE(x) rb_obj_freeze_inline((VALUE)x)
 
+void rb_freeze_singleton_class(VALUE klass);
+
 static inline void
 rb_obj_freeze_inline(VALUE x)
 {
     if (FL_ABLE(x)) {
-	VALUE klass = RBASIC_CLASS(x);
 	OBJ_FREEZE_RAW(x);
-	if (FL_TEST(klass, (FL_SINGLETON|FL_FREEZE)) == FL_SINGLETON) {
-	    OBJ_FREEZE_RAW(klass);
+	if (RBASIC_CLASS(x) && !(RBASIC(x)->flags & FL_SINGLETON)) {
+	    rb_freeze_singleton_class(x);
 	}
     }
 }
+
+#if defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))
+# define RUBY_UNTYPED_DATA_FUNC(func) func __attribute__((warning("untyped Data is unsafe; use TypedData instead")))
+#else
+# define RUBY_UNTYPED_DATA_FUNC(func) DEPRECATED(func)
+#endif
+
+RUBY_UNTYPED_DATA_FUNC(static inline VALUE rb_data_object_alloc_warning(VALUE,void*,RUBY_DATA_FUNC,RUBY_DATA_FUNC));
+RUBY_UNTYPED_DATA_FUNC(static inline void *rb_data_object_get_warning(VALUE));
+
+static inline VALUE
+rb_data_object_alloc_warning(VALUE klass, void *ptr, RUBY_DATA_FUNC mark, RUBY_DATA_FUNC free)
+{
+    return rb_data_object_alloc(klass, ptr, mark, free);
+}
+
+#if defined(HAVE_BUILTIN___BUILTIN_CHOOSE_EXPR_CONSTANT_P)
+#define rb_data_object_alloc_warning(klass, ptr, mark, free) \
+    __extension__( \
+	__builtin_choose_expr( \
+	    __builtin_constant_p(klass) && !(klass), \
+	    rb_data_object_alloc(klass, ptr, mark, free), \
+	    rb_data_object_alloc_warning(klass, ptr, mark, free)))
+#endif
+
+static inline void *
+rb_data_object_get(VALUE obj)
+{
+    Check_Type(obj, T_DATA);
+    return ((struct RData *)obj)->data;
+}
+
+static inline void *
+rb_data_object_get_warning(VALUE obj)
+{
+    return rb_data_object_get(obj);
+}
+
+#define rb_data_object_alloc_0 rb_data_object_alloc
+#define rb_data_object_alloc_1 rb_data_object_alloc_warning
+#define rb_data_object_alloc  RUBY_MACRO_SELECT(rb_data_object_alloc_, RUBY_UNTYPED_DATA_WARNING)
+#define rb_data_object_get_0 rb_data_object_get
+#define rb_data_object_get_1 rb_data_object_get_warning
+#define rb_data_object_get  RUBY_MACRO_SELECT(rb_data_object_get_, RUBY_UNTYPED_DATA_WARNING)
 
 #if USE_RGENGC
 #define OBJ_PROMOTED_RAW(x)         ((RBASIC(x)->flags & (FL_PROMOTED0|FL_PROMOTED1)) == (FL_PROMOTED0|FL_PROMOTED1))
@@ -1256,7 +1341,7 @@ rb_ulong2num_inline(unsigned long v)
 static inline char
 rb_num2char_inline(VALUE x)
 {
-    if ((TYPE(x) == T_STRING) && (RSTRING_LEN(x)>=1))
+    if (RB_TYPE_P(x, T_STRING) && (RSTRING_LEN(x)>=1))
 	return RSTRING_PTR(x)[0];
     else
 	return (char)(NUM2INT(x) & 0xff);
@@ -1399,6 +1484,9 @@ VALUE rb_funcall_passing_block(VALUE, ID, int, const VALUE*);
 VALUE rb_funcall_with_block(VALUE, ID, int, const VALUE*, VALUE);
 int rb_scan_args(int, const VALUE*, const char*, ...);
 VALUE rb_call_super(int, const VALUE*);
+VALUE rb_current_receiver(void);
+int rb_get_kwargs(VALUE keyword_hash, const ID *table, int required, int optional, VALUE *);
+VALUE rb_extract_keywords(VALUE *orighash);
 
 /* rb_scan_args() format allows ':' for optional hash */
 #define HAVE_RB_SCAN_ARGS_OPTIONAL_HASH 1
@@ -1599,18 +1687,6 @@ rb_type(VALUE obj)
     return BUILTIN_TYPE(obj);
 }
 
-#define RB_FLOAT_TYPE_P(obj) (FLONUM_P(obj) || (!SPECIAL_CONST_P(obj) && BUILTIN_TYPE(obj) == T_FLOAT))
-
-#define RB_TYPE_P(obj, type) ( \
-	((type) == T_FIXNUM) ? FIXNUM_P(obj) : \
-	((type) == T_TRUE) ? ((obj) == Qtrue) : \
-	((type) == T_FALSE) ? ((obj) == Qfalse) : \
-	((type) == T_NIL) ? ((obj) == Qnil) : \
-	((type) == T_UNDEF) ? ((obj) == Qundef) : \
-	((type) == T_SYMBOL) ? SYMBOL_P(obj) : \
-        ((type) == T_FLOAT) ? RB_FLOAT_TYPE_P(obj) : \
-	(!SPECIAL_CONST_P(obj) && BUILTIN_TYPE(obj) == (type)))
-
 #ifdef __GNUC__
 #define rb_type_p(obj, type) \
     __extension__ (__builtin_constant_p(type) ? RB_TYPE_P((obj), (type)) : \
@@ -1679,7 +1755,7 @@ int ruby_native_thread_p(void);
 #define RUBY_INTERNAL_EVENT_OBJSPACE_MASK  0x7f00000
 #define RUBY_INTERNAL_EVENT_MASK          0xfffe0000
 
-typedef unsigned long rb_event_flag_t;
+typedef uint32_t rb_event_flag_t;
 typedef void (*rb_event_hook_func_t)(rb_event_flag_t evflag, VALUE data, VALUE self, ID mid, VALUE klass);
 
 #define RB_EVENT_HOOKS_HAVE_CALLBACK_DATA 1

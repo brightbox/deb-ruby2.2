@@ -90,12 +90,12 @@
 # License::
 #  Copyright (c) 2001 akira yamada <akira@ruby-lang.org>
 #  You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: uri.rb 31555 2011-05-13 20:03:21Z drbrain $
+# Revision:: $Id: uri.rb 48243 2014-11-03 00:33:44Z naruse $
 #
 
 module URI
   # :stopdoc:
-  VERSION_CODE = '000911'.freeze
+  VERSION_CODE = '001000'.freeze
   VERSION = VERSION_CODE.scan(/../).collect{|n| n.to_i}.join('.').freeze
   # :startdoc:
 

@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_bn.c 44909 2014-02-11 14:06:51Z akr $
+ * $Id: ossl_bn.c 48662 2014-12-01 06:38:04Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Technorama team <oss-ruby@technorama.net>
  * All rights reserved.
@@ -15,11 +15,11 @@
   if (!(bn)) { \
     ossl_raise(rb_eRuntimeError, "BN wasn't initialized!"); \
   } \
-  (obj) = Data_Wrap_Struct((klass), 0, BN_clear_free, (bn)); \
+  (obj) = TypedData_Wrap_Struct((klass), &ossl_bn_type, (bn)); \
 } while (0)
 
 #define GetBN(obj, bn) do { \
-  Data_Get_Struct((obj), BIGNUM, (bn)); \
+  TypedData_Get_Struct((obj), BIGNUM, &ossl_bn_type, (bn)); \
   if (!(bn)) { \
     ossl_raise(rb_eRuntimeError, "BN wasn't initialized!"); \
   } \
@@ -29,6 +29,25 @@
   OSSL_Check_Kind((obj), cBN); \
   GetBN((obj), (bn)); \
 } while (0)
+
+static void
+ossl_bn_free(void *ptr)
+{
+    BN_clear_free(ptr);
+}
+
+static size_t
+ossl_bn_size(const void *ptr)
+{
+    return sizeof(BIGNUM);
+}
+
+static const rb_data_type_t ossl_bn_type = {
+    "OpenSSL/BN",
+    {0, ossl_bn_free, ossl_bn_size,},
+    0, 0,
+    RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * Classes
@@ -773,7 +792,7 @@ ossl_bn_is_prime_fasttest(int argc, VALUE *argv, VALUE self)
  * (NOTE: ordering of methods is the same as in 'man bn')
  */
 void
-Init_ossl_bn()
+Init_ossl_bn(void)
 {
 #if 0
     mOSSL = rb_define_module("OpenSSL"); /* let rdoc know about mOSSL */

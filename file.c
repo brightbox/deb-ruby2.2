@@ -23,14 +23,16 @@
 #include <CoreFoundation/CFString.h>
 #endif
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/util.h"
 #include "dln.h"
-#include "internal.h"
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#ifdef HAVE_SYS_TIME_H
+# include <sys/time.h>
 #endif
 
 #ifdef HAVE_SYS_FILE_H
@@ -63,12 +65,15 @@ int flock(int, int);
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#if defined(__native_client__) && defined(NACL_NEWLIB)
-# include "nacl/utime.h"
-# include "nacl/stat.h"
-# include "nacl/unistd.h"
+#if defined(__native_client__)
+# if defined(NACL_NEWLIB)
+#  include "nacl/utime.h"
+#  include "nacl/stat.h"
+#  include "nacl/unistd.h"
+# else
+#  undef HAVE_UTIMENSAT
+# endif
 #endif
-
 
 #ifdef HAVE_SYS_MKDEV_H
 #include <sys/mkdev.h>
@@ -310,6 +315,38 @@ rb_str_normalize_ospath(const char *ptr, long len)
 
     return str;
 }
+
+static int
+ignored_char_p(const char *p, const char *e, rb_encoding *enc)
+{
+    unsigned char c;
+    if (p+3 > e) return 0;
+    switch ((unsigned char)*p) {
+      case 0xe2:
+	switch ((unsigned char)p[1]) {
+	  case 0x80:
+	    c = (unsigned char)p[2];
+	    /* c >= 0x200c && c <= 0x200f */
+	    if (c >= 0x8c && c <= 0x8f) return 3;
+	    /* c >= 0x202a && c <= 0x202e */
+	    if (c >= 0xaa && c <= 0xae) return 3;
+	    return 0;
+	  case 0x81:
+	    c = (unsigned char)p[2];
+	    /* c >= 0x206a && c <= 0x206f */
+	    if (c >= 0xaa && c <= 0xaf) return 3;
+	    return 0;
+	}
+	break;
+      case 0xef:
+	/* c == 0xfeff */
+	if ((unsigned char)p[1] == 0xbb &&
+	    (unsigned char)p[2] == 0xbf)
+	    return 3;
+	break;
+    }
+    return 0;
+}
 #endif
 
 static long
@@ -362,7 +399,7 @@ stat_memsize(const void *p)
 static const rb_data_type_t stat_data_type = {
     "stat",
     {NULL, RUBY_TYPED_DEFAULT_FREE, stat_memsize,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static VALUE
@@ -720,7 +757,7 @@ stat_atimespec(struct stat *st)
 #elif defined(HAVE_STRUCT_STAT_ST_ATIMESPEC)
     ts.tv_nsec = st->st_atimespec.tv_nsec;
 #elif defined(HAVE_STRUCT_STAT_ST_ATIMENSEC)
-    ts.tv_nsec = st->st_atimensec;
+    ts.tv_nsec = (long)st->st_atimensec;
 #else
     ts.tv_nsec = 0;
 #endif
@@ -744,7 +781,7 @@ stat_mtimespec(struct stat *st)
 #elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
     ts.tv_nsec = st->st_mtimespec.tv_nsec;
 #elif defined(HAVE_STRUCT_STAT_ST_MTIMENSEC)
-    ts.tv_nsec = st->st_mtimensec;
+    ts.tv_nsec = (long)st->st_mtimensec;
 #else
     ts.tv_nsec = 0;
 #endif
@@ -768,7 +805,7 @@ stat_ctimespec(struct stat *st)
 #elif defined(HAVE_STRUCT_STAT_ST_CTIMESPEC)
     ts.tv_nsec = st->st_ctimespec.tv_nsec;
 #elif defined(HAVE_STRUCT_STAT_ST_CTIMENSEC)
-    ts.tv_nsec = st->st_ctimensec;
+    ts.tv_nsec = (long)st->st_ctimensec;
 #else
     ts.tv_nsec = 0;
 #endif
@@ -1138,7 +1175,7 @@ rb_file_lstat(VALUE obj)
 static int
 rb_group_member(GETGROUPS_T gid)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || !defined(HAVE_GETGROUPS)
     return FALSE;
 #else
     int rv = FALSE;
@@ -1188,6 +1225,15 @@ rb_group_member(GETGROUPS_T gid)
 
 #if defined(S_IXGRP) && !defined(_WIN32) && !defined(__CYGWIN__)
 #define USE_GETEUID 1
+#endif
+
+#ifdef __native_client__
+// Although the NaCl toolchain contain eaccess() is it not yet
+// overridden by nacl_io.
+// TODO(sbc): Remove this once eaccess() is wired up correctly
+// in NaCl.
+# undef HAVE_EACCESS
+# undef USE_GETEUID
 #endif
 
 #ifndef HAVE_EACCESS
@@ -2529,7 +2575,7 @@ utime_internal(const char *path, VALUE pathv, void *arg)
     const struct timespec *tsp = v->tsp;
     struct timeval tvbuf[2], *tvp = NULL;
 
-#ifdef HAVE_UTIMENSAT
+#if defined(HAVE_UTIMENSAT)
     static int try_utimensat = 1;
 
     if (try_utimensat) {
@@ -3089,6 +3135,27 @@ ntfs_tail(const char *path, const char *end, rb_encoding *enc)
     buflen = RSTRING_LEN(result),\
     pend = p + buflen)
 
+#ifdef __APPLE__
+# define SKIPPATHSEP(p) ((*(p)) ? 1 : 0)
+#else
+# define SKIPPATHSEP(p) 1
+#endif
+
+#define BUFCOPY(srcptr, srclen) do { \
+    const int skip = SKIPPATHSEP(p); \
+    rb_str_set_len(result, p-buf+skip); \
+    BUFCHECK(bdiff + ((srclen)+skip) >= buflen); \
+    p += skip; \
+    memcpy(p, (srcptr), (srclen)); \
+    p += (srclen); \
+} while (0)
+
+#define WITH_ROOTDIFF(stmt) do { \
+    long rootdiff = root - buf; \
+    stmt; \
+    root = buf + rootdiff; \
+} while (0)
+
 static VALUE
 copy_home_path(VALUE result, const char *dir)
 {
@@ -3360,17 +3427,25 @@ rb_file_expand_path_internal(VALUE fname, VALUE dname, int abs_mode, int long_na
 	  case '\\':
 #endif
 	    if (s > b) {
-		long rootdiff = root - buf;
-		rb_str_set_len(result, p-buf+1);
-		BUFCHECK(bdiff + (s-b+1) >= buflen);
-		root = buf + rootdiff;
-		memcpy(++p, b, s-b);
-		p += s-b;
+		WITH_ROOTDIFF(BUFCOPY(b, s-b));
 		*p = '/';
 	    }
 	    b = ++s;
 	    break;
 	  default:
+#ifdef __APPLE__
+	    {
+		int n = ignored_char_p(s, fend, enc);
+		if (n) {
+		    if (s > b) {
+			WITH_ROOTDIFF(BUFCOPY(b, s-b));
+			*p = '\0';
+		    }
+		    b = s += n;
+		    break;
+		}
+	    }
+#endif
 	    Inc(s, fend, enc);
 	    break;
 	}
@@ -3392,10 +3467,7 @@ rb_file_expand_path_internal(VALUE fname, VALUE dname, int abs_mode, int long_na
 	    }
 	}
 #endif
-	rb_str_set_len(result, p-buf+1);
-	BUFCHECK(bdiff + (s-b) >= buflen);
-	memcpy(++p, b, s-b);
-	p += s-b;
+	BUFCOPY(b, s-b);
 	rb_str_set_len(result, p-buf);
     }
     if (p == skiproot(buf, p + !!*p, enc) - 1) p++;
@@ -4537,7 +4609,6 @@ rb_file_flock(VALUE obj, VALUE operation)
     }
     return INT2FIX(0);
 }
-#undef flock
 
 static void
 test_check(int n, int argc, VALUE *argv)
@@ -5502,9 +5573,6 @@ rb_path_check(const char *path)
 }
 
 #ifndef _WIN32
-#ifdef __native_client__
-__attribute__((noinline))
-#endif
 int
 rb_file_load_ok(const char *path)
 {
@@ -5609,6 +5677,7 @@ rb_find_file_ext_safe(VALUE *filep, const char *const *ext, int safe_level)
 	}
 	rb_str_set_len(fname, fnlen);
     }
+    rb_str_resize(tmp, 0);
     RB_GC_GUARD(load_path);
     return 0;
 }
@@ -5661,6 +5730,7 @@ rb_find_file_safe(VALUE path, int safe_level)
 		if (rb_file_load_ok(f)) goto found;
 	    }
 	}
+	rb_str_resize(tmp, 0);
 	return 0;
     }
     else {

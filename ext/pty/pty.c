@@ -33,10 +33,9 @@
 #endif
 #include <ctype.h>
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/util.h"
-#include "internal.h"
 
 #include <signal.h>
 #ifdef HAVE_SYS_STROPTS_H
@@ -590,11 +589,11 @@ pty_getpty(int argc, VALUE *argv, VALUE self)
 
     establishShell(argc, argv, &info, SlaveName);
 
-    rfptr->mode = rb_io_mode_flags("r");
+    rfptr->mode = rb_io_modestr_fmode("r");
     rfptr->fd = info.fd;
     rfptr->pathv = rb_obj_freeze(rb_str_new_cstr(SlaveName));
 
-    wfptr->mode = rb_io_mode_flags("w") | FMODE_SYNC;
+    wfptr->mode = rb_io_modestr_fmode("w") | FMODE_SYNC;
     wfptr->fd = rb_cloexec_dup(info.fd);
     if (wfptr->fd == -1)
         rb_sys_fail("dup()");
@@ -745,10 +744,10 @@ static VALUE cPTY;
  */
 
 void
-Init_pty()
+Init_pty(void)
 {
     cPTY = rb_define_module("PTY");
-    /* :nodoc */
+    /* :nodoc: */
     rb_define_module_function(cPTY,"getpty",pty_getpty,-1);
     rb_define_module_function(cPTY,"spawn",pty_getpty,-1);
     rb_define_singleton_method(cPTY,"check",pty_check,-1);

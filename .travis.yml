@@ -25,35 +25,48 @@ compiler:
   - gcc
   - clang
 
+os:
+  - linux
+  - osx
+
 # Dependencies.  Some  header files are missing  in a Travis' worker  VM, so we
 # have  to install  them.  The  "1.9.1" here  is OK.   It is  the  most adopted
 # version string  for Debian/Ubuntu, and  no dependencies have been  changed so
 # far since the 1.9.1 release.
 before_install:
-  - "sudo apt-get -qq update"
-  - "sudo apt-get -qq install $CC" # upgrade if any
-install: "sudo apt-get -qq build-dep ruby1.9.1 2>/dev/null"
+  - "if [[ $TRAVIS_OS_NAME = 'linux' ]]; then sudo apt-get -qq update; fi"
+  - "if [[ $TRAVIS_OS_NAME = 'linux' ]]; then sudo apt-get -qq install $CC; fi" # upgrade if any
+  - "if [[ $TRAVIS_OS_NAME = 'linux' ]]; then JOBS='-j'; fi"
+  - "if [[ $TRAVIS_OS_NAME = 'osx' ]]; then brew install autoconf openssl; fi"
+  - "if [[ $TRAVIS_OS_NAME = 'osx' ]]; then OPENSSL_FLAG=\"--with-openssl-dir=`brew --prefix openssl`\"; fi"
+  - "if [[ $TRAVIS_OS_NAME = 'osx' && $CC = 'gcc' ]]; then CC='gcc-4.9'; fi"
+install: "if [[ $TRAVIS_OS_NAME = 'linux' ]]; then sudo apt-get -qq build-dep ruby1.9.1 2>/dev/null; fi"
 
 # Script is where the test runs.  Note  we just do "make test", not other tests
 # like  test-all, test-rubyspec.   This is  because  they take  too much  time,
 # enough for Travis to shut down the VM as being stalled.
 before_script:
+  - "if [[ $TRAVIS_OS_NAME = 'osx' ]]; then rm -f ~/Library/Logs/DiagnosticReports/ruby_*.crash; fi"
   - "uname -a"
   - "uname -r"
   - "rm -fr .ext autom4te.cache"
   - "make -f common.mk BASERUBY=ruby srcdir=. update-config_files"
   - "autoconf"
   - "mkdir config_1st config_2nd"
-  - "./configure -C --with-gcc=$CC"
+  - "./configure -C --disable-install-doc --disable-install-rdoc --with-gcc=$CC $OPENSSL_FLAG"
   - "cp -pr config.status .ext/include config_1st"
   - "make reconfig"
   - "cp -pr config.status .ext/include config_2nd"
-  - "diff -ru config_1st config_2nd"
-  - "make -sj encs"
-  - "make -sj exts"
+  - "diff -ru config_1st config_2nd || true"
+  - "make -s $JOBS encs"
+  - "make -s $JOBS exts"
+  - "make update-rubyspec"
 script:
-  - "make test OPTS=-v"
-  - "make test-all TESTS='-qv -j2'"
+  - "make test"
+  - "make test-all TESTS='-q -j2'"
+  - "make test-rubyspec"
+after_failure:
+  - "if [[ $TRAVIS_OS_NAME = 'osx' ]]; then find ~/Library/Logs/DiagnosticReports -type f -name ruby_\\*.crash -ls -execdir cat {} \\; -delete; fi"
 
 # Branch matrix.  Not all branches are Travis-ready so we limit branches here.
 branches:

@@ -2,13 +2,13 @@
 
   readline.c - GNU Readline module
 
-  $Author: nobu $
+  $Author: akr $
   created at: Wed Jan 20 13:59:32 JST 1999
 
   Copyright (C) 1997-2008  Shugo Maeda
   Copyright (C) 2008-2013  Kouji Takao
 
-  $Id: readline.c 47555 2014-09-12 13:11:13Z nobu $
+  $Id: readline.c 48447 2014-11-15 11:49:06Z akr $
 
   Contact:
    - Kouji Takao <kouji dot takao at gmail dot com> (current maintainer)
@@ -33,10 +33,9 @@
 #include <editline/readline.h>
 #endif
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/thread.h"
-#include "internal.h"
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -1786,7 +1785,7 @@ username_completion_proc_call(VALUE self, VALUE str)
 }
 
 void
-Init_readline()
+Init_readline(void)
 {
     VALUE history, fcomp, ucomp, version;
 

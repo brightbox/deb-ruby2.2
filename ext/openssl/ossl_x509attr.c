@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509attr.c 41527 2013-06-21 07:39:15Z charliesome $
+ * $Id: ossl_x509attr.c 48809 2014-12-12 23:38:44Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001 Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(attr)) { \
 	ossl_raise(rb_eRuntimeError, "ATTR wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, X509_ATTRIBUTE_free, (attr)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509attr_type, (attr)); \
 } while (0)
 #define GetX509Attr(obj, attr) do { \
-    Data_Get_Struct((obj), X509_ATTRIBUTE, (attr)); \
+    TypedData_Get_Struct((obj), X509_ATTRIBUTE, &ossl_x509attr_type, (attr)); \
     if (!(attr)) { \
 	ossl_raise(rb_eRuntimeError, "ATTR wasn't initialized!"); \
     } \
@@ -32,6 +32,20 @@
  */
 VALUE cX509Attr;
 VALUE eX509AttrError;
+
+static void
+ossl_x509attr_free(void *ptr)
+{
+    X509_ATTRIBUTE_free(ptr);
+}
+
+static const rb_data_type_t ossl_x509attr_type = {
+    "OpenSSL/X509/ATTRIBUTE",
+    {
+	0, ossl_x509attr_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * Public
@@ -260,7 +274,7 @@ ossl_x509attr_to_der(VALUE self)
  * X509_ATTRIBUTE init
  */
 void
-Init_ossl_x509attr()
+Init_ossl_x509attr(void)
 {
     eX509AttrError = rb_define_class_under(mX509, "AttributeError", eOSSLError);
 

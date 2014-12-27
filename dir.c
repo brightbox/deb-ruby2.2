@@ -2,7 +2,7 @@
 
   dir.c -
 
-  $Author: akr $
+  $Author: nobu $
   created at: Wed Jan  5 09:51:01 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -11,8 +11,6 @@
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
-#include "ruby/encoding.h"
 #include "internal.h"
 
 #include <sys/types.h>
@@ -73,6 +71,16 @@ char *strchr(char*,char);
 #define rmdir(p) rb_w32_urmdir(p)
 #undef opendir
 #define opendir(p) rb_w32_uopendir(p)
+#endif
+
+#ifdef HAVE_SYS_ATTR_H
+#include <sys/attr.h>
+#endif
+
+#ifdef HAVE_GETATTRLIST
+# define USE_NAME_ON_FS 1
+#else
+# define USE_NAME_ON_FS 0
 #endif
 
 #ifdef __APPLE__
@@ -381,7 +389,7 @@ dir_memsize(const void *ptr)
 static const rb_data_type_t dir_data_type = {
     "dir",
     {dir_mark, dir_free, dir_memsize,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static VALUE dir_close(VALUE);
@@ -1055,6 +1063,7 @@ sys_warning_1(VALUE mesg)
 
 #define GLOB_ALLOC(type) ((type *)malloc(sizeof(type)))
 #define GLOB_ALLOC_N(type, n) ((type *)malloc(sizeof(type) * (n)))
+#define GLOB_REALLOC(ptr, size) realloc((ptr), (size))
 #define GLOB_FREE(ptr) free(ptr)
 #define GLOB_JUMP_TAG(status) (((status) == -1) ? rb_memerror() : rb_jump_tag(status))
 
@@ -1243,7 +1252,7 @@ glob_make_pattern(const char *p, const char *e, int flags, rb_encoding *enc)
 	else {
 	    const char *m = find_dirsep(p, e, flags, enc);
 	    const enum glob_pattern_type magic = has_magic(p, m, flags, enc);
-	    const enum glob_pattern_type non_magic = (HAVE_HFS || FNM_SYSCASE) ? PLAIN : ALPHA;
+	    const enum glob_pattern_type non_magic = (USE_NAME_ON_FS || FNM_SYSCASE) ? PLAIN : ALPHA;
 	    char *buf;
 
 	    if (!(FNM_SYSCASE || magic > non_magic) && !recursive && *m) {
@@ -1317,6 +1326,45 @@ join_path(const char *path, long len, int dirsep, const char *name, size_t namle
     return buf;
 }
 
+#ifdef HAVE_GETATTRLIST
+static char *
+replace_real_basename(char *path, long base, int hfs_p)
+{
+    u_int32_t attrbuf[(sizeof(attrreference_t) + MAXPATHLEN * 3 + sizeof(u_int32_t) - 1) / sizeof(u_int32_t) + 1];
+    struct attrlist al = {ATTR_BIT_MAP_COUNT, 0, ATTR_CMN_NAME};
+    const attrreference_t *ar = (void *)(attrbuf+1);
+    const char *name;
+    long len;
+    char *tmp;
+    IF_HAVE_HFS(VALUE utf8str = Qnil);
+
+    if (getattrlist(path, &al, attrbuf, sizeof(attrbuf), FSOPT_NOFOLLOW))
+	return path;
+
+    name = (char *)ar + ar->attr_dataoffset;
+    len = (long)ar->attr_length - 1;
+    if (name + len > (char *)attrbuf + sizeof(attrbuf))
+	return path;
+
+# if HAVE_HFS
+    if (hfs_p && has_nonascii(name, len)) {
+	if (!NIL_P(utf8str = rb_str_normalize_ospath(name, len))) {
+	    RSTRING_GETMEM(utf8str, name, len);
+	}
+    }
+# endif
+
+    tmp = GLOB_REALLOC(path, base + len + 1);
+    if (tmp) {
+	path = tmp;
+	memcpy(path + base, name, len);
+	path[base + len] = '\0';
+    }
+    IF_HAVE_HFS(if (!NIL_P(utf8str)) rb_str_resize(utf8str, 0));
+    return path;
+}
+#endif
+
 enum answer {UNKNOWN = -1, NO, YES};
 
 #ifndef S_ISDIR
@@ -1380,7 +1428,11 @@ glob_helper(
 	    plain = 1;
 	    break;
 	  case ALPHA:
+#ifdef HAVE_GETATTRLIST
+	    plain = 1;
+#else
 	    magical = 1;
+#endif
 	    break;
 	  case MAGICAL:
 	    magical = 2;
@@ -1603,6 +1655,12 @@ glob_helper(
 		    status = -1;
 		    break;
 		}
+#ifdef HAVE_GETATTRLIST
+		if ((*cur)->type == ALPHA) {
+		    long base = pathlen + (dirsep != 0);
+		    buf = replace_real_basename(buf, base, IF_HAVE_HFS(1)+0);
+		}
+#endif
 		status = glob_helper(buf, 1, UNKNOWN, UNKNOWN, new_beg,
 				     new_end, flags, func, arg, enc);
 		GLOB_FREE(buf);
@@ -1869,11 +1927,9 @@ dir_globs(long argc, const VALUE *argv, int flags)
 
 /*
  *  call-seq:
- *     Dir[ array ]                 -> array
  *     Dir[ string [, string ...] ] -> array
  *
  *  Equivalent to calling
- *  <code>Dir.glob(</code><i>array,</i><code>0)</code> and
  *  <code>Dir.glob([</code><i>string,...</i><code>],0)</code>.
  *
  */
@@ -2248,7 +2304,7 @@ dir_s_home(int argc, VALUE *argv, VALUE obj)
  *
  */
 VALUE
-rb_file_directory_p()
+rb_file_directory_p(void)
 {
 }
 #endif

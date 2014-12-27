@@ -1,5 +1,5 @@
 /* $RoughId: sha2init.c,v 1.3 2001/07/13 20:00:43 knu Exp $ */
-/* $Id: sha2init.c 26745 2010-02-24 00:31:37Z nobu $ */
+/* $Id: sha2init.c 47745 2014-09-30 08:29:02Z nobu $ */
 
 #include "digest.h"
 #if defined(SHA2_USE_OPENSSL)
@@ -29,7 +29,7 @@ FOREACH_BITLEN(DEFINE_ALGO_METADATA)
  * Standards and Technology), described in FIPS PUB 180-2.
  */
 void
-Init_sha2()
+Init_sha2(void)
 {
     VALUE mDigest, cDigest_Base;
     ID id_metadata;
@@ -50,7 +50,9 @@ Init_sha2()
     cDigest_SHA##bitlen = rb_define_class_under(mDigest, "SHA" #bitlen, cDigest_Base); \
 \
     rb_ivar_set(cDigest_SHA##bitlen, id_metadata, \
-      Data_Wrap_Struct(rb_cObject, 0, 0, (void *)&sha##bitlen));
+		Data_Wrap_Struct(0, 0, 0, (void *)&sha##bitlen));
 
+#undef RUBY_UNTYPED_DATA_WARNING
+#define RUBY_UNTYPED_DATA_WARNING 0
     FOREACH_BITLEN(DEFINE_ALGO_CLASS)
 }

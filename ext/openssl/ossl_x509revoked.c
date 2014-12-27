@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509revoked.c 31128 2011-03-19 03:30:59Z akr $
+ * $Id: ossl_x509revoked.c 48816 2014-12-12 23:59:36Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(rev)) { \
 	ossl_raise(rb_eRuntimeError, "REV wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, X509_REVOKED_free, (rev)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509rev_type, (rev)); \
 } while (0)
 #define GetX509Rev(obj, rev) do { \
-    Data_Get_Struct((obj), X509_REVOKED, (rev)); \
+    TypedData_Get_Struct((obj), X509_REVOKED, &ossl_x509rev_type, (rev)); \
     if (!(rev)) { \
 	ossl_raise(rb_eRuntimeError, "REV wasn't initialized!"); \
     } \
@@ -32,6 +32,20 @@
  */
 VALUE cX509Rev;
 VALUE eX509RevError;
+
+static void
+ossl_x509rev_free(void *ptr)
+{
+    X509_REVOKED_free(ptr);
+}
+
+static const rb_data_type_t ossl_x509rev_type = {
+    "OpenSSL/X509/REV",
+    {
+	0, ossl_x509rev_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * PUBLIC
@@ -209,7 +223,7 @@ ossl_x509revoked_add_extension(VALUE self, VALUE ext)
  * INIT
  */
 void
-Init_ossl_x509revoked()
+Init_ossl_x509revoked(void)
 {
     eX509RevError = rb_define_class_under(mX509, "RevokedError", eOSSLError);
 

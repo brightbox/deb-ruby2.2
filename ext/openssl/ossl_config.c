@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_config.c 44349 2013-12-22 18:21:14Z zzak $
+ * $Id: ossl_config.c 47744 2014-09-30 05:25:32Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -69,7 +69,7 @@ GetConfigPtr(VALUE obj)
  * INIT
  */
 void
-Init_ossl_config()
+Init_ossl_config(void)
 {
     char *default_config_file;
     eConfigError = rb_define_class_under(mOSSL, "ConfigError", eOSSLError);

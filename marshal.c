@@ -13,12 +13,10 @@
 # error too old GCC
 #endif
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/st.h"
 #include "ruby/util.h"
-#include "ruby/encoding.h"
-#include "internal.h"
 
 #include <math.h>
 #ifdef HAVE_FLOAT_H
@@ -87,6 +85,19 @@ static ID s_dump, s_load, s_mdump, s_mload;
 static ID s_dump_data, s_load_data, s_alloc, s_call;
 static ID s_getbyte, s_read, s_write, s_binmode;
 
+#define name_s_dump	"_dump"
+#define name_s_load	"_load"
+#define name_s_mdump	"marshal_dump"
+#define name_s_mload	"marshal_load"
+#define name_s_dump_data "_dump_data"
+#define name_s_load_data "_load_data"
+#define name_s_alloc	"_alloc"
+#define name_s_call	"call"
+#define name_s_getbyte	"getbyte"
+#define name_s_read	"read"
+#define name_s_write	"write"
+#define name_s_binmode	"binmode"
+
 typedef struct {
     VALUE newclass;
     VALUE oldclass;
@@ -153,13 +164,14 @@ struct dump_call_arg {
 };
 
 static void
-check_dump_arg(struct dump_arg *arg, ID sym)
+check_dump_arg(struct dump_arg *arg, const char *name)
 {
     if (!arg->symbols) {
         rb_raise(rb_eRuntimeError, "Marshal.dump reentered at %s",
-		 rb_id2name(sym));
+		 name);
     }
 }
+#define check_dump_arg(arg, sym) check_dump_arg(arg, name_##sym)
 
 static void clear_dump_arg(struct dump_arg *arg);
 
@@ -191,7 +203,7 @@ memsize_dump_arg(const void *ptr)
 static const rb_data_type_t dump_arg_data = {
     "dump_arg",
     {mark_dump_arg, free_dump_arg, memsize_dump_arg,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static VALUE
@@ -361,7 +373,6 @@ load_mantissa(double d, const char *buf, long len)
 static void
 w_float(double d, struct dump_arg *arg)
 {
-    char *ruby_dtoa(double d_, int mode, int ndigits, int *decpt, int *sign, char **rve);
     char buf[FLOAT_DIG + (DECIMAL_MANT + 7) / 8 + 10];
 
     if (isinf(d)) {
@@ -452,7 +463,7 @@ static void
 w_unique(VALUE s, struct dump_arg *arg)
 {
     must_not_be_anonymous("class", s);
-    w_symbol(rb_str_dynamic_intern(s), arg);
+    w_symbol(rb_str_intern(s), arg);
 }
 
 static void w_object(VALUE,struct dump_arg*,int);
@@ -495,7 +506,8 @@ w_class(char type, VALUE obj, struct dump_arg *arg, int check)
     st_data_t real_obj;
     VALUE klass;
 
-    if (st_lookup(arg->compat_tbl, (st_data_t)obj, &real_obj)) {
+    if (arg->compat_tbl &&
+		st_lookup(arg->compat_tbl, (st_data_t)obj, &real_obj)) {
         obj = (VALUE)real_obj;
     }
     klass = CLASS_OF(obj);
@@ -738,6 +750,9 @@ w_object(VALUE obj, struct dump_arg *arg, int limit)
                 marshal_compat_t *compat = (marshal_compat_t*)compat_data;
                 VALUE real_obj = obj;
                 obj = compat->dumper(real_obj);
+                if (!arg->compat_tbl) {
+                    arg->compat_tbl = st_init_numtable();
+                }
                 st_insert(arg->compat_tbl, (st_data_t)obj, (st_data_t)real_obj);
 		if (obj != real_obj && !ivtbl) hasiv = 0;
             }
@@ -911,8 +926,10 @@ clear_dump_arg(struct dump_arg *arg)
     arg->symbols = 0;
     st_free_table(arg->data);
     arg->data = 0;
-    st_free_table(arg->compat_tbl);
-    arg->compat_tbl = 0;
+    if (arg->compat_tbl) {
+	st_free_table(arg->compat_tbl);
+	arg->compat_tbl = 0;
+    }
     if (arg->encodings) {
 	st_free_table(arg->encodings);
 	arg->encodings = 0;
@@ -985,7 +1002,7 @@ marshal_dump(int argc, VALUE *argv)
     arg->symbols = st_init_numtable();
     arg->data    = st_init_numtable();
     arg->infection = 0;
-    arg->compat_tbl = st_init_numtable();
+    arg->compat_tbl = 0;
     arg->encodings = 0;
     arg->str = rb_str_buf_new(0);
     if (!NIL_P(port)) {
@@ -1029,13 +1046,14 @@ struct load_arg {
 };
 
 static void
-check_load_arg(struct load_arg *arg, ID sym)
+check_load_arg(struct load_arg *arg, const char *name)
 {
     if (!arg->symbols) {
         rb_raise(rb_eRuntimeError, "Marshal.load reentered at %s",
-		 rb_id2name(sym));
+		 name);
     }
 }
+#define check_load_arg(arg, sym) check_load_arg(arg, name_##sym)
 
 static void clear_load_arg(struct load_arg *arg);
 
@@ -1066,7 +1084,7 @@ memsize_load_arg(const void *ptr)
 static const rb_data_type_t load_arg_data = {
     "load_arg",
     {mark_load_arg, free_load_arg, memsize_load_arg,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 #define r_entry(v, arg) r_entry0((v), (arg)->data->num_entries, (arg))
@@ -1321,7 +1339,7 @@ r_symreal(struct load_arg *arg, int ivar)
 	}
     }
     if (idx > 0) rb_enc_associate_index(s, idx);
-    sym = rb_str_dynamic_intern(s);
+    sym = rb_str_intern(s);
     st_insert(arg->symbols, (st_data_t)n, (st_data_t)sym);
 
     return sym;
@@ -1365,7 +1383,7 @@ static VALUE
 r_entry0(VALUE v, st_index_t num, struct load_arg *arg)
 {
     st_data_t real_obj = (VALUE)Qundef;
-    if (st_lookup(arg->compat_tbl, v, &real_obj)) {
+    if (arg->compat_tbl && st_lookup(arg->compat_tbl, v, &real_obj)) {
         st_insert(arg->data, num, (st_data_t)real_obj);
     }
     else {
@@ -1384,7 +1402,7 @@ static VALUE
 r_fixup_compat(VALUE v, struct load_arg *arg)
 {
     st_data_t data;
-    if (st_lookup(arg->compat_tbl, v, &data)) {
+    if (arg->compat_tbl && st_lookup(arg->compat_tbl, v, &data)) {
         VALUE real_obj = (VALUE)data;
         rb_alloc_func_t allocator = rb_get_alloc_func(CLASS_OF(real_obj));
         st_data_t key = v;
@@ -1490,6 +1508,10 @@ obj_alloc_by_klass(VALUE klass, struct load_arg *arg, VALUE *oldclass)
         VALUE real_obj = rb_obj_alloc(klass);
         VALUE obj = rb_obj_alloc(compat->oldclass);
 	if (oldclass) *oldclass = compat->oldclass;
+
+        if (!arg->compat_tbl) {
+            arg->compat_tbl = st_init_numtable();
+        }
         st_insert(arg->compat_tbl, (st_data_t)obj, (st_data_t)real_obj);
         return obj;
     }
@@ -1950,8 +1972,10 @@ clear_load_arg(struct load_arg *arg)
     arg->symbols = 0;
     st_free_table(arg->data);
     arg->data = 0;
-    st_free_table(arg->compat_tbl);
-    arg->compat_tbl = 0;
+    if (arg->compat_tbl) {
+	st_free_table(arg->compat_tbl);
+	arg->compat_tbl = 0;
+    }
 }
 
 /*
@@ -1996,7 +2020,7 @@ marshal_load(int argc, VALUE *argv)
     arg->offset = 0;
     arg->symbols = st_init_numtable();
     arg->data    = st_init_numtable();
-    arg->compat_tbl = st_init_numtable();
+    arg->compat_tbl = 0;
     arg->proc = 0;
     arg->readable = 0;
 
@@ -2145,19 +2169,19 @@ Init_marshal(void)
 #define rb_intern(str) rb_intern_const(str)
 
     VALUE rb_mMarshal = rb_define_module("Marshal");
-
-    s_dump = rb_intern("_dump");
-    s_load = rb_intern("_load");
-    s_mdump = rb_intern("marshal_dump");
-    s_mload = rb_intern("marshal_load");
-    s_dump_data = rb_intern("_dump_data");
-    s_load_data = rb_intern("_load_data");
-    s_alloc = rb_intern("_alloc");
-    s_call = rb_intern("call");
-    s_getbyte = rb_intern("getbyte");
-    s_read = rb_intern("read");
-    s_write = rb_intern("write");
-    s_binmode = rb_intern("binmode");
+#define set_id(sym) sym = rb_intern_const(name_##sym)
+    set_id(s_dump);
+    set_id(s_load);
+    set_id(s_mdump);
+    set_id(s_mload);
+    set_id(s_dump_data);
+    set_id(s_load_data);
+    set_id(s_alloc);
+    set_id(s_call);
+    set_id(s_getbyte);
+    set_id(s_read);
+    set_id(s_write);
+    set_id(s_binmode);
 
     rb_define_module_function(rb_mMarshal, "dump", marshal_dump, -1);
     rb_define_module_function(rb_mMarshal, "load", marshal_load, -1);
@@ -2169,6 +2193,8 @@ Init_marshal(void)
     rb_define_const(rb_mMarshal, "MINOR_VERSION", INT2FIX(MARSHAL_MINOR));
 
     compat_allocator_tbl = st_init_numtable();
+#undef RUBY_UNTYPED_DATA_WARNING
+#define RUBY_UNTYPED_DATA_WARNING 0
     compat_allocator_tbl_wrapper =
 	Data_Wrap_Struct(rb_cData, mark_marshal_compat_t, 0, compat_allocator_tbl);
     rb_gc_register_mark_object(compat_allocator_tbl_wrapper);

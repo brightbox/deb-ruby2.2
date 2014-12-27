@@ -293,7 +293,7 @@ def extmake(target)
       unless $mswin
         $extflags = split_libs($extflags, $DLDFLAGS, $LDFLAGS).uniq.join(" ")
       end
-      $extlibs = merge_libs($extlibs, split_libs($libs), split_libs($LOCAL_LIBS))
+      $extlibs = merge_libs($extlibs, split_libs($libs, $LOCAL_LIBS).map {|lib| lib.sub(/\A\.\//, "ext/#{target}/")})
       $extpath |= $LIBPATH
     end
   ensure
@@ -697,6 +697,7 @@ if $configure_only and $command_output
     submakeopts = []
     if enable_config("shared", $enable_shared)
       submakeopts << 'DLDOBJS="$(EXTOBJS) $(ENCOBJS)"'
+      submakeopts << 'EXTOBJS='
       submakeopts << 'EXTSOLIBS="$(EXTLIBS)"'
       submakeopts << 'LIBRUBY_SO_UPDATE=$(LIBRUBY_EXTS)'
     else
@@ -704,6 +705,7 @@ if $configure_only and $command_output
       submakeopts << 'EXTLIBS="$(EXTLIBS)"'
     end
     submakeopts << 'EXTLDFLAGS="$(EXTLDFLAGS)"'
+    submakeopts << 'UPDATE_LIBRARIES="$(UPDATE_LIBRARIES)"'
     mf.macro "SUBMAKEOPTS", submakeopts
     mf.puts
     targets = %w[all install static install-so install-rb clean distclean realclean]
@@ -724,6 +726,7 @@ if $configure_only and $command_output
     rubies.each do |tgt|
       mf.puts "#{tgt}:\n\t#{submake} $@"
     end
+    mf.puts "ext/extinit.#{$OBJEXT}:\n\t$(Q)$(MAKE) $(MFLAGS) V=$(V) $@" if $static
     mf.puts
     if $gnumake == "yes"
       submake = "$(MAKE) -C $(@D)"

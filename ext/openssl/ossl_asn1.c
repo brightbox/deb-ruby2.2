@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_asn1.c 47048 2014-08-03 15:19:20Z nobu $
+ * $Id: ossl_asn1.c 47744 2014-09-30 05:25:32Z nobu $
  * 'OpenSSL for Ruby' team members
  * Copyright (C) 2003
  * All rights reserved.
@@ -1472,7 +1472,7 @@ OSSL_ASN1_IMPL_FACTORY_METHOD(Set)
 OSSL_ASN1_IMPL_FACTORY_METHOD(EndOfContent)
 
 void
-Init_ossl_asn1()
+Init_ossl_asn1(void)
 {
     VALUE ary;
     int i;

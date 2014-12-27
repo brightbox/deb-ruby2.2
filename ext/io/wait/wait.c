@@ -2,7 +2,7 @@
 
   io/wait.c -
 
-  $Author: zzak $
+  $Author: nobu $
   created at: Tue Aug 28 09:08:06 JST 2001
 
   All the files in this distribution are covered under the Ruby's
@@ -177,7 +177,7 @@ io_wait_writable(int argc, VALUE *argv, VALUE io)
  */
 
 void
-Init_wait()
+Init_wait(void)
 {
     rb_define_method(rb_cIO, "nread", io_nread, 0);
     rb_define_method(rb_cIO, "ready?", io_ready_p, 0);

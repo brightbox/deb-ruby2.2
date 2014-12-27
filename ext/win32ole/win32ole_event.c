@@ -86,7 +86,8 @@ static long ole_search_event_at(VALUE ary, VALUE ev);
 static VALUE ole_search_event(VALUE ary, VALUE ev, BOOL  *is_default);
 static VALUE ole_search_handler_method(VALUE handler, VALUE ev, BOOL *is_default_handler);
 static void ole_delete_event(VALUE ary, VALUE ev);
-static void ole_event_free(struct oleeventdata *poleev);
+static void oleevent_free(void *ptr);
+static size_t oleevent_size(const void *ptr);
 static VALUE fev_s_allocate(VALUE klass);
 static VALUE ev_advise(int argc, VALUE *argv, VALUE self);
 static VALUE fev_initialize(int argc, VALUE *argv, VALUE self);
@@ -104,6 +105,13 @@ static VALUE evs_push(VALUE ev);
 static VALUE evs_delete(long i);
 static VALUE evs_entry(long i);
 static long  evs_length(void);
+
+
+static const rb_data_type_t oleevent_datatype = {
+    "win32ole_event",
+    {NULL, oleevent_free, oleevent_size,},
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
+};
 
 STDMETHODIMP EVENTSINK_Invoke(
     PEVENTSINK pEventSink,
@@ -283,7 +291,8 @@ STDMETHODIMP EVENTSINK_GetIDsOfNames(
 }
 
 PIEVENTSINKOBJ
-EVENTSINK_Constructor() {
+EVENTSINK_Constructor(void)
+{
     PIEVENTSINKOBJ pEv;
     if (!g_IsEventSinkVtblInitialized) {
         vtEventSink.QueryInterface=EVENTSINK_QueryInterface;
@@ -476,7 +485,7 @@ find_iid(VALUE ole, char *pitf, IID *piid, ITypeInfo **ppTypeInfo)
     ITypeInfo *pImplTypeInfo;
     TYPEATTR *pImplTypeAttr;
 
-    struct oledata *pole;
+    struct oledata *pole = NULL;
     unsigned int index;
     unsigned int count;
     int type;
@@ -486,7 +495,7 @@ find_iid(VALUE ole, char *pitf, IID *piid, ITypeInfo **ppTypeInfo)
     BOOL is_found = FALSE;
     LCID    lcid = cWIN32OLE_lcid;
 
-    OLEData_Get_Struct(ole, pole);
+    pole = oledata_get_struct(ole);
 
     pDispatch = pole->pDispatch;
 
@@ -700,9 +709,9 @@ find_default_source(VALUE ole, IID *piid, ITypeInfo **ppTypeInfo)
     TYPEATTR *pTypeAttr;
     TYPEATTR *pTypeAttr2 = NULL;
 
-    struct oledata *pole;
+    struct oledata *pole = NULL;
 
-    OLEData_Get_Struct(ole, pole);
+    pole = oledata_get_struct(ole);
     pDispatch = pole->pDispatch;
     hr = pDispatch->lpVtbl->QueryInterface(pDispatch,
                                            &IID_IProvideClassInfo2,
@@ -851,8 +860,9 @@ ole_delete_event(VALUE ary, VALUE ev)
 
 
 static void
-ole_event_free(struct oleeventdata *poleev)
+oleevent_free(void *ptr)
 {
+    struct oleeventdata *poleev = ptr;
     if (poleev->pConnectionPoint) {
         poleev->pConnectionPoint->lpVtbl->Unadvise(poleev->pConnectionPoint, poleev->dwCookie);
         OLE_RELEASE(poleev->pConnectionPoint);
@@ -862,12 +872,18 @@ ole_event_free(struct oleeventdata *poleev)
     free(poleev);
 }
 
+static size_t
+oleevent_size(const void *ptr)
+{
+    return ptr ? sizeof(struct oleeventdata) : 0;
+}
+
 static VALUE
 fev_s_allocate(VALUE klass)
 {
     VALUE obj;
     struct oleeventdata *poleev;
-    obj = Data_Make_Struct(klass,struct oleeventdata,0,ole_event_free,poleev);
+    obj = TypedData_Make_Struct(klass, struct oleeventdata, &oleevent_datatype, poleev);
     poleev->dwCookie = 0;
     poleev->pConnectionPoint = NULL;
     poleev->event_id = 0;
@@ -880,7 +896,7 @@ ev_advise(int argc, VALUE *argv, VALUE self)
 {
 
     VALUE ole, itf;
-    struct oledata *pole;
+    struct oledata *pole = NULL;
     char *pitf;
     HRESULT hr;
     IID iid;
@@ -914,7 +930,7 @@ ev_advise(int argc, VALUE *argv, VALUE self)
         ole_raise(hr, rb_eRuntimeError, "interface not found");
     }
 
-    OLEData_Get_Struct(ole, pole);
+    pole = oledata_get_struct(ole);
     pDispatch = pole->pDispatch;
     hr = pDispatch->lpVtbl->QueryInterface(pDispatch,
                                            &IID_IConnectionPointContainer,
@@ -943,7 +959,7 @@ ev_advise(int argc, VALUE *argv, VALUE self)
         ole_raise(hr, rb_eRuntimeError, "Advise Error");
     }
 
-    Data_Get_Struct(self, struct oleeventdata, poleev);
+    TypedData_Get_Struct(self, struct oleeventdata, &oleevent_datatype, poleev);
     pIEV->m_event_id = evs_length();
     pIEV->pTypeInfo = pTypeInfo;
     poleev->dwCookie = dwCookie;
@@ -976,7 +992,8 @@ fev_initialize(int argc, VALUE *argv, VALUE self)
 }
 
 static void
-ole_msg_loop() {
+ole_msg_loop(void)
+{
     MSG msg;
     while(PeekMessage(&msg,NULL,0,0,PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -1014,7 +1031,7 @@ ev_on_event(int argc, VALUE *argv, VALUE self, VALUE is_ary_arg)
 {
     struct oleeventdata *poleev;
     VALUE event, args, data;
-    Data_Get_Struct(self, struct oleeventdata, poleev);
+    TypedData_Get_Struct(self, struct oleeventdata, &oleevent_datatype, poleev);
     if (poleev->pConnectionPoint == NULL) {
         rb_raise(eWIN32OLERuntimeError, "IConnectionPoint not found. You must call advise at first.");
     }
@@ -1144,7 +1161,7 @@ static VALUE
 fev_unadvise(VALUE self)
 {
     struct oleeventdata *poleev;
-    Data_Get_Struct(self, struct oleeventdata, poleev);
+    TypedData_Get_Struct(self, struct oleeventdata, &oleevent_datatype, poleev);
     if (poleev->pConnectionPoint) {
         ole_msg_loop();
         evs_delete(poleev->event_id);
@@ -1240,7 +1257,7 @@ fev_get_handler(VALUE self)
 }
 
 void
-Init_win32ole_event()
+Init_win32ole_event(void)
 {
     ary_ole_event = rb_ary_new();
     rb_gc_register_mark_object(ary_ole_event);

@@ -8,13 +8,12 @@
 
   $Idaemons: /home/cvs/rb/enumerator/enumerator.c,v 1.1.1.1 2001/07/15 10:12:48 knu Exp $
   $RoughId: enumerator.c,v 1.6 2003/07/27 11:03:24 nobu Exp $
-  $Id: enumerator.c 46988 2014-07-28 08:15:42Z nobu $
+  $Id: enumerator.c 48662 2014-12-01 06:38:04Z nobu $
 
 ************************************************/
 
-#include "ruby/ruby.h"
-#include "node.h"
 #include "internal.h"
+#include "node.h"
 
 /*
  * Document-class: Enumerator
@@ -168,7 +167,7 @@ static const rb_data_type_t enumerator_data_type = {
 	enumerator_free,
 	enumerator_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static struct enumerator *
@@ -1079,7 +1078,7 @@ static const rb_data_type_t yielder_data_type = {
 	yielder_free,
 	yielder_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static struct yielder *
@@ -1186,7 +1185,7 @@ static const rb_data_type_t generator_data_type = {
 	generator_free,
 	generator_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 static struct generator *
@@ -2040,6 +2039,7 @@ InitVM_Enumerator(void)
     rb_define_method(rb_cLazy, "chunk", lazy_super, -1);
     rb_define_method(rb_cLazy, "slice_before", lazy_super, -1);
     rb_define_method(rb_cLazy, "slice_after", lazy_super, -1);
+    rb_define_method(rb_cLazy, "slice_when", lazy_super, -1);
 
     rb_define_alias(rb_cLazy, "force", "to_a");
 

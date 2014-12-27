@@ -1,6 +1,5 @@
 # coding: US-ASCII
 require 'test/unit'
-require_relative 'envutil'
 
 class TestM17N < Test::Unit::TestCase
   def assert_encoding(encname, actual, message=nil)
@@ -261,6 +260,14 @@ class TestM17N < Test::Unit::TestCase
     end
   end
 
+  def test_utf_without_bom_asciionly
+    bug10598 = '[ruby-core:66835] [Bug #10598]'
+    encs = [Encoding::UTF_16, Encoding::UTF_32].find_all {|enc|
+      "abcd".force_encoding(enc).ascii_only?
+    }
+    assert_empty(encs, bug10598)
+  end
+
   def test_object_utf16_32_inspect
     EnvUtil.suppress_warning do
       begin
@@ -479,6 +486,9 @@ class TestM17N < Test::Unit::TestCase
     assert_regexp_fixed_ascii8bit(eval(a(%{/\xc2\xa1/})))
     assert_regexp_fixed_ascii8bit(eval(a(%{/\xc2\xa1/n})))
     assert_regexp_fixed_ascii8bit(eval(a(%q{/\xc2\xa1/})))
+
+    s = '\xc2\xa1'
+    assert_regexp_fixed_ascii8bit(/#{s}/)
 
     assert_raise(SyntaxError) { eval("/\xa1\xa1/n".force_encoding("euc-jp")) }
 

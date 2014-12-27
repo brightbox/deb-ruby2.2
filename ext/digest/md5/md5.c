@@ -49,7 +49,7 @@
 
 /*$OrigId: md5c.c,v 1.2 2001/03/26 08:57:14 matz Exp $ */
 /*$RoughId: md5.c,v 1.2 2001/07/13 19:48:41 knu Exp $ */
-/*$Id: md5.c 46827 2014-07-15 14:59:20Z nobu $ */
+/*$Id: md5.c 47744 2014-09-30 05:25:32Z nobu $ */
 
 #include "md5.h"
 
@@ -61,7 +61,7 @@
  */
 #include <string.h>
 int
-main()
+main(void)
 {
     static const char *const test[7*2] = {
 	"", "d41d8cd98f00b204e9800998ecf8427e",
@@ -102,7 +102,7 @@ main()
 #ifdef COMPUTE_T_VALUES
 #include <math.h>
 int
-main()
+main(void)
 {
     int i;
     for (i = 1; i <= 64; ++i) {

@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_engine.c 44581 2014-01-13 00:57:41Z nobu $
+ * $Id: ossl_engine.c 48792 2014-12-12 21:57:49Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2003  GOTOU Yuuzou <gotoyuzo@notwork.org>
  * All rights reserved.
@@ -16,10 +16,10 @@
     if (!(engine)) { \
 	ossl_raise(rb_eRuntimeError, "ENGINE wasn't initialized."); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, ENGINE_free, (engine)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_engine_type, (engine)); \
 } while(0)
 #define GetEngine(obj, engine) do { \
-    Data_Get_Struct((obj), ENGINE, (engine)); \
+    TypedData_Get_Struct((obj), ENGINE, &ossl_engine_type, (engine)); \
     if (!(engine)) { \
         ossl_raise(rb_eRuntimeError, "ENGINE wasn't initialized."); \
     } \
@@ -56,6 +56,20 @@ do{\
     return Qtrue;\
   }\
 }while(0)
+
+static void
+ossl_engine_free(void *engine)
+{
+    ENGINE_free(engine);
+}
+
+static const rb_data_type_t ossl_engine_type = {
+    "OpenSSL/Engine",
+    {
+	0, ossl_engine_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /* Document-method: OpenSSL::Engine.load
  *
@@ -533,7 +547,7 @@ ossl_engine_inspect(VALUE self)
 #define DefEngineConst(x) rb_define_const(cEngine, #x, INT2NUM(ENGINE_##x))
 
 void
-Init_ossl_engine()
+Init_ossl_engine(void)
 {
     cEngine = rb_define_class_under(mOSSL, "Engine", rb_cObject);
     eEngineError = rb_define_class_under(cEngine, "EngineError", eOSSLError);
@@ -578,7 +592,7 @@ Init_ossl_engine()
 }
 #else
 void
-Init_ossl_engine()
+Init_ossl_engine(void)
 {
 }
 #endif

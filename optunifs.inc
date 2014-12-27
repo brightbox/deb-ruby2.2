@@ -116,6 +116,7 @@ static const int *const *const unified_insns_data[] = {
   0,
   0,
   0,
+  0,
   0};
 
 

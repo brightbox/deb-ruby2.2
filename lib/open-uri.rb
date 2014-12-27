@@ -102,6 +102,7 @@ module OpenURI
     :content_length_proc => true,
     :http_basic_authentication => true,
     :read_timeout => true,
+    :open_timeout => true,
     :ssl_ca_cert => nil,
     :ssl_verify_mode => nil,
     :ftp_active_mode => false,
@@ -294,10 +295,12 @@ module OpenURI
       http.verify_mode = options[:ssl_verify_mode] || OpenSSL::SSL::VERIFY_PEER
       store = OpenSSL::X509::Store.new
       if options[:ssl_ca_cert]
-        if File.directory? options[:ssl_ca_cert]
-          store.add_path options[:ssl_ca_cert]
-        else
-          store.add_file options[:ssl_ca_cert]
+        Array(options[:ssl_ca_cert]).each do |cert|
+          if File.directory? cert
+            store.add_path cert
+          else
+            store.add_file cert
+          end
         end
       else
         store.set_default_paths
@@ -306,6 +309,9 @@ module OpenURI
     end
     if options.include? :read_timeout
       http.read_timeout = options[:read_timeout]
+    end
+    if options.include? :open_timeout
+      http.open_timeout = options[:open_timeout]
     end
 
     resp = nil
@@ -667,9 +673,16 @@ module OpenURI
     #
     #  :read_timeout option specifies a timeout of read for http connections.
     #
+    # [:open_timeout]
+    #  Synopsis:
+    #    :open_timeout=>nil     (no timeout)
+    #    :open_timeout=>10      (10 second)
+    #
+    #  :open_timeout option specifies a timeout of open for http connections.
+    #
     # [:ssl_ca_cert]
     #  Synopsis:
-    #    :ssl_ca_cert=>filename
+    #    :ssl_ca_cert=>filename or an Array of filenames
     #
     #  :ssl_ca_cert is used to specify CA certificate for SSL.
     #  If it is given, default certificates are not used.

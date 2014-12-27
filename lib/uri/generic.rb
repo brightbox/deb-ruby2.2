@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: generic.rb 47074 2014-08-05 19:09:08Z naruse $
+# Revision:: $Id: generic.rb 48980 2014-12-24 23:50:37Z normal $
 #
 # See URI for general documentation
 #
@@ -184,7 +184,7 @@ module URI
       if arg_check
         self.scheme = scheme
         self.userinfo = userinfo
-        self.host = host
+        self.hostname = host
         self.port = port
         self.path = path
         self.query = query
@@ -543,7 +543,7 @@ module URI
     # if properly formatted as 'user:password'
     def split_userinfo(ui)
       return nil, nil unless ui
-      user, password = ui.split(/:/, 2)
+      user, password = ui.split(':'.freeze, 2)
 
       return user, password
     end
@@ -695,13 +695,7 @@ module URI
     # see also URI::Generic.port=
     #
     def set_port(v)
-      unless !v || v.kind_of?(Fixnum)
-        if v.empty?
-          v = nil
-        else
-          v = v.to_i
-        end
-      end
+      v = v.empty? ? nil : v.to_i unless !v || v.kind_of?(Fixnum)
       @port = v
     end
     protected :set_port
@@ -768,13 +762,14 @@ module URI
 
       # If scheme is ftp, path may be relative.
       # See RFC 1738 section 3.2.2, and RFC 2396.
-      if @scheme && @scheme != "ftp"
-        if v && v != '' && parser.regexp[:ABS_PATH] !~ v
+      if @scheme && @scheme != "ftp".freeze
+        if v && v != ''.freeze && parser.regexp[:ABS_PATH] !~ v
           raise InvalidComponentError,
             "bad component(expected absolute path component): #{v}"
         end
       else
-        if v && v != '' && parser.regexp[:ABS_PATH] !~ v && parser.regexp[:REL_PATH] !~ v
+        if v && v != ''.freeze && parser.regexp[:ABS_PATH] !~ v &&
+           parser.regexp[:REL_PATH] !~ v
           raise InvalidComponentError,
             "bad component(expected relative path component): #{v}"
         end
@@ -849,9 +844,9 @@ module URI
       x = v.to_str
       v = x.dup if x.equal? v
       v.encode!(Encoding::UTF_8) rescue nil
-      v.delete!("\t\r\n")
+      v.delete!("\t\r\n".freeze)
       v.force_encoding(Encoding::ASCII_8BIT)
-      v.gsub!(/(?!%\h\h|[!$-&(-;=?-_a-~])./n){'%%%02X' % $&.ord}
+      v.gsub!(/(?!%\h\h|[!$-&(-;=?-_a-~])./n.freeze){'%%%02X'.freeze % $&.ord}
       v.force_encoding(Encoding::US_ASCII)
       @query = v
     end
@@ -939,9 +934,9 @@ module URI
       x = v.to_str
       v = x.dup if x.equal? v
       v.encode!(Encoding::UTF_8) rescue nil
-      v.delete!("\t\r\n")
+      v.delete!("\t\r\n".freeze)
       v.force_encoding(Encoding::ASCII_8BIT)
-      v.gsub!(/(?!%\h\h|[!-~])./n){'%%%02X' % $&.ord}
+      v.gsub!(/(?!%\h\h|[!-~])./n){'%%%02X'.freeze % $&.ord}
       v.force_encoding(Encoding::US_ASCII)
       @fragment = v
     end
@@ -1450,9 +1445,8 @@ module URI
       end
     end
 
-    @@to_s = Kernel.instance_method(:to_s)
     def inspect
-      @@to_s.bind(self).call.sub!(/>\z/) {" URL:#{self}>"}
+      "#<#{self.class} #{self}>"
     end
 
     #

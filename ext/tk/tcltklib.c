@@ -19,9 +19,12 @@
 #define RUBY_RELEASE_DATE "unknown release-date"
 #endif
 
+#undef RUBY_UNTYPED_DATA_WARNING
+#define RUBY_UNTYPED_DATA_WARNING 0
+
 #ifdef HAVE_RB_THREAD_CHECK_TRAP_PENDING
 static int rb_thread_critical; /* dummy */
-int rb_thread_check_trap_pending();
+int rb_thread_check_trap_pending(void);
 #else
 /* use rb_thread_critical on Ruby 1.8.x */
 #include "rubysig.h"
@@ -114,7 +117,7 @@ static struct {
 } tcltk_version = {0, 0, 0, 0};
 
 static void
-set_tcltk_version()
+set_tcltk_version(void)
 {
     if (tcltk_version.major) return;
 
@@ -182,6 +185,7 @@ static const char tcltklib_release_date[] = TCLTKLIB_RELEASE_DATE;
 static const char finalize_hook_name[] = "INTERP_FINALIZE_HOOK";
 
 static void ip_finalize _((Tcl_Interp*));
+static void ip_free _((void *p));
 
 static int at_exit = 0;
 
@@ -771,13 +775,18 @@ struct tcltkip {
     int return_value;            /* return value */
 };
 
+static const rb_data_type_t tcltkip_type = {
+    "tcltkip",
+    {0, ip_free, 0,},
+};
+
 static struct tcltkip *
 get_ip(self)
     VALUE self;
 {
     struct tcltkip *ptr;
 
-    Data_Get_Struct(self, struct tcltkip, ptr);
+    TypedData_Get_Struct(self, struct tcltkip, &tcltkip_type, ptr);
     if (ptr == 0) {
         /* rb_raise(rb_eTypeError, "uninitialized TclTkIp"); */
         return((struct tcltkip *)NULL);
@@ -1057,7 +1066,7 @@ set_rubytk_kitpath(const char *kitpath)
 #endif
 
 static void
-check_tclkit_std_channels()
+check_tclkit_std_channels(void)
 {
     Tcl_Channel chan;
 
@@ -1141,7 +1150,7 @@ rubytk_kitpath_init(Tcl_Interp *interp)
 /*--------------------------------------------------------*/
 
 static void
-init_static_tcltk_packages()
+init_static_tcltk_packages(void)
 {
     /*
      * Ensure that std channels exist (creating them if necessary)
@@ -1228,7 +1237,7 @@ void rbtk_win32_SetHINSTANCE(const char *module_name)
 /*--------------------------------------------------------*/
 
 static void
-setup_rubytkkit()
+setup_rubytkkit(void)
 {
   init_static_tcltk_packages();
 
@@ -1281,7 +1290,7 @@ setup_rubytkkit()
 
 /* stub status */
 static void
-tcl_stubs_check()
+tcl_stubs_check(void)
 {
     if (!tcl_stubs_init_p()) {
         int st = ruby_tcl_stubs_init();
@@ -1382,7 +1391,7 @@ static int rbtk_internal_eventloop_handler = 0;
 
 
 static int
-pending_exception_check0()
+pending_exception_check0(void)
 {
     volatile VALUE exc = rbtk_pending_exception;
 
@@ -1645,7 +1654,7 @@ _timer_for_tcl(clientData)
 #ifdef RUBY_USE_NATIVE_THREAD
 #if USE_TOGGLE_WINDOW_MODE_FOR_IDLE
 static int
-toggle_eventloop_window_mode_for_idle()
+toggle_eventloop_window_mode_for_idle(void)
 {
   if (window_event_mode & TCL_IDLE_EVENTS) {
     /* idle -> event */
@@ -2099,7 +2108,7 @@ eventloop_sleep(dummy)
 
 #if USE_EVLOOP_THREAD_ALONE_CHECK_FLAG
 static int
-get_thread_alone_check_flag()
+get_thread_alone_check_flag(void)
 {
 #ifdef RUBY_USE_NATIVE_THREAD
   return 0;
@@ -2168,7 +2177,7 @@ trap_check(int *check_var)
 }
 
 static int
-check_eventloop_interp()
+check_eventloop_interp(void)
 {
   DUMP1("check eventloop_interp");
   if (eventloop_interp != (Tcl_Interp*)NULL
@@ -5800,9 +5809,10 @@ ip_finalize(ip)
 
 /* destroy interpreter */
 static void
-ip_free(ptr)
-    struct tcltkip *ptr;
+ip_free(p)
+    void *p;
 {
+    struct tcltkip *ptr = p;
     int  thr_crit_bup;
 
     DUMP2("free Tcl Interp %p", ptr->ip);
@@ -5856,7 +5866,7 @@ static VALUE
 ip_alloc(self)
     VALUE self;
 {
-    return Data_Wrap_Struct(self, 0, ip_free, 0);
+    return TypedData_Wrap_Struct(self, &tcltkip_type, 0);
 }
 
 static void
@@ -5998,6 +6008,9 @@ ip_rb_replaceSlaveTkCmdsCommand(clientData, interp, objc, objv)
     return TCL_OK;
 }
 
+#ifndef ORIG_NAMESPACE_CMD
+#define ORIG_NAMESPACE_CMD "__orig_namespace_command__"
+#endif
 
 #if TCL_MAJOR_VERSION >= 8
 static int ip_rbNamespaceObjCmd _((ClientData, Tcl_Interp *, int,
@@ -6012,7 +6025,12 @@ ip_rbNamespaceObjCmd(clientData, interp, objc, objv)
     Tcl_CmdInfo info;
     int ret;
 
-    if (!Tcl_GetCommandInfo(interp, "__orig_namespace_command__", &(info))) {
+    DUMP1("call ip_rbNamespaceObjCmd");
+    DUMP2("objc = %d", objc);
+    DUMP2("objv[0] = '%s'", Tcl_GetString(objv[0]));
+    DUMP2("objv[1] = '%s'", Tcl_GetString(objv[1]));
+    if (!Tcl_GetCommandInfo(interp, ORIG_NAMESPACE_CMD, &(info))) {
+      DUMP1("fail to get "ORIG_NAMESPACE_CMD);
         Tcl_ResetResult(interp);
         Tcl_AppendResult(interp,
                          "invalid command name \"namespace\"", (char*)NULL);
@@ -6020,15 +6038,38 @@ ip_rbNamespaceObjCmd(clientData, interp, objc, objv)
     }
 
     rbtk_eventloop_depth++;
-    /* DUMP2("namespace wrapper enter depth == %d", rbtk_eventloop_depth); */
+    DUMP2("namespace wrapper enter depth == %d", rbtk_eventloop_depth);
 
     if (info.isNativeObjectProc) {
+#if TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION < 6
+        DUMP1("call a native-object-proc");
         ret = (*(info.objProc))(info.objClientData, interp, objc, objv);
+#else
+        /* Tcl8.6 or later */
+        int i;
+        Tcl_Obj **cp_objv;
+        char org_ns_cmd_name[] = ORIG_NAMESPACE_CMD;
+
+        DUMP1("call a native-object-proc for tcl8.6 or later");
+        cp_objv = RbTk_ALLOC_N(Tcl_Obj *, (objc + 1));
+
+        cp_objv[0] = Tcl_NewStringObj(org_ns_cmd_name, strlen(org_ns_cmd_name));
+        for(i = 1; i < objc; i++) {
+            cp_objv[i] = objv[i];
+        }
+        cp_objv[objc] = (Tcl_Obj *)NULL;
+
+        /* ret = Tcl_EvalObjv(interp, objc, cp_objv, TCL_EVAL_DIRECT); */
+        ret = Tcl_EvalObjv(interp, objc, cp_objv, 0);
+
+        ckfree((char*)cp_objv);
+#endif
     } else {
         /* string interface */
         int i;
         char **argv;
 
+        DUMP1("call with the string-interface");
         /* argv = (char **)Tcl_Alloc(sizeof(char *) * (objc + 1)); */
         argv = RbTk_ALLOC_N(char *, (objc + 1));
 #if 0 /* use Tcl_Preserve/Release */
@@ -6056,9 +6097,10 @@ ip_rbNamespaceObjCmd(clientData, interp, objc, objv)
 #endif
     }
 
-    /* DUMP2("namespace wrapper exit depth == %d", rbtk_eventloop_depth); */
+    DUMP2("namespace wrapper exit depth == %d", rbtk_eventloop_depth);
     rbtk_eventloop_depth--;
 
+    DUMP1("end of ip_rbNamespaceObjCmd");
     return ret;
 }
 #endif
@@ -6068,6 +6110,8 @@ ip_wrap_namespace_command(interp)
     Tcl_Interp *interp;
 {
 #if TCL_MAJOR_VERSION >= 8
+
+#if TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION < 6
     Tcl_CmdInfo orig_info;
 
     if (!Tcl_GetCommandInfo(interp, "namespace", &(orig_info))) {
@@ -6075,14 +6119,19 @@ ip_wrap_namespace_command(interp)
     }
 
     if (orig_info.isNativeObjectProc) {
-        Tcl_CreateObjCommand(interp, "__orig_namespace_command__",
+        Tcl_CreateObjCommand(interp, ORIG_NAMESPACE_CMD,
                              orig_info.objProc, orig_info.objClientData,
                              orig_info.deleteProc);
     } else {
-        Tcl_CreateCommand(interp, "__orig_namespace_command__",
+        Tcl_CreateCommand(interp, ORIG_NAMESPACE_CMD,
                           orig_info.proc, orig_info.clientData,
                           orig_info.deleteProc);
     }
+
+#else /* tcl8.6 or later */
+    Tcl_Eval(interp, "rename namespace "ORIG_NAMESPACE_CMD);
+
+#endif
 
     Tcl_CreateObjCommand(interp, "namespace", ip_rbNamespaceObjCmd,
                          (ClientData) 0, (Tcl_CmdDeleteProc *)NULL);
@@ -6137,7 +6186,7 @@ ip_init(argc, argv, self)
     }
 
     /* create object */
-    Data_Get_Struct(self, struct tcltkip, ptr);
+    TypedData_Get_Struct(self, struct tcltkip, &tcltkip_type, ptr);
     ptr = ALLOC(struct tcltkip);
     /* ptr = RbTk_ALLOC_N(struct tcltkip, 1); */
     DATA_PTR(self) = ptr;
@@ -6476,7 +6525,7 @@ ip_create_slave_core(interp, argc, argv)
 
     rb_thread_critical = thr_crit_bup;
 
-    return Data_Wrap_Struct(CLASS_OF(interp), 0, ip_free, slave);
+    return TypedData_Wrap_Struct(CLASS_OF(interp), &tcltkip_type, slave);
 }
 
 static VALUE
@@ -7013,7 +7062,7 @@ call_queue_handler(evPtr, flags)
     /* check safe-level */
     if (rb_safe_level() != q->safe_level) {
         /* q_dat = Data_Wrap_Struct(rb_cData,0,-1,q); */
-        q_dat = Data_Wrap_Struct(rb_cData,call_queue_mark,-1,q);
+        q_dat = Data_Wrap_Struct(0,call_queue_mark,-1,q);
         ret = rb_funcall(rb_proc_new(callq_safelevel_handler, q_dat),
                          ID_call, 0);
         rb_gc_force_recycle(q_dat);
@@ -7507,7 +7556,7 @@ eval_queue_handler(evPtr, flags)
 #endif
 #endif
         /* q_dat = Data_Wrap_Struct(rb_cData,0,-1,q); */
-        q_dat = Data_Wrap_Struct(rb_cData,eval_queue_mark,-1,q);
+        q_dat = Data_Wrap_Struct(0,eval_queue_mark,-1,q);
         ret = rb_funcall(rb_proc_new(evq_safelevel_handler, q_dat),
                          ID_call, 0);
         rb_gc_force_recycle(q_dat);
@@ -8448,15 +8497,28 @@ invoke_tcl_proc(arg)
 #endif
 {
     struct invoke_info *inf = (struct invoke_info *)arg;
+#if TCL_MAJOR_VERSION >= 8 && TCL_MINOR_VERSION < 6
     int i, len;
-#if TCL_MAJOR_VERSION >= 8
     int argc = inf->objc;
     char **argv = (char **)NULL;
 #endif
 
+    DUMP1("call invoke_tcl_proc");
+
+#if TCL_MAJOR_VERSION > 8 || (TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION >= 6)
+    /* Tcl/Tk 8.6 or later */
+
+    /* eval */
+    inf->ptr->return_value = Tcl_EvalObjv(inf->ptr->ip, inf->objc, inf->objv, TCL_EVAL_DIRECT);
+    /* inf->ptr->return_value = Tcl_EvalObjv(inf->ptr->ip, inf->objc, inf->objv, 0); */
+
+#else /* Tcl/Tk 7.x, 8.0 -- 8.5 */
+
     /* memory allocation for arguments of this command */
-#if TCL_MAJOR_VERSION >= 8
+#if TCL_MAJOR_VERSION == 8
+     /* Tcl/Tk 8.0 -- 8.5 */
     if (!inf->cmdinfo.isNativeObjectProc) {
+        DUMP1("called proc is not a native-obj-proc");
         /* string interface */
         /* argv = (char **)ALLOC_N(char *, argc+1);*/ /* XXXXXXXXXX */
         argv = RbTk_ALLOC_N(char *, (argc+1));
@@ -8470,11 +8532,14 @@ invoke_tcl_proc(arg)
     }
 #endif
 
+    DUMP1("reset result of tcl-interp");
     Tcl_ResetResult(inf->ptr->ip);
 
     /* Invoke the C procedure */
-#if TCL_MAJOR_VERSION >= 8
+#if TCL_MAJOR_VERSION == 8
+    /* Tcl/Tk 8.0 -- 8.5 */
     if (inf->cmdinfo.isNativeObjectProc) {
+        DUMP1("call tcl_proc as a native-obj-proc");
         inf->ptr->return_value
             = (*(inf->cmdinfo.objProc))(inf->cmdinfo.objClientData,
                                         inf->ptr->ip, inf->objc, inf->objv);
@@ -8482,7 +8547,9 @@ invoke_tcl_proc(arg)
     else
 #endif
     {
-#if TCL_MAJOR_VERSION >= 8
+#if TCL_MAJOR_VERSION == 8
+        /* Tcl/Tk 8.0 -- 8.5 */
+        DUMP1("call tcl_proc as not a native-obj-proc");
         inf->ptr->return_value
             = (*(inf->cmdinfo.proc))(inf->cmdinfo.clientData, inf->ptr->ip,
                                      argc, (CONST84 char **)argv);
@@ -8505,6 +8572,9 @@ invoke_tcl_proc(arg)
 #endif
     }
 
+#endif /* Tcl/Tk 8.6 or later || Tcl 7.x, 8.0 -- 8.5 */
+
+    DUMP1("end of invoke_tcl_proc");
     return Qnil;
 }
 
@@ -8644,7 +8714,9 @@ ip_invoke_core(interp, argc, argv)
 #endif
 
     /* invoke tcl-proc */
+    DUMP1("invoke tcl-proc");
     rb_protect(invoke_tcl_proc, (VALUE)&inf, &status);
+    DUMP2("status of tcl-proc, %d", status);
     switch(status) {
     case TAG_RAISE:
         if (NIL_P(rb_errinfo())) {
@@ -8985,7 +9057,7 @@ invoke_queue_handler(evPtr, flags)
     /* check safe-level */
     if (rb_safe_level() != q->safe_level) {
         /* q_dat = Data_Wrap_Struct(rb_cData,0,0,q); */
-        q_dat = Data_Wrap_Struct(rb_cData,invoke_queue_mark,-1,q);
+        q_dat = Data_Wrap_Struct(0,invoke_queue_mark,-1,q);
         ret = rb_funcall(rb_proc_new(ivq_safelevel_handler, q_dat),
                          ID_call, 0);
         rb_gc_force_recycle(q_dat);
@@ -9975,7 +10047,7 @@ lib_get_reltype_name(self)
 
 
 static VALUE
-tcltklib_compile_info()
+tcltklib_compile_info(void)
 {
     volatile VALUE ret;
     size_t size;
@@ -10714,7 +10786,7 @@ ip_make_menu_embeddable(interp, menu_path)
 
 /*---- initialization ----*/
 void
-Init_tcltklib()
+Init_tcltklib(void)
 {
     int  ret;
 
