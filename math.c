@@ -2,14 +2,13 @@
 
   math.c -
 
-  $Author: nobu $
+  $Author: akr $
   created at: Tue Jan 25 14:12:56 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
 #include "internal.h"
 #include <float.h>
 #include <math.h>

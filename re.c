@@ -2,18 +2,16 @@
 
   re.c -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Mon Aug  9 18:24:49 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
-#include "ruby/re.h"
-#include "ruby/encoding.h"
-#include "ruby/util.h"
 #include "internal.h"
+#include "ruby/re.h"
+#include "ruby/util.h"
 #include "regint.h"
 #include <ctype.h>
 
@@ -877,6 +875,17 @@ match_alloc(VALUE klass)
     return (VALUE)match;
 }
 
+int
+rb_reg_region_copy(struct re_registers *to, const struct re_registers *from)
+{
+    onig_region_copy(to, (OnigRegion *)from);
+    if (to->allocated) return 0;
+    rb_gc();
+    onig_region_copy(to, (OnigRegion *)from);
+    if (to->allocated) return 0;
+    return ONIGERR_MEMORY;
+}
+
 typedef struct {
     long byte_pos;
     long char_pos;
@@ -984,7 +993,8 @@ match_init_copy(VALUE obj, VALUE orig)
     RMATCH(obj)->regexp = RMATCH(orig)->regexp;
 
     rm = RMATCH(obj)->rmatch;
-    onig_region_copy(&rm->regs, RMATCH_REGS(orig));
+    if (rb_reg_region_copy(&rm->regs, RMATCH_REGS(orig)))
+	rb_memerror();
 
     if (!RMATCH(orig)->rmatch->char_offset_updated) {
         rm->char_offset_updated = 0;
@@ -997,6 +1007,7 @@ match_init_copy(VALUE obj, VALUE orig)
         MEMCPY(rm->char_offset, RMATCH(orig)->rmatch->char_offset,
                struct rmatch_offset, rm->regs.num_regs);
         rm->char_offset_updated = 1;
+	RB_GC_GUARD(orig);
     }
 
     return obj;
@@ -1471,9 +1482,11 @@ rb_reg_search0(VALUE re, VALUE str, long pos, int reverse, int set_backref_str)
     }
 
     if (NIL_P(match)) {
+	int err;
 	match = match_alloc(rb_cMatch);
-	onig_region_copy(RMATCH_REGS(match), regs);
+	err = rb_reg_region_copy(RMATCH_REGS(match), regs);
 	onig_region_free(regs, 0);
+	if (err) rb_memerror();
     }
     else {
 	if (rb_safe_level() >= 3)
@@ -1774,7 +1787,7 @@ name_to_backref_error(VALUE name)
 static VALUE
 match_aref(int argc, VALUE *argv, VALUE match)
 {
-    VALUE idx, rest;
+    VALUE idx, rest, re;
 
     match_check(match);
     rb_scan_args(argc, argv, "11", &idx, &rest);
@@ -1795,7 +1808,8 @@ match_aref(int argc, VALUE *argv, VALUE match)
 		/* fall through */
 	      case T_STRING:
 		p = StringValuePtr(idx);
-		if (!rb_enc_compatible(RREGEXP(RMATCH(match)->regexp)->src, idx) ||
+		re = RMATCH(match)->regexp;
+		if (NIL_P(re) || !rb_enc_compatible(RREGEXP(re)->src, idx) ||
 		    (num = name_to_backref_number(RMATCH_REGS(match), RMATCH(match)->regexp,
 						  p, p + RSTRING_LEN(idx))) < 1) {
 		    name_to_backref_error(idx);
@@ -2284,8 +2298,16 @@ unescape_nonascii(const char *p, const char *end, rb_encoding *enc,
               case 'C': /* \C-X, \C-\M-X */
               case 'M': /* \M-X, \M-\C-X, \M-\cX */
                 p = p-2;
-                if (unescape_escaped_nonascii(&p, end, enc, buf, encp, err) != 0)
-                    return -1;
+		if (enc == rb_usascii_encoding()) {
+		    const char *pbeg = p;
+		    c = read_escaped_byte(&p, end, err);
+		    if (c == (char)-1) return -1;
+		    rb_str_buf_cat(buf, pbeg, p-pbeg);
+		}
+		else {
+		    if (unescape_escaped_nonascii(&p, end, enc, buf, encp, err) != 0)
+			return -1;
+		}
                 break;
 
               case 'u':

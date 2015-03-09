@@ -2,17 +2,15 @@
 
   error.c -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Mon Aug  9 16:11:34 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
-#include "ruby/st.h"
-#include "ruby/encoding.h"
 #include "internal.h"
+#include "ruby/st.h"
 #include "vm_core.h"
 
 #include <stdio.h>
@@ -200,10 +198,10 @@ rb_compile_warning(const char *file, int line, const char *fmt, ...)
     va_end(args);
 }
 
-static void
-warn_print(const char *fmt, va_list args)
+static VALUE
+warning_string(rb_encoding *enc, const char *fmt, va_list args)
 {
-    VALUE str = rb_str_new(0, 0);
+    VALUE str = rb_enc_str_new(0, 0, enc);
     VALUE file = rb_sourcefilename();
 
     if (!NIL_P(file)) {
@@ -216,33 +214,69 @@ warn_print(const char *fmt, va_list args)
     rb_str_cat2(str, "warning: ");
     rb_str_vcatf(str, fmt, args);
     rb_str_cat2(str, "\n");
-    rb_write_error_str(str);
+    return str;
 }
 
 void
 rb_warn(const char *fmt, ...)
 {
+    VALUE mesg;
     va_list args;
 
     if (NIL_P(ruby_verbose)) return;
 
     va_start(args, fmt);
-    warn_print(fmt, args);
+    mesg = warning_string(0, fmt, args);
     va_end(args);
+    rb_write_error_str(mesg);
 }
+
+#if 0
+void
+rb_enc_warn(rb_encoding *enc, const char *fmt, ...)
+{
+    VALUE mesg;
+    va_list args;
+
+    if (NIL_P(ruby_verbose)) return;
+
+    va_start(args, fmt);
+    mesg = warning_string(enc, fmt, args);
+    va_end(args);
+    rb_write_error_str(mesg);
+}
+#endif
 
 /* rb_warning() reports only in verbose mode */
 void
 rb_warning(const char *fmt, ...)
 {
+    VALUE mesg;
     va_list args;
 
     if (!RTEST(ruby_verbose)) return;
 
     va_start(args, fmt);
-    warn_print(fmt, args);
+    mesg = warning_string(0, fmt, args);
     va_end(args);
+    rb_write_error_str(mesg);
 }
+
+#if 0
+void
+rb_enc_warning(rb_encoding *enc, const char *fmt, ...)
+{
+    VALUE mesg;
+    va_list args;
+
+    if (!RTEST(ruby_verbose)) return;
+
+    va_start(args, fmt);
+    mesg = warning_string(enc, fmt, args);
+    va_end(args);
+    rb_write_error_str(mesg);
+}
+#endif
 
 /*
  * call-seq:
@@ -873,9 +907,7 @@ exc_cause(VALUE exc)
 static VALUE
 try_convert_to_exception(VALUE obj)
 {
-    ID id_exception;
-    CONST_ID(id_exception, "exception");
-    return rb_check_funcall(obj, id_exception, 0, 0);
+    return rb_check_funcall(obj, idException, 0, 0);
 }
 
 /*
@@ -891,10 +923,9 @@ static VALUE
 exc_equal(VALUE exc, VALUE obj)
 {
     VALUE mesg, backtrace;
-    ID id_mesg;
+    const ID id_mesg = idMesg;
 
     if (exc == obj) return Qtrue;
-    CONST_ID(id_mesg, "mesg");
 
     if (rb_obj_class(exc) != rb_obj_class(obj)) {
 	int status = 0;
@@ -1123,7 +1154,7 @@ static const rb_data_type_t name_err_mesg_data_type = {
 	name_err_mesg_free,
 	name_err_mesg_memsize,
     },
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 /* :nodoc: */
@@ -1290,19 +1321,19 @@ set_syserr(int n, const char *name)
 
 	/* capture nonblock errnos for WaitReadable/WaitWritable subclasses */
 	switch (n) {
-	    case EAGAIN:
-	        rb_eEAGAIN = error;
+	  case EAGAIN:
+	    rb_eEAGAIN = error;
 
-#if EAGAIN != EWOULDBLOCK
-                break;
-	    case EWOULDBLOCK:
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+	    break;
+	  case EWOULDBLOCK:
 #endif
 
-		rb_eEWOULDBLOCK = error;
-		break;
-	    case EINPROGRESS:
-		rb_eEINPROGRESS = error;
-		break;
+	    rb_eEWOULDBLOCK = error;
+	    break;
+	  case EINPROGRESS:
+	    rb_eEINPROGRESS = error;
+	    break;
 	}
 
 	rb_define_const(error, "Errno", INT2NUM(n));
@@ -1346,7 +1377,7 @@ syserr_initialize(int argc, VALUE *argv, VALUE self)
     char *strerror();
 #endif
     const char *err;
-    VALUE mesg, error, func;
+    VALUE mesg, error, func, errmsg;
     VALUE klass = rb_obj_class(self);
 
     if (klass == rb_eSystemCallError) {
@@ -1370,25 +1401,17 @@ syserr_initialize(int argc, VALUE *argv, VALUE self)
     }
     if (!NIL_P(error)) err = strerror(NUM2INT(error));
     else err = "unknown error";
-    if (!NIL_P(mesg)) {
-	rb_encoding *le = rb_locale_encoding();
-	VALUE str = StringValue(mesg);
-	rb_encoding *me = rb_enc_get(mesg);
 
-	if (NIL_P(func))
-	    mesg = rb_sprintf("%s - %"PRIsVALUE, err, mesg);
-	else
-	    mesg = rb_sprintf("%s @ %"PRIsVALUE" - %"PRIsVALUE, err, func, mesg);
-	if (le != me && rb_enc_asciicompat(me)) {
-	    le = me;
-	}/* else assume err is non ASCII string. */
-	OBJ_INFECT(mesg, str);
-	rb_enc_associate(mesg, le);
+    errmsg = rb_enc_str_new_cstr(err, rb_locale_encoding());
+    if (!NIL_P(mesg)) {
+	VALUE str = StringValue(mesg);
+
+	if (!NIL_P(func)) rb_str_catf(errmsg, " @ %"PRIsVALUE, func);
+	rb_str_catf(errmsg, " - %"PRIsVALUE, str);
+	OBJ_INFECT(errmsg, mesg);
     }
-    else {
-	mesg = rb_str_new2(err);
-	rb_enc_associate(mesg, rb_locale_encoding());
-    }
+    mesg = errmsg;
+
     rb_call_super(1, &mesg);
     rb_iv_set(self, "errno", error);
     return self;
@@ -1669,7 +1692,7 @@ syserr_eqq(VALUE self, VALUE exc)
  *
  *  <em>raises the exception:</em>
  *
- *     RuntimeError: can't modify frozen array
+ *     RuntimeError: can't modify frozen Array
  *
  *  Kernel.raise will raise a RuntimeError if no Exception class is
  *  specified.
@@ -1793,14 +1816,19 @@ syserr_eqq(VALUE self, VALUE exc)
  *    * LoadError
  *    * NotImplementedError
  *    * SyntaxError
+ *  * SecurityError
  *  * SignalException
  *    * Interrupt
  *  * StandardError -- default for +rescue+
  *    * ArgumentError
- *    * IndexError
- *      * StopIteration
+ *      * UncaughtThrowError
+ *    * EncodingError
+ *    * FiberError
  *    * IOError
  *      * EOFError
+ *    * IndexError
+ *      * KeyError
+ *      * StopIteration
  *    * LocalJumpError
  *    * NameError
  *      * NoMethodError
@@ -1808,14 +1836,13 @@ syserr_eqq(VALUE self, VALUE exc)
  *      * FloatDomainError
  *    * RegexpError
  *    * RuntimeError -- default for +raise+
- *    * SecurityError
  *    * SystemCallError
  *      * Errno::*
- *    * SystemStackError
  *    * ThreadError
  *    * TypeError
  *    * ZeroDivisionError
  *  * SystemExit
+ *  * SystemStackError
  *  * fatal -- impossible to rescue
  */
 
@@ -1953,8 +1980,8 @@ void
 rb_notimplement(void)
 {
     rb_raise(rb_eNotImpError,
-	     "%s() function is unimplemented on this machine",
-	     rb_id2name(rb_frame_this_func()));
+	     "%"PRIsVALUE"() function is unimplemented on this machine",
+	     rb_id2str(rb_frame_this_func()));
 }
 
 void
@@ -2097,7 +2124,7 @@ rb_mod_syserr_fail_str(VALUE mod, int e, VALUE mesg)
 void
 rb_sys_warning(const char *fmt, ...)
 {
-    char buf[BUFSIZ];
+    VALUE mesg;
     va_list args;
     int errno_save;
 
@@ -2105,12 +2132,32 @@ rb_sys_warning(const char *fmt, ...)
 
     if (!RTEST(ruby_verbose)) return;
 
-    snprintf(buf, BUFSIZ, "warning: %s", fmt);
-    snprintf(buf+strlen(buf), BUFSIZ-strlen(buf), ": %s", strerror(errno_save));
+    va_start(args, fmt);
+    mesg = warning_string(0, fmt, args);
+    va_end(args);
+    rb_str_set_len(mesg, RSTRING_LEN(mesg)-1);
+    rb_str_catf(mesg, ": %s\n", strerror(errno_save));
+    rb_write_error_str(mesg);
+    errno = errno_save;
+}
+
+void
+rb_sys_enc_warning(rb_encoding *enc, const char *fmt, ...)
+{
+    VALUE mesg;
+    va_list args;
+    int errno_save;
+
+    errno_save = errno;
+
+    if (!RTEST(ruby_verbose)) return;
 
     va_start(args, fmt);
-    warn_print(buf, args);
+    mesg = warning_string(enc, fmt, args);
     va_end(args);
+    rb_str_set_len(mesg, RSTRING_LEN(mesg)-1);
+    rb_str_catf(mesg, ": %s\n", strerror(errno_save));
+    rb_write_error_str(mesg);
     errno = errno_save;
 }
 
@@ -2127,6 +2174,13 @@ void
 rb_error_frozen(const char *what)
 {
     rb_raise(rb_eRuntimeError, "can't modify frozen %s", what);
+}
+
+void
+rb_error_frozen_object(VALUE frozen_obj)
+{
+    rb_raise(rb_eRuntimeError, "can't modify frozen %"PRIsVALUE,
+	     CLASS_OF(frozen_obj));
 }
 
 #undef rb_check_frozen

@@ -2,7 +2,7 @@
 
   vm_eval.c -
 
-  $Author: zzak $
+  $Author: naruse $
   created at: Sat May 24 16:02:32 JST 2008
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -23,6 +23,10 @@ static NODE *vm_cref_push(rb_thread_t *th, VALUE klass, int noex, rb_block_t *bl
 static VALUE vm_exec(rb_thread_t *th);
 static void vm_set_eval_stack(rb_thread_t * th, VALUE iseqval, const NODE *cref, rb_block_t *base_block);
 static int vm_collect_local_variables_in_heap(rb_thread_t *th, const VALUE *dfp, const struct local_var_list *vars);
+
+static VALUE rb_eUncaughtThrow;
+static ID id_tag, id_value;
+#define id_mesg idMesg
 
 /* vm_backtrace.c */
 VALUE rb_vm_backtrace_str_ary(rb_thread_t *th, int lev, int n);
@@ -50,6 +54,7 @@ vm_call0(rb_thread_t* th, VALUE recv, ID id, int argc, const VALUE *argv,
     ci->defined_class = defined_class;
     ci->argc = argc;
     ci->me = me;
+    ci->kw_arg = NULL;
 
     return vm_call0_body(th, ci, argv);
 }
@@ -264,7 +269,7 @@ vm_call_super(rb_thread_t *th, int argc, const VALUE *argv)
     rb_method_entry_t *me;
     rb_control_frame_t *cfp = th->cfp;
 
-    if (cfp->iseq || NIL_P(cfp->klass)) {
+    if (RUBY_VM_NORMAL_ISEQ_P(cfp->iseq) || NIL_P(cfp->klass)) {
 	rb_bug("vm_call_super: should not be reached");
     }
 
@@ -283,6 +288,16 @@ rb_call_super(int argc, const VALUE *argv)
 {
     PASS_PASSED_BLOCK();
     return vm_call_super(GET_THREAD(), argc, argv);
+}
+
+VALUE
+rb_current_receiver(void)
+{
+    rb_thread_t *th = GET_THREAD();
+    rb_control_frame_t *cfp;
+    if (!th || !(cfp = th->cfp))
+	rb_raise(rb_eRuntimeError, "no self, no life");
+    return cfp->self;
 }
 
 static inline void
@@ -568,8 +583,8 @@ rb_method_call_status(rb_thread_t *th, const rb_method_entry_t *me, call_type sc
 	    }
 
 	    if (NOEX_SAFE(noex) > th->safe_level) {
-		rb_raise(rb_eSecurityError, "calling insecure method: %s",
-			 rb_id2name(me->called_id));
+		rb_raise(rb_eSecurityError, "calling insecure method: %"PRIsVALUE,
+			 rb_id2str(me->called_id));
 	    }
 	}
     }
@@ -850,12 +865,22 @@ rb_funcall_with_block(VALUE recv, ID mid, int argc, const VALUE *argv, VALUE pas
     return rb_call(recv, mid, argc, argv, CALL_PUBLIC);
 }
 
+static VALUE *
+current_vm_stack_arg(rb_thread_t *th, const VALUE *argv)
+{
+    rb_control_frame_t *prev_cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(th->cfp);
+    if (RUBY_VM_CONTROL_FRAME_STACK_OVERFLOW_P(th, prev_cfp)) return NULL;
+    if (prev_cfp->sp + 1 != argv) return NULL;
+    return prev_cfp->sp + 1;
+}
+
 static VALUE
 send_internal(int argc, const VALUE *argv, VALUE recv, call_type scope)
 {
     ID id;
     VALUE vid;
     VALUE self;
+    VALUE ret, vargv = 0;
     rb_thread_t *th = GET_THREAD();
 
     if (scope == CALL_PUBLIC) {
@@ -869,19 +894,40 @@ send_internal(int argc, const VALUE *argv, VALUE recv, call_type scope)
 	rb_raise(rb_eArgError, "no method name given");
     }
 
-    vid = *argv++; argc--;
+    vid = *argv;
 
     id = rb_check_id(&vid);
     if (!id) {
 	if (rb_method_basic_definition_p(CLASS_OF(recv), idMethodMissing)) {
 	    VALUE exc = make_no_method_exception(rb_eNoMethodError, NULL,
-						 recv, ++argc, --argv);
+						 recv, argc, argv);
 	    rb_exc_raise(exc);
 	}
-	id = rb_to_id(vid);
+	if (!SYMBOL_P(*argv)) {
+	    VALUE *tmp_argv = current_vm_stack_arg(th, argv);
+	    vid = rb_str_intern(vid);
+	    if (tmp_argv) {
+		tmp_argv[0] = vid;
+	    }
+	    else if (argc > 1) {
+		tmp_argv = ALLOCV_N(VALUE, vargv, argc);
+		tmp_argv[0] = vid;
+		MEMCPY(tmp_argv+1, argv+1, VALUE, argc-1);
+		argv = tmp_argv;
+	    }
+	    else {
+		argv = &vid;
+	    }
+	}
+	id = idMethodMissing;
+    }
+    else {
+	argv++; argc--;
     }
     PASS_PASSED_BLOCK_TH(th);
-    return rb_call0(recv, id, argc, argv, scope, self);
+    ret = rb_call0(recv, id, argc, argv, scope, self);
+    ALLOCV_END(vargv);
+    return ret;
 }
 
 /*
@@ -988,6 +1034,7 @@ rb_yield_splat(VALUE values)
         rb_raise(rb_eArgError, "not an array");
     }
     v = rb_yield_0(RARRAY_LENINT(tmp), RARRAY_CONST_PTR(tmp));
+    RB_GC_GUARD(tmp);
     return v;
 }
 
@@ -1084,10 +1131,9 @@ rb_iterate(VALUE (* it_proc) (VALUE), VALUE data1,
     else {
 	VALUE err = th->errinfo;
 	if (state == TAG_BREAK) {
-	    VALUE *escape_ep = GET_THROWOBJ_CATCH_POINT(err);
-	    VALUE *cep = cfp->ep;
+	    rb_control_frame_t *escape_cfp = GET_THROWOBJ_CATCH_POINT(err);
 
-	    if (cep == escape_ep) {
+	    if (cfp == escape_cfp) {
 		state = 0;
 		th->state = 0;
 		th->errinfo = Qnil;
@@ -1100,10 +1146,9 @@ rb_iterate(VALUE (* it_proc) (VALUE), VALUE data1,
 	    }
 	}
 	else if (state == TAG_RETRY) {
-	    VALUE *escape_ep = GET_THROWOBJ_CATCH_POINT(err);
-	    VALUE *cep = cfp->ep;
+	    rb_control_frame_t *escape_cfp = GET_THROWOBJ_CATCH_POINT(err);
 
-	    if (cep == escape_ep) {
+	    if (cfp == escape_cfp) {
 		rb_vm_rewind_cfp(th, cfp);
 
 		state = 0;
@@ -1215,7 +1260,7 @@ eval_string_with_cref(VALUE self, VALUE src, VALUE scope, NODE *const cref_arg, 
 	    absolute_path = file;
 	}
 
-	if (scope != Qnil) {
+	if (!NIL_P(scope)) {
 	    bind = Check_TypedStruct(scope, &ruby_binding_data_type);
 	    {
 		envval = bind->env;
@@ -1265,6 +1310,7 @@ eval_string_with_cref(VALUE self, VALUE src, VALUE scope, NODE *const cref_arg, 
 	    COPY_CREF(cref, orig_cref);
 	}
 	vm_set_eval_stack(th, iseqval, cref, base_block);
+	th->cfp->klass = CLASS_OF(base_block->self);
 	RB_GC_GUARD(crefval);
 
 	if (0) {		/* for debug */
@@ -1290,9 +1336,7 @@ eval_string_with_cref(VALUE self, VALUE src, VALUE scope, NODE *const cref_arg, 
 	    VALUE errinfo = th->errinfo;
 	    if (file == Qundef) {
 		VALUE mesg, errat, bt2;
-		ID id_mesg;
 
-		CONST_ID(id_mesg, "mesg");
 		errat = rb_get_backtrace(errinfo);
 		mesg = rb_attr_get(errinfo, id_mesg);
 		if (!NIL_P(errat) && RB_TYPE_P(errat, T_ARRAY) &&
@@ -1427,7 +1471,7 @@ rb_eval_string_protect(const char *str, int *state)
 
 /**
  * Evaluates the given string under a module binding in an isolated binding.
- * This is same as the binding for required libraries on "require('foo', true)".
+ * This is same as the binding for loaded libraries on "load('foo', true)".
  *
  * __FILE__ will be "(eval)", and __LINE__ starts from 1 in the evaluation.
  *
@@ -1478,7 +1522,7 @@ rb_eval_cmd(VALUE cmd, VALUE arg, int level)
 	PUSH_TAG();
 	rb_set_safe_level_force(level);
 	if ((state = EXEC_TAG()) == 0) {
-	    val = rb_funcall2(cmd, rb_intern("call"), RARRAY_LENINT(arg),
+	    val = rb_funcall2(cmd, idCall, RARRAY_LENINT(arg),
 			      RARRAY_CONST_PTR(arg));
 	}
 	POP_TAG();
@@ -1723,11 +1767,75 @@ rb_mod_module_exec(int argc, const VALUE *argv, VALUE mod)
 }
 
 /*
+ *  Document-class: UncaughtThrowError
+ *
+ *  Raised when +throw+ is called with a _tag_ which does not have
+ *  corresponding +catch+ block.
+ *
+ *     throw "foo", "bar"
+ *
+ *  <em>raises the exception:</em>
+ *
+ *     UncaughtThrowError: uncaught throw "foo"
+ */
+
+static VALUE
+uncaught_throw_init(int argc, const VALUE *argv, VALUE exc)
+{
+    rb_check_arity(argc, 2, UNLIMITED_ARGUMENTS);
+    rb_call_super(argc - 2, argv + 2);
+    rb_ivar_set(exc, id_tag, argv[0]);
+    rb_ivar_set(exc, id_value, argv[1]);
+    return exc;
+}
+
+/*
+ * call-seq:
+ *   uncaught_throw.tag   -> obj
+ *
+ * Return the tag object which was called for.
+ */
+
+static VALUE
+uncaught_throw_tag(VALUE exc)
+{
+    return rb_ivar_get(exc, id_tag);
+}
+
+/*
+ * call-seq:
+ *   uncaught_throw.value   -> obj
+ *
+ * Return the return value which was called for.
+ */
+
+static VALUE
+uncaught_throw_value(VALUE exc)
+{
+    return rb_ivar_get(exc, id_value);
+}
+
+/*
+ * call-seq:
+ *   uncaught_throw.to_s   ->  string
+ *
+ * Returns formatted message with the inspected tag.
+ */
+
+static VALUE
+uncaught_throw_to_s(VALUE exc)
+{
+    VALUE mesg = rb_attr_get(exc, id_mesg);
+    VALUE tag = uncaught_throw_tag(exc);
+    return rb_str_format(1, &tag, mesg);
+}
+
+/*
  *  call-seq:
  *     throw(tag [, obj])
  *
  *  Transfers control to the end of the active +catch+ block
- *  waiting for _tag_. Raises +ArgumentError+ if there
+ *  waiting for _tag_. Raises +UncaughtThrowError+ if there
  *  is no +catch+ block for the _tag_. The optional second
  *  parameter supplies a return value for the +catch+ block,
  *  which otherwise defaults to +nil+. For examples, see
@@ -1758,8 +1866,11 @@ rb_throw_obj(VALUE tag, VALUE value)
 	tt = tt->prev;
     }
     if (!tt) {
-	VALUE desc = rb_inspect(tag);
-	rb_raise(rb_eArgError, "uncaught throw %"PRIsVALUE, desc);
+	VALUE desc[3];
+	desc[0] = tag;
+	desc[1] = value;
+	desc[2] = rb_str_new_cstr("uncaught throw %p");
+	rb_exc_raise(rb_class_new_instance(numberof(desc), desc, rb_eUncaughtThrow));
     }
     th->errinfo = NEW_THROW_OBJECT(tag, 0, TAG_THROW);
 
@@ -2055,4 +2166,13 @@ Init_vm_eval(void)
     rb_define_method(rb_cModule, "class_exec", rb_mod_module_exec, -1);
     rb_define_method(rb_cModule, "module_eval", rb_mod_module_eval, -1);
     rb_define_method(rb_cModule, "class_eval", rb_mod_module_eval, -1);
+
+    rb_eUncaughtThrow = rb_define_class("UncaughtThrowError", rb_eArgError);
+    rb_define_method(rb_eUncaughtThrow, "initialize", uncaught_throw_init, -1);
+    rb_define_method(rb_eUncaughtThrow, "tag", uncaught_throw_tag, 0);
+    rb_define_method(rb_eUncaughtThrow, "value", uncaught_throw_value, 0);
+    rb_define_method(rb_eUncaughtThrow, "to_s", uncaught_throw_to_s, 0);
+
+    id_tag = rb_intern_const("tag");
+    id_value = rb_intern_const("value");
 }

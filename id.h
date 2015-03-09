@@ -64,6 +64,8 @@ enum ruby_id_types {
 #define RUBY_TOKEN_ASET 145
 #define RUBY_TOKEN_COLON2 146
 #define RUBY_TOKEN_COLON3 147
+#define RUBY_TOKEN_ANDOP 148
+#define RUBY_TOKEN_OROP 149
 #define RUBY_TOKEN(t) RUBY_TOKEN_##t
 
 enum ruby_method_ids {
@@ -82,6 +84,7 @@ enum ruby_method_ids {
     idLTLT = RUBY_TOKEN(LSHFT),
     idLE = RUBY_TOKEN(LEQ),
     idGT = '>',
+    idGTGT = RUBY_TOKEN(RSHFT),
     idGE = RUBY_TOKEN(GEQ),
     idEq = RUBY_TOKEN(EQ),
     idEqq = RUBY_TOKEN(EQQ),
@@ -92,7 +95,10 @@ enum ruby_method_ids {
     idNeqTilde = RUBY_TOKEN(NMATCH),
     idAREF = RUBY_TOKEN(AREF),
     idASET = RUBY_TOKEN(ASET),
-    tPRESERVED_ID_BEGIN = 147,
+    idCOLON2 = RUBY_TOKEN(COLON2),
+    idANDOP = RUBY_TOKEN(ANDOP),
+    idOROP = RUBY_TOKEN(OROP),
+    tPRESERVED_ID_BEGIN = 149,
     idNULL,
     idEmptyP,
     idEqlP,
@@ -149,6 +155,9 @@ enum ruby_method_ids {
     tTo_i,
     tBt,
     tBt_locations,
+    tCall,
+    tMesg,
+    tException,
     tUScore,
     tNEXT_ID,
 #define TOKEN2LOCALID(n) id##n = ((t##n<<ID_SCOPE_SHIFT)|ID_LOCAL|ID_STATIC_SYM)
@@ -190,6 +199,9 @@ enum ruby_method_ids {
     TOKEN2LOCALID(To_i),
     TOKEN2LOCALID(Bt),
     TOKEN2LOCALID(Bt_locations),
+    TOKEN2LOCALID(Call),
+    TOKEN2LOCALID(Mesg),
+    TOKEN2LOCALID(Exception),
     TOKEN2LOCALID(UScore),
     tLAST_OP_ID = tPRESERVED_ID_END-1,
     idLAST_OP_ID = tLAST_OP_ID >> ID_SCOPE_SHIFT

@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_pkey.h 33634 2011-11-04 07:19:23Z nobu $
+ * $Id: ossl_pkey.h 48806 2014-12-12 23:19:07Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001 Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -15,6 +15,7 @@ extern VALUE mPKey;
 extern VALUE cPKey;
 extern VALUE ePKeyError;
 extern ID id_private_q;
+extern const rb_data_type_t ossl_evp_pkey_type;
 
 #define OSSL_PKEY_SET_PRIVATE(obj) rb_iv_set((obj), "private", Qtrue)
 #define OSSL_PKEY_SET_PUBLIC(obj)  rb_iv_set((obj), "private", Qfalse)
@@ -24,11 +25,11 @@ extern ID id_private_q;
     if (!(pkey)) { \
 	rb_raise(rb_eRuntimeError, "PKEY wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, EVP_PKEY_free, (pkey)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_evp_pkey_type, (pkey)); \
     OSSL_PKEY_SET_PUBLIC(obj); \
 } while (0)
 #define GetPKey(obj, pkey) do {\
-    Data_Get_Struct((obj), EVP_PKEY, (pkey));\
+    TypedData_Get_Struct((obj), EVP_PKEY, &ossl_evp_pkey_type, (pkey)); \
     if (!(pkey)) { \
 	rb_raise(rb_eRuntimeError, "PKEY wasn't initialized!");\
     } \

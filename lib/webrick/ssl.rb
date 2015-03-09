@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2003 GOTOU Yuuzou All rights reserved.
 #
-# $Id: ssl.rb 44407 2013-12-25 05:10:12Z a_matsuda $
+# $Id: ssl.rb 48362 2014-11-10 11:05:00Z akr $
 
 require 'webrick'
 require 'openssl'
@@ -162,6 +162,7 @@ module WEBrick
         }
       end
       @listeners += listeners
+      setup_shutdown_pipe
     end
 
     ##

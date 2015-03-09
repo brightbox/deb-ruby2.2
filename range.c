@@ -2,15 +2,13 @@
 
   range.c -
 
-  $Author: nobu $
+  $Author: akr $
   created at: Thu Aug 19 17:46:47 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
-#include "ruby/encoding.h"
 #include "internal.h"
 #include "id.h"
 

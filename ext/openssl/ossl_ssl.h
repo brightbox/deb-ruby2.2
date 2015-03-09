@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_ssl.h 31087 2011-03-10 13:28:58Z akr $
+ * $Id: ossl_ssl.h 48801 2014-12-12 21:58:34Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -11,8 +11,12 @@
 #if !defined(_OSSL_SSL_H_)
 #define _OSSL_SSL_H_
 
+#define GetSSL(obj, ssl) do { \
+	TypedData_Get_Struct((obj), SSL, &ossl_ssl_type, (ssl)); \
+} while (0)
+
 #define GetSSLSession(obj, sess) do { \
-	Data_Get_Struct((obj), SSL_SESSION, (sess)); \
+	TypedData_Get_Struct((obj), SSL_SESSION, &ossl_ssl_session_type, (sess)); \
 	if (!(sess)) { \
 		ossl_raise(rb_eRuntimeError, "SSL Session wasn't initialized."); \
 	} \
@@ -23,6 +27,8 @@
 	GetSSLSession((obj), (sess)); \
 } while (0)
 
+extern const rb_data_type_t ossl_ssl_type;
+extern const rb_data_type_t ossl_ssl_session_type;
 extern VALUE mSSL;
 extern VALUE eSSLError;
 extern VALUE cSSLSocket;

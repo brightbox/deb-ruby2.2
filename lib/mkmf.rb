@@ -610,9 +610,7 @@ MSG
   end
 
   def try_cppflags(flags)
-    with_cppflags(flags) do
-      try_header("int main() {return 0;}")
-    end
+    try_header(MAIN_DOES_NOTHING, flags)
   end
 
   def with_cflags(flags)
@@ -624,9 +622,7 @@ MSG
   end
 
   def try_cflags(flags)
-    with_cflags(flags) do
-      try_compile("int main() {return 0;}")
-    end
+    try_compile(MAIN_DOES_NOTHING, flags)
   end
 
   def with_ldflags(flags)
@@ -638,9 +634,7 @@ MSG
   end
 
   def try_ldflags(flags)
-    with_ldflags(flags) do
-      try_link("int main() {return 0;}")
-    end
+    try_link(MAIN_DOES_NOTHING, flags)
   end
 
   def try_static_assert(expr, headers = nil, opt = "", &b)
@@ -2051,7 +2045,10 @@ RULES
         implicit = [[m[1], m[2]], [m.post_match]]
         next
       elsif RULE_SUBST and /\A(?!\s*\w+\s*=)[$\w][^#]*:/ =~ line
-        line.gsub!(%r"(\s)(?!\.)([^$(){}+=:\s\/\\,]+)(?=\s|\z)") {$1 + RULE_SUBST % $2}
+        line.sub!(/\s*\#.*$/, '')
+        comment = $&
+        line.gsub!(%r"(\s)(?!\.)([^$(){}+=:\s\\,]+)(?=\s|\z)") {$1 + RULE_SUBST % $2}
+        line = line.chomp + comment + "\n" if comment
       end
       depout << line
     end
@@ -2315,7 +2312,7 @@ static: $(STATIC_LIB)#{$extout ? " install-rb" : ""}
           dest = "#{dir}/#{File.basename(f)}"
           mfile.print("install-rb#{sfx}: #{dest}\n")
           mfile.print("#{dest}: #{f} #{timestamp_file(dir, target_prefix)}\n")
-          mfile.print("\t$(Q) $(#{$extout ? 'COPY' : 'INSTALL_DATA'}) #{f} $(@D#{sep})\n")
+          mfile.print("\t$(Q) $(#{$extout ? 'COPY' : 'INSTALL_DATA'}) #{f} $(@D)\n")
           if defined?($installed_list) and !$extout
             mfile.print("\t@echo #{dest}>>$(INSTALLED_LIST)\n")
           end
@@ -2358,20 +2355,28 @@ site-install-rb: install-rb
     return unless target
 
     mfile.puts SRC_EXT.collect {|e| ".path.#{e} = $(VPATH)"} if $nmake == ?b
-    mfile.print ".SUFFIXES: .#{SRC_EXT.join(' .')} .#{$OBJEXT}\n"
+    mfile.print ".SUFFIXES: .#{(SRC_EXT + [$OBJEXT, $ASMEXT]).compact.join(' .')}\n"
     mfile.print "\n"
 
     compile_command = "\n\t$(ECHO) compiling $(<#{rsep})\n\t$(Q) %s\n\n"
+    command = compile_command % COMPILE_CXX
+    asm_command = compile_command.sub(/compiling/, 'translating') % ASSEMBLE_CXX
     CXX_EXT.each do |e|
       each_compile_rules do |rule|
         mfile.printf(rule, e, $OBJEXT)
-        mfile.printf(compile_command, COMPILE_CXX)
+        mfile.print(command)
+        mfile.printf(rule, e, $ASMEXT)
+        mfile.print(asm_command)
       end
     end
+    command = compile_command % COMPILE_C
+    asm_command = compile_command.sub(/compiling/, 'translating') % ASSEMBLE_C
     C_EXT.each do |e|
       each_compile_rules do |rule|
         mfile.printf(rule, e, $OBJEXT)
-        mfile.printf(compile_command, COMPILE_C)
+        mfile.print(command)
+        mfile.printf(rule, e, $ASMEXT)
+        mfile.print(asm_command)
       end
     end
 
@@ -2444,6 +2449,7 @@ site-install-rb: install-rb
     $LIBEXT = config['LIBEXT'].dup
     $OBJEXT = config["OBJEXT"].dup
     $EXEEXT = config["EXEEXT"].dup
+    $ASMEXT = config_string('ASMEXT', &:dup) || 'S'
     $LIBS = "#{config['LIBS']} #{config['DLDLIBS']}"
     $LIBRUBYARG = ""
     $LIBRUBYARG_STATIC = config['LIBRUBYARG_STATIC']
@@ -2590,6 +2596,16 @@ MESSAGE
   # Command which will compile C++ files in the generated Makefile
 
   COMPILE_CXX = config_string('COMPILE_CXX') || '$(CXX) $(INCFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(COUTFLAG)$@ -c $<'
+
+  ##
+  # Command which will translate C files to assembler sources in the generated Makefile
+
+  ASSEMBLE_C = config_string('ASSEMBLE_C') || COMPILE_C.sub(/(?<=\s)-c(?=\s)/, '-S')
+
+  ##
+  # Command which will translate C++ files to assembler sources in the generated Makefile
+
+  ASSEMBLE_CXX = config_string('ASSEMBLE_CXX') || COMPILE_CXX.sub(/(?<=\s)-c(?=\s)/, '-S')
 
   ##
   # Command which will compile a program in order to test linking a library

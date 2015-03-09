@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_x509req.c 32199 2011-06-22 08:41:08Z emboss $
+ * $Id: ossl_x509req.c 48815 2014-12-12 23:59:28Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(req)) { \
 	ossl_raise(rb_eRuntimeError, "Req wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, X509_REQ_free, (req)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_x509req_type, (req)); \
 } while (0)
 #define GetX509Req(obj, req) do { \
-    Data_Get_Struct((obj), X509_REQ, (req)); \
+    TypedData_Get_Struct((obj), X509_REQ, &ossl_x509req_type, (req)); \
     if (!(req)) { \
 	ossl_raise(rb_eRuntimeError, "Req wasn't initialized!"); \
     } \
@@ -32,6 +32,20 @@
  */
 VALUE cX509Req;
 VALUE eX509ReqError;
+
+static void
+ossl_x509req_free(void *ptr)
+{
+    X509_REQ_free(ptr);
+}
+
+static const rb_data_type_t ossl_x509req_type = {
+    "OpenSSL/X509/REQ",
+    {
+	0, ossl_x509req_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
 
 /*
  * Public functions
@@ -438,7 +452,7 @@ ossl_x509req_add_attribute(VALUE self, VALUE attr)
  * X509_REQUEST init
  */
 void
-Init_ossl_x509req()
+Init_ossl_x509req(void)
 {
     eX509ReqError = rb_define_class_under(mX509, "RequestError", eOSSLError);
 

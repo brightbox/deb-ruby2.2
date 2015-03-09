@@ -45,6 +45,8 @@ end
 # * Matrix.zero(n)
 # * Matrix.row_vector(row)
 # * Matrix.column_vector(column)
+# * Matrix.hstack(*matrices)
+# * Matrix.vstack(*matrices)
 #
 # To access Matrix elements/columns/rows/submatrices/properties:
 # * #[](i, j)
@@ -60,6 +62,9 @@ end
 # * #minor(*param)
 # * #first_minor(row, column)
 # * #cofactor(row, column)
+# * #adjugate
+# * #laplace_expansion(row_or_column: num)
+# * #cofactor_expansion(row_or_column: num)
 #
 # Properties of a matrix:
 # * #diagonal?
@@ -86,16 +91,20 @@ end
 # * #inverse
 # * #inv
 # * #**
+# * #+@
+# * #-@
 #
 # Matrix functions:
 # * #determinant
 # * #det
+# * #hstack(*matrices)
 # * #rank
 # * #round
 # * #trace
 # * #tr
 # * #transpose
 # * #t
+# * #vstack(*matrices)
 #
 # Matrix decompositions:
 # * #eigen
@@ -152,7 +161,7 @@ class Matrix
   #          -1 66
   #
   def Matrix.rows(rows, copy = true)
-    rows = convert_to_array(rows)
+    rows = convert_to_array(rows, copy)
     rows.map! do |row|
       convert_to_array(row, copy)
     end
@@ -296,6 +305,51 @@ class Matrix
   end
 
   #
+  # Create a matrix by stacking matrices vertically
+  #
+  #   x = Matrix[[1, 2], [3, 4]]
+  #   y = Matrix[[5, 6], [7, 8]]
+  #   Matrix.vstack(x, y) # => Matrix[[1, 2], [3, 4], [5, 6], [7, 8]]
+  #
+  def Matrix.vstack(x, *matrices)
+    raise TypeError, "Expected a Matrix, got a #{x.class}" unless x.is_a?(Matrix)
+    result = x.send(:rows).map(&:dup)
+    matrices.each do |m|
+      raise TypeError, "Expected a Matrix, got a #{m.class}" unless m.is_a?(Matrix)
+      if m.column_count != x.column_count
+        raise ErrDimensionMismatch, "The given matrices must have #{x.column_count} columns, but one has #{m.column_count}"
+      end
+      result.concat(m.send(:rows))
+    end
+    new result, x.column_count
+  end
+
+
+  #
+  # Create a matrix by stacking matrices horizontally
+  #
+  #   x = Matrix[[1, 2], [3, 4]]
+  #   y = Matrix[[5, 6], [7, 8]]
+  #   Matrix.hstack(x, y) # => Matrix[[1, 2, 5, 6], [3, 4, 7, 8]]
+  #
+  def Matrix.hstack(x, *matrices)
+    raise TypeError, "Expected a Matrix, got a #{x.class}" unless x.is_a?(Matrix)
+    result = x.send(:rows).map(&:dup)
+    total_column_count = x.column_count
+    matrices.each do |m|
+      raise TypeError, "Expected a Matrix, got a #{m.class}" unless m.is_a?(Matrix)
+      if m.row_count != x.row_count
+        raise ErrDimensionMismatch, "The given matrices must have #{x.row_count} rows, but one has #{m.row_count}"
+      end
+      result.each_with_index do |row, i|
+        row.concat m.send(:rows)[i]
+      end
+      total_column_count += m.column_count
+    end
+    new result, total_column_count
+  end
+
+  #
   # Matrix.new is private; use Matrix.rows, columns, [], etc... to create.
   #
   def initialize(rows, column_count = rows[0].size)
@@ -391,7 +445,7 @@ class Matrix
 
   #
   # Yields all elements of the matrix, starting with those of the first row,
-  # or returns an Enumerator is no block given.
+  # or returns an Enumerator if no block given.
   # Elements can be restricted by passing an argument:
   # * :all (default): yields all elements
   # * :diagonal: yields only elements on the diagonal
@@ -636,12 +690,57 @@ class Matrix
     det_of_minor * (-1) ** (row + column)
   end
 
+  #
+  # Returns the adjugate of the matrix.
+  #
+  #   Matrix[ [7,6],[3,9] ].adjugate
+  #     => 9 -6
+  #        -3 7
+  #
+  def adjugate
+    Matrix.Raise ErrDimensionMismatch unless square?
+    Matrix.build(row_count, column_count) do |row, column|
+      cofactor(column, row)
+    end
+  end
+
+  #
+  # Returns the Laplace expansion along given row or column.
+  #
+  #    Matrix[[7,6], [3,9]].laplace_expansion(column: 1)
+  #     => 45
+  #
+  #    Matrix[[Vector[1, 0], Vector[0, 1]], [2, 3]].laplace_expansion(row: 0)
+  #     => Vector[3, -2]
+  #
+  #
+  def laplace_expansion(row: nil, column: nil)
+    num = row || column
+
+    if !num || (row && column)
+      raise ArgumentError, "exactly one the row or column arguments must be specified"
+    end
+
+    Matrix.Raise ErrDimensionMismatch unless square?
+    raise RuntimeError, "laplace_expansion of empty matrix is not defined" if empty?
+
+    unless 0 <= num && num < row_count
+      raise ArgumentError, "invalid num (#{num.inspect} for 0..#{row_count - 1})"
+    end
+
+    send(row ? :row : :column, num).map.with_index { |e, k|
+      e * cofactor(*(row ? [num, k] : [k,num]))
+    }.inject(:+)
+  end
+  alias_method :cofactor_expansion, :laplace_expansion
+
+
   #--
   # TESTING -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   #++
 
   #
-  # Returns +true+ is this is a diagonal matrix.
+  # Returns +true+ if this is a diagonal matrix.
   # Raises an error if matrix is not square.
   #
   def diagonal?
@@ -658,7 +757,7 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is an hermitian matrix.
+  # Returns +true+ if this is an hermitian matrix.
   # Raises an error if matrix is not square.
   #
   def hermitian?
@@ -669,14 +768,14 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is a lower triangular matrix.
+  # Returns +true+ if this is a lower triangular matrix.
   #
   def lower_triangular?
     each(:strict_upper).all?(&:zero?)
   end
 
   #
-  # Returns +true+ is this is a normal matrix.
+  # Returns +true+ if this is a normal matrix.
   # Raises an error if matrix is not square.
   #
   def normal?
@@ -694,7 +793,7 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is an orthogonal matrix
+  # Returns +true+ if this is an orthogonal matrix
   # Raises an error if matrix is not square.
   #
   def orthogonal?
@@ -712,7 +811,7 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is a permutation matrix
+  # Returns +true+ if this is a permutation matrix
   # Raises an error if matrix is not square.
   #
   def permutation?
@@ -748,21 +847,21 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is a singular matrix.
+  # Returns +true+ if this is a singular matrix.
   #
   def singular?
     determinant == 0
   end
 
   #
-  # Returns +true+ is this is a square matrix.
+  # Returns +true+ if this is a square matrix.
   #
   def square?
     column_count == row_count
   end
 
   #
-  # Returns +true+ is this is a symmetric matrix.
+  # Returns +true+ if this is a symmetric matrix.
   # Raises an error if matrix is not square.
   #
   def symmetric?
@@ -774,7 +873,7 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is a unitary matrix
+  # Returns +true+ if this is a unitary matrix
   # Raises an error if matrix is not square.
   #
   def unitary?
@@ -792,14 +891,14 @@ class Matrix
   end
 
   #
-  # Returns +true+ is this is an upper triangular matrix.
+  # Returns +true+ if this is an upper triangular matrix.
   #
   def upper_triangular?
     each(:strict_lower).all?(&:zero?)
   end
 
   #
-  # Returns +true+ is this is a matrix with only zero elements
+  # Returns +true+ if this is a matrix with only zero elements
   #
   def zero?
     all?(&:zero?)
@@ -1040,6 +1139,14 @@ class Matrix
     end
   end
 
+  def +@
+    self
+  end
+
+  def -@
+    collect {|e| -e }
+  end
+
   #--
   # MATRIX FUNCTIONS -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   #++
@@ -1143,6 +1250,18 @@ class Matrix
   alias det_e determinant_e
 
   #
+  # Returns a new matrix resulting by stacking horizontally
+  # the receiver with the given matrices
+  #
+  #   x = Matrix[[1, 2], [3, 4]]
+  #   y = Matrix[[5, 6], [7, 8]]
+  #   x.hstack(y) # => Matrix[[1, 2, 5, 6], [3, 4, 7, 8]]
+  #
+  def hstack(*matrices)
+    self.class.hstack(self, *matrices)
+  end
+
+  #
   # Returns the rank of the matrix.
   # Beware that using Float values can yield erroneous results
   # because of their lack of precision.
@@ -1222,6 +1341,18 @@ class Matrix
     new_matrix @rows.transpose, row_count
   end
   alias t transpose
+
+  #
+  # Returns a new matrix resulting by stacking vertically
+  # the receiver with the given matrices
+  #
+  #   x = Matrix[[1, 2], [3, 4]]
+  #   y = Matrix[[5, 6], [7, 8]]
+  #   x.vstack(y) # => Matrix[[1, 2], [3, 4], [5, 6], [7, 8]]
+  #
+  def vstack(*matrices)
+    self.class.vstack(self, *matrices)
+  end
 
   #--
   # DECOMPOSITIONS -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -1551,6 +1682,7 @@ end
 # To create a Vector:
 # * Vector.[](*array)
 # * Vector.elements(array, copy = true)
+# * Vector.basis(size: n, index: k)
 #
 # To access elements:
 # * #[](i)
@@ -1559,14 +1691,21 @@ end
 # * #each2(v)
 # * #collect2(v)
 #
+# Properties of vectors:
+# * #angle_with(v)
+# * Vector.independent?(*vs)
+# * #independent?(*vs)
+#
 # Vector arithmetic:
 # * #*(x) "is matrix or number"
 # * #+(v)
 # * #-(v)
+# * #+@
+# * #-@
 #
 # Vector functions:
-# * #inner_product(v)
-# * #cross_product(v)
+# * #inner_product(v), dot(v)
+# * #cross_product(v), cross(v)
 # * #collect
 # * #magnitude
 # * #map
@@ -1610,6 +1749,19 @@ class Vector
   #
   def Vector.elements(array, copy = true)
     new convert_to_array(array, copy)
+  end
+
+  #
+  # Returns a standard basis +n+-vector, where k is the index.
+  #
+  #    Vector.basis(size:, index:) # => Vector[0, 1, 0]
+  #
+  def Vector.basis(size:, index:)
+    raise ArgumentError, "invalid size (#{size} for 1..)" if size < 1
+    raise ArgumentError, "invalid index (#{index} for 0...#{size})" unless 0 <= index && index < size
+    array = Array.new(size, 0)
+    array[index] = 1
+    new convert_to_array(array, false)
   end
 
   #
@@ -1685,6 +1837,41 @@ class Vector
   end
 
   #--
+  # PROPERTIES -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+  #++
+
+  #
+  # Returns +true+ iff all of vectors are linearly independent.
+  #
+  #   Vector.independent?(Vector[1,0], Vector[0,1])
+  #     => true
+  #
+  #   Vector.independent?(Vector[1,2], Vector[2,4])
+  #     => false
+  #
+  def Vector.independent?(*vs)
+    vs.each do |v|
+      raise TypeError, "expected Vector, got #{v.class}" unless v.is_a?(Vector)
+      Vector.Raise ErrDimensionMismatch unless v.size == vs.first.size
+    end
+    return false if vs.count > vs.first.size
+    Matrix[*vs].rank.eql?(vs.count)
+  end
+
+  #
+  # Returns +true+ iff all of vectors are linearly independent.
+  #
+  #   Vector[1,0].independent?(Vector[0,1])
+  #     => true
+  #
+  #   Vector[1,2].independent?(Vector[2,4])
+  #     => false
+  #
+  def independent?(*vs)
+    self.class.independent?(self, *vs)
+  end
+
+  #--
   # COMPARING -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   #++
 
@@ -1702,14 +1889,14 @@ class Vector
   end
 
   #
-  # Return a copy of the vector.
+  # Returns a copy of the vector.
   #
   def clone
     self.class.elements(@elements)
   end
 
   #
-  # Return a hash-code for the vector.
+  # Returns a hash-code for the vector.
   #
   def hash
     @elements.hash
@@ -1787,6 +1974,14 @@ class Vector
     end
   end
 
+  def +@
+    self
+  end
+
+  def -@
+    collect {|e| -e }
+  end
+
   #--
   # VECTOR FUNCTIONS -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   #++
@@ -1804,17 +1999,41 @@ class Vector
     }
     p
   end
+  alias_method :dot, :inner_product
 
   #
-  # Returns the cross product of this vector with the other.
+  # Returns the cross product of this vector with the others.
   #   Vector[1, 0, 0].cross_product Vector[0, 1, 0]   => Vector[0, 0, 1]
   #
-  def cross_product(v)
-    Vector.Raise ErrDimensionMismatch unless size == v.size && v.size == 3
-    Vector[ v[2]*@elements[1] - v[1]*@elements[2],
-            v[0]*@elements[2] - v[2]*@elements[0],
-            v[1]*@elements[0] - v[0]*@elements[1] ]
+  # It is generalized to other dimensions to return a vector perpendicular
+  # to the arguments.
+  #   Vector[1, 2].cross_product # => Vector[-2, 1]
+  #   Vector[1, 0, 0, 0].cross_product(
+  #      Vector[0, 1, 0, 0],
+  #      Vector[0, 0, 1, 0]
+  #   )  #=> Vector[0, 0, 0, 1]
+  #
+  def cross_product(*vs)
+    raise ErrOperationNotDefined, "cross product is not defined on vectors of dimension #{size}" unless size >= 2
+    raise ArgumentError, "wrong number of arguments (#{vs.size} for #{size - 2})" unless vs.size == size - 2
+    vs.each do |v|
+      raise TypeError, "expected Vector, got #{v.class}" unless v.is_a? Vector
+      Vector.Raise ErrDimensionMismatch unless v.size == size
+    end
+    case size
+    when 2
+      Vector[-@elements[1], @elements[0]]
+    when 3
+      v = vs[0]
+      Vector[ v[2]*@elements[1] - v[1]*@elements[2],
+        v[0]*@elements[2] - v[2]*@elements[0],
+        v[1]*@elements[0] - v[0]*@elements[1] ]
+    else
+      rows = self, *vs, Array.new(size) {|i| Vector.basis(size: size, index: i) }
+      Matrix.rows(rows).laplace_expansion(row: size - 1)
+    end
   end
+  alias_method :cross, :cross_product
 
   #
   # Like Array#collect.
@@ -1857,6 +2076,20 @@ class Vector
     n = magnitude
     raise ZeroVectorError, "Zero vectors can not be normalized" if n == 0
     self / n
+  end
+
+  #
+  # Returns an angle with another vector. Result is within the [0...Math::PI].
+  #   Vector[1,0].angle_with(Vector[0,1])
+  #   # => Math::PI / 2
+  #
+  def angle_with(v)
+    raise TypeError, "Expected a Vector, got a #{v.class}" unless v.is_a?(Vector)
+    Vector.Raise ErrDimensionMismatch if size != v.size
+    prod = magnitude * v.magnitude
+    raise ZeroVectorError, "Can't get angle of zero vector" if prod == 0
+
+    Math.acos( inner_product(v) / prod )
   end
 
   #--

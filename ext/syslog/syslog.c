@@ -5,7 +5,7 @@
  * Documented by mathew <meta@pobox.com>
  *
  * $RoughId: syslog.c,v 1.21 2002/02/25 12:21:17 knu Exp $
- * $Id: syslog.c 44581 2014-01-13 00:57:41Z nobu $
+ * $Id: syslog.c 47792 2014-10-04 23:09:32Z nobu $
  */
 
 #include "ruby/ruby.h"
@@ -418,7 +418,7 @@ static VALUE mSyslogMacros_included(VALUE mod, VALUE target)
  *
  * The syslog protocol is standardized in RFC 5424.
  */
-void Init_syslog()
+void Init_syslog(void)
 {
     mSyslog = rb_define_module("Syslog");
 

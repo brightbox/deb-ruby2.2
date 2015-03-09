@@ -2,13 +2,13 @@
 
   readline.c - GNU Readline module
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Wed Jan 20 13:59:32 JST 1999
 
   Copyright (C) 1997-2008  Shugo Maeda
   Copyright (C) 2008-2013  Kouji Takao
 
-  $Id: readline.c 47555 2014-09-12 13:11:13Z nobu $
+  $Id: readline.c 49299 2015-01-17 07:50:07Z naruse $
 
   Contact:
    - Kouji Takao <kouji dot takao at gmail dot com> (current maintainer)
@@ -33,10 +33,9 @@
 #include <editline/readline.h>
 #endif
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/io.h"
 #include "ruby/thread.h"
-#include "internal.h"
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -360,6 +359,34 @@ clear_rl_outstream(void)
     readline_outstream = Qfalse;
 }
 
+static void
+prepare_readline(void)
+{
+    static int initialized = 0;
+    if (!initialized) {
+	rl_initialize();
+	initialized = 1;
+    }
+
+    if (readline_instream) {
+        rb_io_t *ifp;
+        rb_io_check_initialized(ifp = RFILE(rb_io_taint_check(readline_instream))->fptr);
+        if (ifp->fd < 0) {
+            clear_rl_instream();
+            rb_raise(rb_eIOError, "closed readline input");
+        }
+    }
+
+    if (readline_outstream) {
+        rb_io_t *ofp;
+        rb_io_check_initialized(ofp = RFILE(rb_io_taint_check(readline_outstream))->fptr);
+        if (ofp->fd < 0) {
+            clear_rl_outstream();
+            rb_raise(rb_eIOError, "closed readline output");
+        }
+    }
+}
+
 /*
  * call-seq:
  *   Readline.readline(prompt = "", add_hist = false) -> string or nil
@@ -461,23 +488,7 @@ readline_readline(int argc, VALUE *argv, VALUE self)
         prompt = RSTRING_PTR(tmp);
     }
 
-    if (readline_instream) {
-        rb_io_t *ifp;
-        rb_io_check_initialized(ifp = RFILE(rb_io_taint_check(readline_instream))->fptr);
-        if (ifp->fd < 0) {
-            clear_rl_instream();
-            rb_raise(rb_eIOError, "closed readline input");
-        }
-    }
-
-    if (readline_outstream) {
-        rb_io_t *ofp;
-        rb_io_check_initialized(ofp = RFILE(rb_io_taint_check(readline_outstream))->fptr);
-        if (ofp->fd < 0) {
-            clear_rl_outstream();
-            rb_raise(rb_eIOError, "closed readline output");
-        }
-    }
+    prepare_readline();
 
 #ifdef _WIN32
     rl_prep_terminal(1);
@@ -1550,6 +1561,7 @@ readline_s_get_filename_quote_characters(VALUE self, VALUE str)
 static VALUE
 readline_s_refresh_line(VALUE self)
 {
+    prepare_readline();
     rl_refresh_line(0, 0);
     return Qnil;
 }
@@ -1786,7 +1798,7 @@ username_completion_proc_call(VALUE self, VALUE str)
 }
 
 void
-Init_readline()
+Init_readline(void)
 {
     VALUE history, fcomp, ucomp, version;
 

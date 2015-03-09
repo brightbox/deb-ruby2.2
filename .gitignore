@@ -105,6 +105,8 @@ y.tab.c
 /benchmark/fasta.output.*
 /benchmark/wc.input
 
+/enc/unicode/data
+
 # /enc/trans/
 /enc/trans/*.c
 
@@ -117,6 +119,9 @@ y.tab.c
 
 # /ext/etc/
 /ext/etc/constdefs.h
+
+# /ext/fiddle/
+/ext/fiddle/libffi-*
 
 # /ext/rbconfig/
 /ext/rbconfig/sizeof/sizes.c

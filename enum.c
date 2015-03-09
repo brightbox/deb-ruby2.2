@@ -2,20 +2,17 @@
 
   enum.c -
 
-  $Author: knu $
+  $Author: akr $
   created at: Fri Oct  1 15:15:19 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/util.h"
 #include "node.h"
 #include "id.h"
-#include "internal.h"
-
-VALUE rb_f_send(int argc, VALUE *argv, VALUE recv);
 
 VALUE rb_mEnumerable;
 
@@ -555,8 +552,7 @@ inject_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, p))
 
     ENUM_WANT_SVALUE();
 
-    if (memo->u2.argc == 0) {
-	memo->u2.argc = 1;
+    if (memo->u1.value == Qundef) {
 	memo->u1.value = i;
     }
     else {
@@ -573,12 +569,12 @@ inject_op_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, p))
 
     ENUM_WANT_SVALUE();
 
-    if (memo->u2.argc == 0) {
-	memo->u2.argc = 1;
+    if (memo->u1.value == Qundef) {
 	memo->u1.value = i;
     }
     else if (SYMBOL_P(name = memo->u3.value)) {
-	memo->u1.value = rb_funcall(memo->u1.value, SYM2ID(name), 1, i);
+	const ID mid = SYM2ID(name);
+	memo->u1.value = rb_funcall(memo->u1.value, mid, 1, i);
     }
     else {
 	VALUE args[2];
@@ -642,6 +638,7 @@ enum_inject(int argc, VALUE *argv, VALUE obj)
 
     switch (rb_scan_args(argc, argv, "02", &init, &op)) {
       case 0:
+	init = Qundef;
 	break;
       case 1:
 	if (rb_block_given_p()) {
@@ -649,8 +646,7 @@ enum_inject(int argc, VALUE *argv, VALUE obj)
 	}
 	id = rb_check_id(&init);
 	op = id ? ID2SYM(id) : init;
-	argc = 0;
-	init = Qnil;
+	init = Qundef;
 	iter = inject_op_i;
 	break;
       case 2:
@@ -662,8 +658,9 @@ enum_inject(int argc, VALUE *argv, VALUE obj)
 	iter = inject_op_i;
 	break;
     }
-    memo = NEW_MEMO(init, argc, op);
+    memo = NEW_MEMO(init, Qnil, op);
     rb_block_call(obj, id_each, 0, 0, iter, (VALUE)memo);
+    if (memo->u1.value == Qundef) return Qnil;
     return memo->u1.value;
 }
 
@@ -1110,6 +1107,7 @@ struct nmin_data {
   long bufmax;
   long curlen;
   VALUE buf;
+  VALUE limit;
   int (*cmpfunc)(const void *, const void *, void *);
   int rev; /* max if 1 */
   int by; /* min_by if 1 */
@@ -1221,17 +1219,32 @@ nmin_filter(struct nmin_data *data)
 
     data->curlen = data->n;
     rb_ary_resize(data->buf, data->n * eltsize);
+    data->limit = RARRAY_PTR(data->buf)[(data->n-1)*eltsize];
 }
 
 static VALUE
 nmin_i(VALUE i, VALUE *_data, int argc, VALUE *argv)
 {
     struct nmin_data *data = (struct nmin_data *)_data;
+    VALUE cmpv;
 
     ENUM_WANT_SVALUE();
 
     if (data->by)
-	rb_ary_push(data->buf, rb_yield(i));
+	cmpv = rb_yield(i);
+    else
+	cmpv = i;
+
+    if (data->limit != Qundef) {
+        int c = data->cmpfunc(&cmpv, &data->limit, data);
+        if (data->rev)
+            c = -c;
+        if (c > 0)
+            return Qnil;
+    }
+
+    if (data->by)
+	rb_ary_push(data->buf, cmpv);
     rb_ary_push(data->buf, i);
 
     data->curlen++;
@@ -1259,6 +1272,7 @@ nmin_run(VALUE obj, VALUE num, int by, int rev)
     data.bufmax = data.n * 4;
     data.curlen = 0;
     data.buf = rb_ary_tmp_new(data.bufmax * (by ? 2 : 1));
+    data.limit = Qundef;
     data.cmpfunc = by ? nmin_cmp :
                    rb_block_given_p() ? nmin_block_cmp :
 		   nmin_cmp;
@@ -1283,6 +1297,9 @@ nmin_run(VALUE obj, VALUE num, int by, int rev)
     else {
 	ruby_qsort(RARRAY_PTR(result), RARRAY_LEN(result), sizeof(VALUE),
 		   data.cmpfunc, (void *)&data);
+    }
+    if (rev) {
+        rb_ary_reverse(result);
     }
     *((VALUE *)&RBASIC(result)->klass) = rb_cArray;
     return result;
@@ -1496,8 +1513,8 @@ max_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *  as an array.
  *
  *     a = %w[albatross dog horse]
- *     a.max(2)                                  #=> ["dog", "horse"]
- *     a.max(2) {|a, b| a.length <=> b.length }  #=> ["horse", "albatross"]
+ *     a.max(2)                                  #=> ["horse", "dog"]
+ *     a.max(2) {|a, b| a.length <=> b.length }  #=> ["albatross", "horse"]
  */
 
 static VALUE
@@ -1775,7 +1792,7 @@ max_by_i(RB_BLOCK_CALL_FUNC_ARGLIST(i, args))
  *  as an array.
  *
  *     a = %w[albatross dog horse]
- *     a.max_by(2) {|x| x.length } #=> ["horse", "albatross"]
+ *     a.max_by(2) {|x| x.length } #=> ["albatross", "horse"]
  *
  *  enum.max_by(n) can be used to implement weighted random sampling.
  *  Following example implements and use Enumerable#wsample.
@@ -2751,7 +2768,7 @@ chunk_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
 /*
  *  call-seq:
  *     enum.chunk { |elt| ... }                       -> an_enumerator
- *     enum.chunk(initial_state) { |elt, state| ... } -> an_enumerator
+ *     enum.chunk(initial_state) { |elt, state| ... } -> an_enumerator (deprecated)
  *
  *  Enumerates over the items, chunking them together based on the return
  *  value of the block.
@@ -2835,22 +2852,19 @@ chunk_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
  *      }
  *    }
  *
- *  If the block needs to maintain state over multiple elements,
- *  an +initial_state+ argument can be used.
- *  If a non-nil value is given,
- *  a reference to it is passed as the 2nd argument of the block for the
- *  +chunk+ method, so state-changes to it persist across block calls.
- *
  */
 static VALUE
 enum_chunk(int argc, VALUE *argv, VALUE enumerable)
 {
     VALUE initial_state;
     VALUE enumerator;
+    int n;
 
     if (!rb_block_given_p())
 	rb_raise(rb_eArgError, "no block given");
-    rb_scan_args(argc, argv, "01", &initial_state);
+    n = rb_scan_args(argc, argv, "01", &initial_state);
+    if (n != 0)
+        rb_warn("initial_state given for chunk.  (Use local variables.)");
 
     enumerator = rb_obj_alloc(rb_cEnumerator);
     rb_ivar_set(enumerator, rb_intern("chunk_enumerable"), enumerable);
@@ -2926,7 +2940,7 @@ slicebefore_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
  *  call-seq:
  *     enum.slice_before(pattern)                             -> an_enumerator
  *     enum.slice_before { |elt| bool }                       -> an_enumerator
- *     enum.slice_before(initial_state) { |elt, state| bool } -> an_enumerator
+ *     enum.slice_before(initial_state) { |elt, state| bool } -> an_enumerator (deprecated)
  *
  *  Creates an enumerator for each chunked elements.
  *  The beginnings of chunks are defined by _pattern_ and the block.
@@ -2943,7 +2957,6 @@ slicebefore_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
  *
  *    enum.slice_before(pattern).each { |ary| ... }
  *    enum.slice_before { |elt| bool }.each { |ary| ... }
- *    enum.slice_before(initial_state) { |elt, state| bool }.each { |ary| ... }
  *
  *  Other methods of the Enumerator class and Enumerable module,
  *  such as map, etc., are also usable.
@@ -2989,35 +3002,43 @@ slicebefore_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
  *    }.join(",")
  *    #=> "0,2-4,6,7,9"
  *
- *  However local variables are not appropriate to maintain state
- *  if the result enumerator is used twice or more.
- *  In such a case, the last state of the 1st +each+ is used in the 2nd +each+.
- *  The _initial_state_ argument can be used to avoid this problem.
- *  If non-nil value is given as _initial_state_,
- *  it is duplicated for each +each+ method invocation of the enumerator.
- *  The duplicated object is passed to 2nd argument of the block for
- *  +slice_before+ method.
+ *  However local variables should be used carefully
+ *  if the result enumerator is enumerated twice or more.
+ *  The local variables should be initialized for each enumeration.
+ *  Enumerator.new can be used to do it.
  *
  *    # Word wrapping.  This assumes all characters have same width.
  *    def wordwrap(words, maxwidth)
- *      # if cols is a local variable, 2nd "each" may start with non-zero cols.
- *      words.slice_before(cols: 0) { |w, h|
- *        h[:cols] += 1 if h[:cols] != 0
- *        h[:cols] += w.length
- *        if maxwidth < h[:cols]
- *          h[:cols] = w.length
- *          true
- *        else
- *          false
- *        end
+ *      Enumerator.new {|y|
+ *        # cols is initialized in Enumerator.new.
+ *        cols = 0
+ *        words.slice_before { |w|
+ *          cols += 1 if cols != 0
+ *          cols += w.length
+ *          if maxwidth < cols
+ *            cols = w.length
+ *            true
+ *          else
+ *            false
+ *          end
+ *        }.each {|ws| y.yield ws }
  *      }
  *    end
  *    text = (1..20).to_a.join(" ")
  *    enum = wordwrap(text.split(/\s+/), 10)
  *    puts "-"*10
- *    enum.each { |ws| puts ws.join(" ") }
+ *    enum.each { |ws| puts ws.join(" ") } # first enumeration.
+ *    puts "-"*10
+ *    enum.each { |ws| puts ws.join(" ") } # second enumeration generates same result as the first.
  *    puts "-"*10
  *    #=> ----------
+ *    #   1 2 3 4 5
+ *    #   6 7 8 9 10
+ *    #   11 12 13
+ *    #   14 15 16
+ *    #   17 18 19
+ *    #   20
+ *    #   ----------
  *    #   1 2 3 4 5
  *    #   6 7 8 9 10
  *    #   11 12 13
@@ -3066,7 +3087,10 @@ enum_slice_before(int argc, VALUE *argv, VALUE enumerable)
 
     if (rb_block_given_p()) {
         VALUE initial_state;
-        rb_scan_args(argc, argv, "01", &initial_state);
+        int n;
+        n = rb_scan_args(argc, argv, "01", &initial_state);
+        if (n != 0)
+	    rb_warn("initial_state given for slice_before.  (Use local variables.)");
         enumerator = rb_obj_alloc(rb_cEnumerator);
         rb_ivar_set(enumerator, rb_intern("slicebefore_sep_pred"), rb_block_proc());
         rb_ivar_set(enumerator, rb_intern("slicebefore_initial_state"), initial_state);
@@ -3206,6 +3230,144 @@ enum_slice_after(int argc, VALUE *argv, VALUE enumerable)
     return enumerator;
 }
 
+struct slicewhen_arg {
+    VALUE pred;
+    VALUE prev_elt;
+    VALUE prev_elts;
+    VALUE yielder;
+};
+
+static VALUE
+slicewhen_ii(RB_BLOCK_CALL_FUNC_ARGLIST(i, _memo))
+{
+#define UPDATE_MEMO ((void)(memo = MEMO_FOR(struct slicewhen_arg, _memo)))
+    struct slicewhen_arg *memo;
+    int split_p;
+    UPDATE_MEMO;
+
+    ENUM_WANT_SVALUE();
+
+    if (memo->prev_elt == Qundef) {
+        /* The first element */
+        memo->prev_elt = i;
+        memo->prev_elts = rb_ary_new3(1, i);
+    }
+    else {
+        split_p = RTEST(rb_funcall(memo->pred, id_call, 2, memo->prev_elt, i));
+        UPDATE_MEMO;
+
+        if (split_p) {
+            rb_funcall(memo->yielder, id_lshift, 1, memo->prev_elts);
+            UPDATE_MEMO;
+            memo->prev_elts = rb_ary_new3(1, i);
+        }
+        else {
+            rb_ary_push(memo->prev_elts, i);
+        }
+
+        memo->prev_elt = i;
+    }
+
+    return Qnil;
+#undef UPDATE_MEMO
+}
+
+static VALUE
+slicewhen_i(RB_BLOCK_CALL_FUNC_ARGLIST(yielder, enumerator))
+{
+    VALUE enumerable;
+    VALUE arg;
+    struct slicewhen_arg *memo = NEW_MEMO_FOR(struct slicewhen_arg, arg);
+
+    enumerable = rb_ivar_get(enumerator, rb_intern("slicewhen_enum"));
+    memo->pred = rb_attr_get(enumerator, rb_intern("slicewhen_pred"));
+    memo->prev_elt = Qundef;
+    memo->prev_elts = Qnil;
+    memo->yielder = yielder;
+
+    rb_block_call(enumerable, id_each, 0, 0, slicewhen_ii, arg);
+    memo = MEMO_FOR(struct slicewhen_arg, arg);
+    if (!NIL_P(memo->prev_elts))
+        rb_funcall(memo->yielder, id_lshift, 1, memo->prev_elts);
+    return Qnil;
+}
+
+/*
+ *  call-seq:
+ *     enum.slice_when {|elt_before, elt_after| bool } -> an_enumerator
+ *
+ *  Creates an enumerator for each chunked elements.
+ *  The beginnings of chunks are defined by the block.
+ *
+ *  This method split each chunk using adjacent elements,
+ *  _elt_before_ and _elt_after_,
+ *  in the receiver enumerator.
+ *  This method split chunks between _elt_before_ and _elt_after_ where
+ *  the block returns true.
+ *
+ *  The block is called the length of the receiver enumerator minus one.
+ *
+ *  The result enumerator yields the chunked elements as an array.
+ *  So +each+ method can be called as follows:
+ *
+ *    enum.slice_when { |elt_before, elt_after| bool }.each { |ary| ... }
+ *
+ *  Other methods of the Enumerator class and Enumerable module,
+ *  such as +to_a+, +map+, etc., are also usable.
+ *
+ *  For example, one-by-one increasing subsequence can be chunked as follows:
+ *
+ *    a = [1,2,4,9,10,11,12,15,16,19,20,21]
+ *    b = a.slice_when {|i, j| i+1 != j }
+ *    p b.to_a #=> [[1, 2], [4], [9, 10, 11, 12], [15, 16], [19, 20, 21]]
+ *    c = b.map {|a| a.length < 3 ? a : "#{a.first}-#{a.last}" }
+ *    p c #=> [[1, 2], [4], "9-12", [15, 16], "19-21"]
+ *    d = c.join(",")
+ *    p d #=> "1,2,4,9-12,15,16,19-21"
+ *
+ *  Near elements (threshold: 6) in sorted array can be chunked as follwos:
+ *
+ *    a = [3, 11, 14, 25, 28, 29, 29, 41, 55, 57]
+ *    p a.slice_when {|i, j| 6 < j - i }.to_a
+ *    #=> [[3], [11, 14], [25, 28, 29, 29], [41], [55, 57]]
+ *
+ *  Increasing (non-decreasing) subsequence can be chunked as follows:
+ *
+ *    a = [0, 9, 2, 2, 3, 2, 7, 5, 9, 5]
+ *    p a.slice_when {|i, j| i > j }.to_a
+ *    #=> [[0, 9], [2, 2, 3], [2, 7], [5, 9], [5]]
+ *
+ *  Adjacent evens and odds can be chunked as follows:
+ *  (Enumerable#chunk is another way to do it.)
+ *
+ *    a = [7, 5, 9, 2, 0, 7, 9, 4, 2, 0]
+ *    p a.slice_when {|i, j| i.even? != j.even? }.to_a
+ *    #=> [[7, 5, 9], [2, 0], [7, 9], [4, 2, 0]]
+ *
+ *  Paragraphs (non-empty lines with trailing empty lines) can be chunked as follows:
+ *  (See Enumerable#chunk to ignore empty lines.)
+ *
+ *    lines = ["foo\n", "bar\n", "\n", "baz\n", "qux\n"]
+ *    p lines.slice_when {|l1, l2| /\A\s*\z/ =~ l1 && /\S/ =~ l2 }.to_a
+ *    #=> [["foo\n", "bar\n", "\n"], ["baz\n", "qux\n"]]
+ *
+ */
+static VALUE
+enum_slice_when(VALUE enumerable)
+{
+    VALUE enumerator;
+    VALUE pred;
+
+    pred = rb_block_proc();
+
+    enumerator = rb_obj_alloc(rb_cEnumerator);
+    rb_ivar_set(enumerator, rb_intern("slicewhen_enum"), enumerable);
+    rb_ivar_set(enumerator, rb_intern("slicewhen_pred"), pred);
+
+    rb_block_call(enumerator, idInitialize, 0, 0, slicewhen_i, enumerator);
+    return enumerator;
+}
+
 /*
  *  The <code>Enumerable</code> mixin provides collection classes with
  *  several traversal and searching methods, and with the ability to
@@ -3275,6 +3437,7 @@ Init_Enumerable(void)
     rb_define_method(rb_mEnumerable, "chunk", enum_chunk, -1);
     rb_define_method(rb_mEnumerable, "slice_before", enum_slice_before, -1);
     rb_define_method(rb_mEnumerable, "slice_after", enum_slice_after, -1);
+    rb_define_method(rb_mEnumerable, "slice_when", enum_slice_when, 0);
 
     id_next = rb_intern("next");
     id_call = rb_intern("call");

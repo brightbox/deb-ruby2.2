@@ -11,7 +11,7 @@
   (See the file 'LICENCE'.)
 
 = Version
-  $Id: ssl.rb 46223 2014-05-29 10:32:19Z akr $
+  $Id: ssl.rb 48097 2014-10-22 13:55:24Z nagachika $
 =end
 
 require "openssl/buffering"
@@ -64,6 +64,7 @@ module OpenSSL
           opts |= OpenSSL::SSL::OP_NO_COMPRESSION if defined?(OpenSSL::SSL::OP_NO_COMPRESSION)
           opts |= OpenSSL::SSL::OP_NO_SSLv2 if defined?(OpenSSL::SSL::OP_NO_SSLv2)
           opts |= OpenSSL::SSL::OP_NO_SSLv3 if defined?(OpenSSL::SSL::OP_NO_SSLv3)
+          opts
         }.call
       }
 

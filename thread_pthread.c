@@ -3,7 +3,7 @@
 
   thread_pthread.c -
 
-  $Author: hsbt $
+  $Author: naruse $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -653,6 +653,42 @@ space_size(size_t stack_size)
     }
 }
 
+#ifdef __linux__
+static __attribute__((noinline)) void
+reserve_stack(volatile char *limit, size_t size)
+{
+# ifdef C_ALLOCA
+#   error needs alloca()
+# endif
+    struct rlimit rl;
+    volatile char buf[0x100];
+    STACK_GROW_DIR_DETECTION;
+
+    if (!getrlimit(RLIMIT_STACK, &rl) && rl.rlim_cur == RLIM_INFINITY)
+	return;
+
+    size -= sizeof(buf); /* margin */
+    if (IS_STACK_DIR_UPPER()) {
+	const volatile char *end = buf + sizeof(buf);
+	limit += size;
+	if (limit > end) {
+	    size = limit - end;
+	    limit = alloca(size);
+	    limit[size-1] = 0;
+	}
+    }
+    else {
+	limit -= size;
+	if (buf > limit) {
+	    limit = alloca(buf - limit);
+	    limit[0] = 0;
+	}
+    }
+}
+#else
+# define reserve_stack(limit, size) ((void)(limit), (void)(size))
+#endif
+
 #undef ruby_init_stack
 /* Set stack bottom of Ruby implementation.
  *
@@ -674,6 +710,7 @@ ruby_init_stack(volatile VALUE *addr
 	if (get_main_stack(&stackaddr, &size) == 0) {
 	    native_main_thread.stack_maxsize = size;
 	    native_main_thread.stack_start = stackaddr;
+	    reserve_stack(stackaddr, size);
 	    return;
 	}
     }
@@ -1446,6 +1483,39 @@ timer_thread_sleep(rb_global_vm_lock_t* unused)
 #elif !defined(SET_THREAD_NAME)
 # define SET_THREAD_NAME(name) (void)0
 #endif
+
+static VALUE rb_thread_inspect_msg(VALUE thread, int show_enclosure, int show_location, int show_status);
+
+static void
+native_set_thread_name(rb_thread_t *th)
+{
+#if defined(__linux__) && defined(PR_SET_NAME)
+    VALUE str;
+    char *name, *p;
+    char buf[16];
+    size_t len;
+
+    str = rb_thread_inspect_msg(th->self, 0, 1, 0);
+    name = StringValueCStr(str);
+    if (*name == '@')
+        name++;
+    p = strrchr(name, '/'); /* show only the basename of the path. */
+    if (p && p[1])
+        name = p + 1;
+
+    len = strlen(name);
+    if (len < sizeof(buf)) {
+        memcpy(buf, name, len);
+        buf[len] = '\0';
+    }
+    else {
+        memcpy(buf, name, sizeof(buf)-2);
+        buf[sizeof(buf)-2] = '*';
+        buf[sizeof(buf)-1] = '\0';
+    }
+    SET_THREAD_NAME(buf);
+#endif
+}
 
 static void *
 thread_timer(void *p)

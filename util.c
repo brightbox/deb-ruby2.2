@@ -2,14 +2,13 @@
 
   util.c -
 
-  $Author: nobu $
+  $Author: akr $
   created at: Fri Mar 10 17:22:34 JST 1995
 
   Copyright (C) 1993-2008 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
 #include "internal.h"
 
 #include <ctype.h>

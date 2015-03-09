@@ -2,17 +2,16 @@
 
   vm_dump.c -
 
-  $Author: normal $
+  $Author: naruse $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
 **********************************************************************/
 
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "addr2line.h"
 #include "vm_core.h"
-#include "internal.h"
 #include "iseq.h"
 
 /* see vm_insnhelper.h for the values */
@@ -265,7 +264,7 @@ vm_stack_dump_each(rb_thread_t *th, rb_control_frame_t *cfp)
 	name = "<ifunc>";
     }
     else {
-	argc = iseq->argc;
+	argc = iseq->param.lead_num;
 	local_size = iseq->local_size;
 	name = RSTRING_PTR(iseq->location.label);
     }
@@ -712,7 +711,7 @@ rb_print_backtrace(void)
 #endif
 }
 
-#ifdef __FreeBSD__
+#ifdef HAVE_LIBPROCSTAT
 #include <sys/user.h>
 #include <sys/sysctl.h>
 #include <sys/param.h>
@@ -1034,7 +1033,7 @@ rb_vm_bugreport(const void *ctx)
 	    }
 	}
 #endif /* __linux__ */
-#ifdef __FreeBSD__
+#ifdef HAVE_LIBPROCSTAT
 # define MIB_KERN_PROC_PID_LEN 4
 	int mib[MIB_KERN_PROC_PID_LEN];
 	struct kinfo_proc kp;

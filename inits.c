@@ -2,14 +2,13 @@
 
   inits.c -
 
-  $Author: normal $
+  $Author: akr $
   created at: Tue Dec 28 16:01:58 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
 #include "internal.h"
 
 #define CALL(n) {void Init_##n(void); Init_##n();}
@@ -17,6 +16,7 @@
 void
 rb_call_inits(void)
 {
+    CALL(Method);
     CALL(RandomSeed);
     CALL(sym);
     CALL(var_tables);

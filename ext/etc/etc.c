@@ -30,6 +30,10 @@
 #include <sys/utsname.h>
 #endif
 
+#ifdef HAVE_SCHED_GETAFFINITY
+#include <sched.h>
+#endif
+
 static VALUE sPasswd;
 #ifdef HAVE_GETGRENT
 static VALUE sGroup;
@@ -77,8 +81,15 @@ etc_getlogin(VALUE obj)
     login = getenv("USER");
 #endif
 
-    if (login)
-	return rb_tainted_str_new2(login);
+    if (login) {
+#ifdef _WIN32
+	rb_encoding *extenc = rb_utf8_encoding();
+#else
+	rb_encoding *extenc = rb_locale_encoding();
+#endif
+	return rb_external_str_new_with_enc(login, strlen(login), extenc);
+    }
+
     return Qnil;
 }
 
@@ -640,7 +651,22 @@ etc_systmpdir(void)
     if (!len) return Qnil;
     tmpdir = rb_w32_conv_from_wchar(path, rb_filesystem_encoding());
 #else
-    tmpdir = rb_filesystem_str_new_cstr("/tmp");
+    const char default_tmp[] = "/tmp";
+    const char *tmpstr = default_tmp;
+    size_t tmplen = strlen(default_tmp);
+# if defined _CS_DARWIN_USER_TEMP_DIR
+    #ifndef MAXPATHLEN
+    #define MAXPATHLEN 1024
+    #endif
+    char path[MAXPATHLEN];
+    size_t len;
+    len = confstr(_CS_DARWIN_USER_TEMP_DIR, path, sizeof(path));
+    if (len > 0) {
+	tmpstr = path;
+	tmplen = len - 1;
+    }
+# endif
+    tmpdir = rb_filesystem_str_new(tmpstr, tmplen);
 #endif
     FL_UNSET(tmpdir, FL_TAINT);
     return tmpdir;
@@ -778,10 +804,7 @@ etc_uname(VALUE obj)
  * nil means indefinite limit.  (sysconf() returns -1 but errno is not set.)
  *
  *   Etc.sysconf(Etc::SC_ARG_MAX) #=> 2097152
- *
- *   # Number of processors.
- *   # It is not standardized.
- *   Etc.sysconf(Etc::SC_NPROCESSORS_ONLN) #=> 4
+ *   Etc.sysconf(Etc::SC_LOGIN_NAME_MAX) #=> 256
  *
  */
 static VALUE
@@ -891,6 +914,119 @@ io_pathconf(VALUE io, VALUE arg)
 #define io_pathconf rb_f_notimplement
 #endif
 
+#if (defined(HAVE_SYSCONF) && defined(_SC_NPROCESSORS_ONLN)) || defined(_WIN32)
+
+#if defined(HAVE_SCHED_GETAFFINITY) && defined(CPU_ALLOC)
+static int
+etc_nprocessors_affin(void)
+{
+    cpu_set_t *cpuset;
+    size_t size;
+    int ret;
+    int n;
+
+    /*
+     * XXX:
+     * man page says CPU_ALLOC takes number of cpus. But it is not accurate
+     * explanation. sched_getaffinity() returns EINVAL if cpuset bitmap is
+     * smaller than kernel internal bitmap.
+     * That said, sched_getaffinity() can fail when a kernel have sparse bitmap
+     * even if cpuset bitmap is larger than number of cpus.
+     * The precious way is to use /sys/devices/system/cpu/online. But there are
+     * two problems,
+     * - Costly calculation
+     *    It is a minor issue, but possibly kill a benefit of a parallel processing.
+     * - No guarantee to exist /sys/devices/system/cpu/online
+     *    This is an issue especially when using Linux containers.
+     * So, we use hardcode number for a workaround. Current linux kernel
+     * (Linux 3.17) support 8192 cpus at maximum. Then 16384 must be enough.
+     */
+    for (n=64; n <= 16384; n *= 2) {
+	size = CPU_ALLOC_SIZE(n);
+	if (size >= 1024) {
+	    cpuset = xcalloc(1, size);
+	    if (!cpuset)
+		return -1;
+	} else {
+	    cpuset = alloca(size);
+	    CPU_ZERO_S(size, cpuset);
+	}
+
+	ret = sched_getaffinity(0, size, cpuset);
+	if (ret == 0) {
+	    /* On success, count number of cpus. */
+	    ret = CPU_COUNT_S(size, cpuset);
+	}
+
+	if (size >= 1024) {
+	    xfree(cpuset);
+	}
+	if (ret > 0) {
+	    return ret;
+	}
+    }
+
+    return ret;
+}
+#endif
+
+/*
+ * Returns the number of online processors.
+ *
+ * The result is intended as the number of processes to
+ * use all available processors.
+ *
+ * This method is implemented using:
+ * - sched_getaffinity(): Linux
+ * - sysconf(_SC_NPROCESSORS_ONLN): GNU/Linux, NetBSD, FreeBSD, OpenBSD, DragonFly BSD, OpenIndiana, Mac OS X, AIX
+ *
+ * Example:
+ *
+ *   require 'etc'
+ *   p Etc.nprocessors #=> 4
+ *
+ * The result might be smaller number than physical cpus especially when ruby
+ * process is bound to specific cpus. This is intended for getting better
+ * parallel processing.
+ *
+ * Example: (Linux)
+ *
+ *   linux$ taskset 0x3 ./ruby -retc -e "p Etc.nprocessors"  #=> 2
+ *
+ */
+static VALUE
+etc_nprocessors(VALUE obj)
+{
+    long ret;
+
+#if !defined(_WIN32)
+
+#if defined(HAVE_SCHED_GETAFFINITY) && defined(CPU_ALLOC)
+    int ncpus;
+
+    ncpus = etc_nprocessors_affin();
+    if (ncpus != -1) {
+       return INT2NUM(ncpus);
+    }
+    /* fallback to _SC_NPROCESSORS_ONLN */
+#endif
+
+    errno = 0;
+    ret = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ret == -1) {
+        rb_sys_fail("sysconf(_SC_NPROCESSORS_ONLN)");
+    }
+#else
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    ret = (long)si.dwNumberOfProcessors;
+#endif
+    return LONG2NUM(ret);
+}
+#else
+#define etc_nprocessors rb_f_notimplement
+#endif
+
 /*
  * The Etc module provides access to information typically stored in
  * files in the /etc directory on Unix systems.
@@ -946,6 +1082,7 @@ Init_etc(void)
     rb_define_module_function(mEtc, "sysconf", etc_sysconf, 1);
     rb_define_module_function(mEtc, "confstr", etc_confstr, 1);
     rb_define_method(rb_cIO, "pathconf", io_pathconf, 1);
+    rb_define_module_function(mEtc, "nprocessors", etc_nprocessors, 0);
 
     sPasswd =  rb_struct_define_under(mEtc, "Passwd",
 				      "name",

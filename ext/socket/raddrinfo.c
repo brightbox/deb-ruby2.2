@@ -312,11 +312,11 @@ struct getnameinfo_arg
 {
     const struct sockaddr *sa;
     socklen_t salen;
+    int flags;
     char *host;
     size_t hostlen;
     char *serv;
     size_t servlen;
-    int flags;
 };
 
 static void *
@@ -617,7 +617,8 @@ make_hostent_internal(struct hostent_arg *arg)
     }
     rb_ary_push(ary, rb_str_new2(hostp));
 
-    if (addr->ai_canonname && (h = gethostbyname(addr->ai_canonname))) {
+    if (addr->ai_canonname && strlen(addr->ai_canonname) < NI_MAXHOST &&
+	(h = gethostbyname(addr->ai_canonname))) {
         names = rb_ary_new();
         if (h->h_aliases != NULL) {
             for (pch = h->h_aliases; *pch; pch++) {
@@ -716,7 +717,7 @@ get_addrinfo(VALUE self)
 
 
 static rb_addrinfo_t *
-alloc_addrinfo()
+alloc_addrinfo(void)
 {
     rb_addrinfo_t *rai = ZALLOC(rb_addrinfo_t);
     rai->inspectname = Qnil;

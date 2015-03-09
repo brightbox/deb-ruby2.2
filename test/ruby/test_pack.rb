@@ -526,6 +526,11 @@ EXPECTED
     assert_equal(["a"*46], "M86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A86%A\n!80``\n".unpack("u"))
     assert_equal(["abcdefghi"], "&86)C9&5F\n#9VAI\n".unpack("u"))
 
+    assert_equal(["abcdef"], "#86)C\n#9&5F\n".unpack("u"))
+    assert_equal(["abcdef"], "#86)CX\n#9&5FX\n".unpack("u")) # X is a (dummy) checksum.
+    assert_equal(["abcdef"], "#86)C\r\n#9&5F\r\n".unpack("u"))
+    assert_equal(["abcdef"], "#86)CX\r\n#9&5FX\r\n".unpack("u")) # X is a (dummy) checksum.
+
     assert_equal(["\x00"], "\"\n".unpack("u"))
     assert_equal(["\x00"], "! \r \n".unpack("u"))
   end
@@ -709,4 +714,17 @@ EXPECTED
     $VERBOSE = verbose
   end
 
+  def test_invalid_warning
+    assert_warning(/unknown pack directive ',' in ','/) {
+      [].pack(",")
+    }
+    assert_warning(/\A[ -~]+\Z/) {
+      [].pack("\x7f")
+    }
+    assert_warning(/\A(.* in '\u{3042}'\n)+\z/) {
+      EnvUtil.with_default_external(Encoding::UTF_8) {
+        [].pack("\u{3042}")
+      }
+    }
+  end
 end

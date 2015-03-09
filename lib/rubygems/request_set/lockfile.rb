@@ -168,8 +168,12 @@ class Gem::RequestSet::Lockfile
     dest = File.expand_path(dest)
     base = File.expand_path(base)
 
-    if dest.index(base) == 0
-      return dest[base.size+1..-1]
+    if dest.index(base) == 0 then
+      offset = dest[base.size+1..-1]
+
+      return '.' unless offset
+
+      offset
     else
       dest
     end
@@ -195,6 +199,8 @@ class Gem::RequestSet::Lockfile
     out << "PLATFORMS"
 
     platforms = @requests.map { |request| request.spec.platform }.uniq
+
+    platforms = platforms.sort_by { |platform| platform.to_s }
 
     platforms.sort.each do |platform|
       out << "  #{platform}"
@@ -273,14 +279,7 @@ class Gem::RequestSet::Lockfile
       when :bang then
         get :bang
 
-        spec = @set.sets.select { |set|
-          Gem::Resolver::GitSet    === set or
-          Gem::Resolver::VendorSet === set
-        }.map { |set|
-          set.specs[name]
-        }.compact.first
-
-        requirements << spec.version
+        requirements << pinned_requirement(name)
       when :l_paren then
         get :l_paren
 
@@ -296,6 +295,13 @@ class Gem::RequestSet::Lockfile
         end
 
         get :r_paren
+
+        if peek[0] == :bang then
+          requirements.clear
+          requirements << pinned_requirement(name)
+
+          get :bang
+        end
       end
 
       @set.gem name, *requirements
@@ -501,6 +507,17 @@ class Gem::RequestSet::Lockfile
 
   def peek # :nodoc:
     @tokens.first || [:EOF]
+  end
+
+  def pinned_requirement name # :nodoc:
+    spec = @set.sets.select { |set|
+      Gem::Resolver::GitSet    === set or
+        Gem::Resolver::VendorSet === set
+    }.map { |set|
+      set.specs[name]
+    }.compact.first
+
+    spec.version
   end
 
   def skip type # :nodoc:

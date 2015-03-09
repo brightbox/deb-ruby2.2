@@ -385,7 +385,7 @@ module Net   #:nodoc:
   class HTTP < Protocol
 
     # :stopdoc:
-    Revision = %q$Revision: 47079 $.split[1]
+    Revision = %q$Revision: 49278 $.split[1]
     HTTPVersion = '1.1'
     begin
       require 'zlib'
@@ -914,7 +914,10 @@ module Net   #:nodoc:
             @socket.write(buf)
             HTTPResponse.read_new(@socket).value
           end
-          s.session = @ssl_session if @ssl_session
+          if @ssl_session and
+             Process.clock_gettime(Process::CLOCK_REALTIME) < @ssl_session.time.to_f + @ssl_session.timeout
+            s.session = @ssl_session if @ssl_session
+          end
           # Server Name Indication (SNI) RFC 3546
           s.hostname = @address if s.respond_to? :hostname=
           Timeout.timeout(@open_timeout, Net::OpenTimeout) { s.connect }
@@ -1347,7 +1350,8 @@ module Net   #:nodoc:
     #    puts response.body
     #
     def send_request(name, path, data = nil, header = nil)
-      r = HTTPGenericRequest.new(name,(data ? true : false),true,path,header)
+      has_response_body = name != 'HEAD'
+      r = HTTPGenericRequest.new(name,(data ? true : false),has_response_body,path,header)
       request r, data
     end
 

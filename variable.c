@@ -2,7 +2,7 @@
 
   variable.c -
 
-  $Author: normal $
+  $Author: nobu $
   created at: Tue Apr 19 23:55:15 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -11,13 +11,11 @@
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
+#include "internal.h"
 #include "ruby/st.h"
 #include "ruby/util.h"
-#include "ruby/encoding.h"
 #include "node.h"
 #include "constant.h"
-#include "internal.h"
 #include "id.h"
 
 st_table *rb_global_tbl;
@@ -930,11 +928,27 @@ generic_ivar_get(VALUE obj, ID id, VALUE undef)
     return undef;
 }
 
+static int
+generic_ivar_update(st_data_t *k, st_data_t *v, st_data_t a, int existing)
+{
+    VALUE obj = (VALUE)*k;
+    st_table **tbl = (st_table **)a;
+
+    if (!existing) {
+	FL_SET(obj, FL_EXIVAR);
+	*v = (st_data_t)(*tbl = st_init_numtable());
+	return ST_CONTINUE;
+    }
+    else {
+	*tbl = (st_table *)*v;
+	return ST_STOP;
+    }
+}
+
 static void
 generic_ivar_set(VALUE obj, ID id, VALUE val)
 {
     st_table *tbl;
-    st_data_t data;
 
     if (rb_special_const_p(obj)) {
 	if (rb_obj_frozen_p(obj)) rb_error_frozen("object");
@@ -943,16 +957,14 @@ generic_ivar_set(VALUE obj, ID id, VALUE val)
     if (!generic_iv_tbl) {
 	generic_iv_tbl = st_init_numtable();
     }
-    if (!st_lookup(generic_iv_tbl, (st_data_t)obj, &data)) {
-	FL_SET(obj, FL_EXIVAR);
-	tbl = st_init_numtable();
-	st_add_direct(generic_iv_tbl, (st_data_t)obj, (st_data_t)tbl);
+    if (!st_update(generic_iv_tbl, (st_data_t)obj,
+		   generic_ivar_update, (st_data_t)&tbl)) {
 	st_add_direct(tbl, (st_data_t)id, (st_data_t)val);
-	if (FL_ABLE(obj)) RB_OBJ_WRITTEN(obj, Qundef, val);
-	return;
     }
-    st_insert((st_table *)data, (st_data_t)id, (st_data_t)val);
-    if (FL_ABLE(obj)) RB_OBJ_WRITTEN(obj, data, val);
+    else {
+	st_insert(tbl, (st_data_t)id, (st_data_t)val);
+    }
+    if (FL_ABLE(obj)) RB_OBJ_WRITTEN(obj, Qundef, val);
 }
 
 static VALUE
@@ -1118,7 +1130,8 @@ rb_ivar_get(VALUE obj, ID id)
     VALUE iv = rb_ivar_lookup(obj, id, Qundef);
 
     if (iv == Qundef) {
-	rb_warning("instance variable %"PRIsVALUE" not initialized", QUOTE_ID(id));
+	if (RTEST(ruby_verbose))
+	    rb_warning("instance variable %"PRIsVALUE" not initialized", QUOTE_ID(id));
 	iv = Qnil;
     }
     return iv;
@@ -1462,23 +1475,24 @@ rb_obj_remove_instance_variable(VALUE obj, VALUE name)
     UNREACHABLE;
 }
 
-NORETURN(static void uninitialized_constant(VALUE, ID));
+NORETURN(static void uninitialized_constant(VALUE, VALUE));
 static void
-uninitialized_constant(VALUE klass, ID id)
+uninitialized_constant(VALUE klass, VALUE name)
 {
     if (klass && rb_class_real(klass) != rb_cObject)
-	rb_name_error(id, "uninitialized constant %"PRIsVALUE"::%"PRIsVALUE"",
-		      rb_class_name(klass),
-		      QUOTE_ID(id));
+	rb_name_error_str(name, "uninitialized constant %"PRIsVALUE"::% "PRIsVALUE"",
+			  rb_class_name(klass), name);
     else {
-	rb_name_error(id, "uninitialized constant %"PRIsVALUE"", QUOTE_ID(id));
+	rb_name_error_str(name, "uninitialized constant % "PRIsVALUE"", name);
     }
 }
 
-static VALUE
-const_missing(VALUE klass, ID id)
+VALUE
+rb_const_missing(VALUE klass, VALUE name)
 {
-    return rb_funcall(klass, rb_intern("const_missing"), 1, ID2SYM(id));
+    VALUE value = rb_funcallv(klass, rb_intern("const_missing"), 1, &name);
+    rb_vm_inc_const_missing_count();
+    return value;
 }
 
 
@@ -1522,7 +1536,7 @@ VALUE
 rb_mod_const_missing(VALUE klass, VALUE name)
 {
     rb_vm_pop_cfunc_frame();
-    uninitialized_constant(klass, rb_to_id(name));
+    uninitialized_constant(klass, name);
 
     UNREACHABLE;
 }
@@ -1549,7 +1563,7 @@ autoload_memsize(const void *ptr)
 static const rb_data_type_t autoload_data_type = {
     "autoload",
     {autoload_mark, autoload_free, autoload_memsize,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 #define check_autoload_table(av) \
@@ -1593,7 +1607,7 @@ autoload_i_memsize(const void *ptr)
 static const rb_data_type_t autoload_data_i_type = {
     "autoload_i",
     {autoload_i_mark, RUBY_TYPED_DEFAULT_FREE, autoload_i_memsize,},
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
 #define check_autoload_data(av) \
@@ -1836,7 +1850,7 @@ rb_const_get_0(VALUE klass, ID id, int exclude, int recurse, int visibility)
 	rb_const_entry_t *ce;
 
 	while ((ce = rb_const_lookup(tmp, id))) {
-	    if (visibility && ce->flag == CONST_PRIVATE) {
+	    if (visibility && RB_CONST_PRIVATE_P(ce)) {
 		rb_name_error(id, "private constant %"PRIsVALUE"::%"PRIsVALUE" referenced",
 			      rb_class_name(klass), QUOTE_ID(id));
 	    }
@@ -1863,9 +1877,7 @@ rb_const_get_0(VALUE klass, ID id, int exclude, int recurse, int visibility)
 	goto retry;
     }
 
-    value = const_missing(klass, id);
-    rb_vm_inc_const_missing_count();
-    return value;
+    return rb_const_missing(klass, ID2SYM(id));
 }
 
 VALUE
@@ -1964,6 +1976,14 @@ rb_const_remove(VALUE mod, ID id)
 }
 
 static int
+cv_i_update(st_data_t *k, st_data_t *v, st_data_t a, int existing)
+{
+    if (existing) return ST_STOP;
+    *v = a;
+    return ST_CONTINUE;
+}
+
+static int
 sv_i(st_data_t k, st_data_t v, st_data_t a)
 {
     ID key = (ID)k;
@@ -1971,9 +1991,7 @@ sv_i(st_data_t k, st_data_t v, st_data_t a)
     st_table *tbl = (st_table *)a;
 
     if (rb_is_const_id(key)) {
-	if (!st_lookup(tbl, (st_data_t)key, 0)) {
-	    st_insert(tbl, (st_data_t)key, (st_data_t)ce);
-	}
+	st_update(tbl, (st_data_t)key, cv_i_update, (st_data_t)ce);
     }
     return ST_CONTINUE;
 }
@@ -2029,7 +2047,7 @@ list_i(st_data_t key, st_data_t value, VALUE ary)
 {
     ID sym = (ID)key;
     rb_const_entry_t *ce = (rb_const_entry_t *)value;
-    if (ce->flag != CONST_PRIVATE) rb_ary_push(ary, ID2SYM(sym));
+    if (RB_CONST_PUBLIC_P(ce)) rb_ary_push(ary, ID2SYM(sym));
     return ST_CONTINUE;
 }
 
@@ -2093,7 +2111,7 @@ rb_const_defined_0(VALUE klass, ID id, int exclude, int recurse, int visibility)
   retry:
     while (tmp) {
 	if ((ce = rb_const_lookup(tmp, id))) {
-	    if (visibility && ce->flag == CONST_PRIVATE) {
+	    if (visibility && RB_CONST_PRIVATE_P(ce)) {
 		return (int)Qfalse;
 	    }
 	    if (ce->value == Qundef && !check_autoload_required(tmp, id, 0) && !rb_autoloading_value(tmp, id, 0))
@@ -2443,9 +2461,7 @@ cv_i(st_data_t k, st_data_t v, st_data_t a)
     st_table *tbl = (st_table *)a;
 
     if (rb_is_class_id(key)) {
-	if (!st_lookup(tbl, (st_data_t)key, 0)) {
-	    st_insert(tbl, (st_data_t)key, 0);
-	}
+	st_update(tbl, (st_data_t)key, cv_i_update, 0);
     }
     return ST_CONTINUE;
 }

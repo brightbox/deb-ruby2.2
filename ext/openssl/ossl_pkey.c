@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_pkey.c 45595 2014-04-16 00:51:18Z nobu $
+ * $Id: ossl_pkey.c 48806 2014-12-12 23:19:07Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -69,9 +69,23 @@ ossl_generate_cb_stop(void *ptr)
 }
 #endif
 
+static void
+ossl_evp_pkey_free(void *ptr)
+{
+    EVP_PKEY_free(ptr);
+}
+
 /*
  * Public
  */
+const rb_data_type_t ossl_evp_pkey_type = {
+    "OpenSSL/EVP_PKEY",
+    {
+	0, ossl_evp_pkey_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
+
 VALUE
 ossl_pkey_new(EVP_PKEY *pkey)
 {
@@ -342,7 +356,7 @@ ossl_pkey_verify(VALUE self, VALUE digest, VALUE sig, VALUE data)
  * INIT
  */
 void
-Init_ossl_pkey()
+Init_ossl_pkey(void)
 {
 #if 0
     mOSSL = rb_define_module("OpenSSL"); /* let rdoc know about mOSSL */

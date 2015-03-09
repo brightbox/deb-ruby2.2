@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_ns_spki.c 33497 2011-10-20 17:22:09Z emboss $
+ * $Id: ossl_ns_spki.c 48794 2014-12-12 21:58:03Z nobu $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -14,10 +14,10 @@
     if (!(spki)) { \
 	ossl_raise(rb_eRuntimeError, "SPKI wasn't initialized!"); \
     } \
-    (obj) = Data_Wrap_Struct((klass), 0, NETSCAPE_SPKI_free, (spki)); \
+    (obj) = TypedData_Wrap_Struct((klass), &ossl_netscape_spki_type, (spki)); \
 } while (0)
 #define GetSPKI(obj, spki) do { \
-    Data_Get_Struct((obj), NETSCAPE_SPKI, (spki)); \
+    TypedData_Get_Struct((obj), NETSCAPE_SPKI, &ossl_netscape_spki_type, (spki)); \
     if (!(spki)) { \
 	ossl_raise(rb_eRuntimeError, "SPKI wasn't initialized!"); \
     } \
@@ -37,6 +37,21 @@ VALUE eSPKIError;
 /*
  * Private functions
  */
+
+static void
+ossl_netscape_spki_free(void *spki)
+{
+    NETSCAPE_SPKI_free(spki);
+}
+
+static const rb_data_type_t ossl_netscape_spki_type = {
+    "OpenSSL/NETSCAPE_SPKI",
+    {
+	0, ossl_netscape_spki_free,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY,
+};
+
 static VALUE
 ossl_spki_alloc(VALUE klass)
 {
@@ -360,7 +375,7 @@ ossl_spki_verify(VALUE self, VALUE key)
  */
 
 void
-Init_ossl_ns_spki()
+Init_ossl_ns_spki(void)
 {
 #if 0
     mOSSL = rb_define_module("OpenSSL"); /* let rdoc know about mOSSL */

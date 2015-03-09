@@ -2,17 +2,15 @@
 
   numeric.c -
 
-  $Author: ko1 $
+  $Author: naruse $
   created at: Fri Aug 13 18:33:09 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
 
 **********************************************************************/
 
-#include "ruby/ruby.h"
-#include "ruby/encoding.h"
-#include "ruby/util.h"
 #include "internal.h"
+#include "ruby/util.h"
 #include "id.h"
 #include <ctype.h>
 #include <math.h>
@@ -239,9 +237,14 @@ NORETURN(static void coerce_failed(VALUE x, VALUE y));
 static void
 coerce_failed(VALUE x, VALUE y)
 {
+    if (SPECIAL_CONST_P(y) || BUILTIN_TYPE(y) == T_FLOAT) {
+	y = rb_inspect(y);
+    }
+    else {
+	y = rb_obj_class(y);
+    }
     rb_raise(rb_eTypeError, "%"PRIsVALUE" can't be coerced into %"PRIsVALUE,
-	     (rb_special_const_p(y)? rb_inspect(y) : rb_obj_class(y)),
-	     rb_obj_class(x));
+	     y, rb_obj_class(x));
 }
 
 static VALUE
@@ -672,7 +675,6 @@ rb_float_new_in_heap(double d)
 static VALUE
 flo_to_s(VALUE flt)
 {
-    char *ruby_dtoa(double d_, int mode, int ndigits, int *decpt, int *sign, char **rve);
     enum {decimal_mant = DBL_MANT_DIG-DBL_DIG};
     enum {float_dig = DBL_DIG+1};
     char buf[float_dig + (decimal_mant + CHAR_BIT - 1) / CHAR_BIT + 10];
@@ -2778,7 +2780,6 @@ fix_uminus(VALUE num)
 VALUE
 rb_fix2str(VALUE x, int base)
 {
-    extern const char ruby_digitmap[];
     char buf[SIZEOF_VALUE*CHAR_BIT + 2], *b = buf + sizeof buf;
     long val = FIX2LONG(x);
     int neg = 0;
@@ -3430,10 +3431,11 @@ static int
 bit_coerce(VALUE *x, VALUE *y)
 {
     if (!FIXNUM_P(*y) && !RB_TYPE_P(*y, T_BIGNUM)) {
+	VALUE orig = *x;
 	do_coerce(x, y, TRUE);
 	if (!FIXNUM_P(*x) && !RB_TYPE_P(*x, T_BIGNUM)
 	    && !FIXNUM_P(*y) && !RB_TYPE_P(*y, T_BIGNUM)) {
-	    coerce_failed(*x, *y);
+	    coerce_failed(orig, *y);
 	}
     }
     return TRUE;

@@ -1,5 +1,4 @@
 require 'test/unit'
-require_relative 'envutil'
 
 class TestLazyEnumerator < Test::Unit::TestCase
   class Step
@@ -481,6 +480,7 @@ EOS
       assert_equal Enumerator::Lazy, [].lazy.send(method, *arg).class, bug7507
     end
     assert_equal Enumerator::Lazy, [].lazy.chunk{}.class, bug7507
+    assert_equal Enumerator::Lazy, [].lazy.slice_when{}.class, bug7507
   end
 
   def test_no_warnings

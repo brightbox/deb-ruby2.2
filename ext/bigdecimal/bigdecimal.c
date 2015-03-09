@@ -162,7 +162,7 @@ static const rb_data_type_t BigDecimal_data_type = {
     "BigDecimal",
     { 0, BigDecimal_delete, BigDecimal_memsize, },
 #ifdef RUBY_TYPED_FREE_IMMEDIATELY
-    NULL, NULL, RUBY_TYPED_FREE_IMMEDIATELY
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 #endif
 };
 
@@ -4418,7 +4418,7 @@ VpSetPTR(Real *a, Real *b, Real *c, size_t *a_pos, size_t *b_pos, size_t *c_pos,
 
     size_t const round_limit = (VpGetPrecLimit() + BASE_FIG - 1) / BASE_FIG;
 
-    assert(a->exponent >= b->expoennt);
+    assert(a->exponent >= b->exponent);
 
     c->frac[0] = 0;
     *av = *bv = 0;

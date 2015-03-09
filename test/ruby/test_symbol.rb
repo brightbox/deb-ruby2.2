@@ -222,4 +222,20 @@ class TestSymbol < Test::Unit::TestCase
                        '',
                        child_env: '--disable-gems')
   end
+
+  def test_dynamic_attrset_id
+    bug10259 = '[ruby-dev:48559] [Bug #10259]'
+    class << (obj = Object.new)
+      attr_writer :unagi
+    end
+    assert_nothing_raised(NoMethodError, bug10259) {obj.send("unagi=".intern, 1)}
+  end
+
+  def test_symbol_fstr_leak
+    bug10686 = '[ruby-core:67268] [Bug #10686]'
+    x = 0
+    assert_no_memory_leak([], '', <<-"end;", bug10686, limit: 1.65)
+      200_000.times { |i| i.to_s.to_sym }
+    end;
+  end
 end

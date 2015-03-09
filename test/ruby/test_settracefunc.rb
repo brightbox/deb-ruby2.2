@@ -1,5 +1,4 @@
 require 'test/unit'
-require_relative 'envutil'
 
 class TestSetTraceFunc < Test::Unit::TestCase
   def setup
@@ -507,7 +506,6 @@ class TestSetTraceFunc < Test::Unit::TestCase
      [:return,  16, "xyzzy", xyzzy.class, :bar,             xyzzy,       :XYZZY_bar, xyzzy],
      [:return,  12, "xyzzy", xyzzy.class, :foo,             xyzzy,       :XYZZY_foo, xyzzy],
      [:line,    20, "xyzzy", TestSetTraceFunc, method,      self,        :outer, :nothing],
-     [:line,    20, "xyzzy", TestSetTraceFunc, method,      self,        :outer, :nothing],
      [:c_call,  20, "xyzzy", Kernel,      :raise,           self,        :outer, :nothing],
      [:c_call,  20, "xyzzy", Exception,   :exception,       RuntimeError, :outer, :nothing],
      [:c_call,  20, "xyzzy", Exception,   :initialize,      raised_exc,  :outer, :nothing],
@@ -563,14 +561,18 @@ class TestSetTraceFunc < Test::Unit::TestCase
   def test_tracepoint
     events1, answer_events = *trace_by_tracepoint(:line, :class, :end, :call, :return, :c_call, :c_return, :raise)
 
-    mesg = events1.map{|e|
-      if false
-        p [:event, e[0]]
-        p [:line_file, e[1], e[2]]
-        p [:id, e[4]]
+    ms = [events1, answer_events].map{|evs|
+      evs.map{|e|
+        "#{e[0]} - #{e[2]}:#{e[1]} id: #{e[4]}"
+      }
+    }
+
+    mesg = ms[0].zip(ms[1]).map{|a, b|
+      if a != b
+        "#{a} <-> #{b}"
       end
-      "#{e[0]} - #{e[2]}:#{e[1]} id: #{e[4]}"
-    }.join("\n")
+    }.compact.join("\n")
+
     answer_events.zip(events1){|answer, event|
       assert_equal answer, event, mesg
     }
@@ -975,6 +977,27 @@ class TestSetTraceFunc < Test::Unit::TestCase
     end
   end
 
+  def test_trace_point_binding_after_break
+    bug10689 = '[ruby-dev:48797]'
+    assert_in_out_err([], <<-INPUT, [], [], bug10689)
+      class Bug
+        include Enumerable
+
+        def each
+          [0].each do
+            yield
+          end
+        end
+      end
+
+      TracePoint.trace(:c_return) do |tp|
+        tp.binding
+      end
+
+      Bug.new.all? { false }
+    INPUT
+  end
+
   def test_tracepoint_b_return_with_next
     n = 0
     TracePoint.new(:b_return){
@@ -1294,5 +1317,19 @@ class TestSetTraceFunc < Test::Unit::TestCase
         redo
       }
     end
+  end
+
+  def test_no_duplicate_line_events
+    lines = []
+    dummy = []
+
+    TracePoint.new(:line){|tp|
+      next unless target_thread?
+      lines << tp.lineno
+    }.enable{
+      dummy << (1) + (2)
+      dummy << (1) + (2)
+    }
+    assert_equal [__LINE__ - 3, __LINE__ - 2], lines, 'Bug #10449'
   end
 end

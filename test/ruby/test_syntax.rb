@@ -1,11 +1,10 @@
 require 'test/unit'
-require_relative 'envutil'
 
 class TestSyntax < Test::Unit::TestCase
   def assert_syntax_files(test)
     srcdir = File.expand_path("../../..", __FILE__)
     srcdir = File.join(srcdir, test)
-    assert_separately(%W[--disable-gem -r#{__dir__}/envutil - #{srcdir}],
+    assert_separately(%W[--disable-gem - #{srcdir}],
                       __FILE__, __LINE__, <<-'eom', timeout: Float::INFINITY)
       dir = ARGV.shift
       for script in Dir["#{dir}/**/*.rb"].sort
@@ -109,37 +108,131 @@ class TestSyntax < Test::Unit::TestCase
     def o.kw(k1: 1, k2: 2) [k1, k2] end
     h = {k1: 11, k2: 12}
     assert_equal([11, 12], o.kw(**h))
-    assert_equal([11, 22], o.kw(k2: 22, **h))
-    assert_equal([11, 12], o.kw(**h, **{k2: 22}))
-    assert_equal([11, 22], o.kw(**{k2: 22}, **h))
+    assert_equal([11, 12], o.kw(k2: 22, **h))
+    assert_equal([11, 22], o.kw(**h, **{k2: 22}))
+    assert_equal([11, 12], o.kw(**{k2: 22}, **h))
+
+    bug10315 = '[ruby-core:65368] [Bug #10315]'
+    assert_equal([23, 2], o.kw(**{k1: 22}, **{k1: 23}), bug10315)
+
     h = {k3: 31}
     assert_raise(ArgumentError) {o.kw(**h)}
     h = {"k1"=>11, k2: 12}
     assert_raise(TypeError) {o.kw(**h)}
+
+    bug10315 = '[ruby-core:65625] [Bug #10315]'
+    a = []
+    def a.add(x) push(x); x; end
+    def a.f(k:) k; end
+    a.clear
+    r = nil
+    assert_warn(/duplicated/) {r = eval("a.f(k: a.add(1), k: a.add(2))")}
+    assert_equal(2, r)
+    assert_equal([1, 2], a, bug10315)
+    a.clear
+    r = nil
+    assert_warn(/duplicated/) {r = eval("a.f({k: a.add(1), k: a.add(2)})")}
+    assert_equal(2, r)
+    assert_equal([1, 2], a, bug10315)
+  end
+
+  def test_keyword_empty_splat
+    assert_separately([], <<-'end;')
+      bug10719 = '[ruby-core:67446] [Bug #10719]'
+      assert_valid_syntax("foo(a: 1, **{})", bug10719)
+    end;
   end
 
   def test_keyword_self_reference
     bug9593 = '[ruby-core:61299] [Bug #9593]'
     o = Object.new
-    def o.foo(var: defined?(var)) var end
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var: defined?(var)) var end")
+    end
     assert_equal(42, o.foo(var: 42))
     assert_equal("local-variable", o.foo, bug9593)
 
     o = Object.new
-    def o.foo(var: var) var end
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var: var) var end")
+    end
     assert_nil(o.foo, bug9593)
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var: bar(var)) var end")
+    end
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var: bar {var}) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("def foo(var: bar {|var| var}) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("def foo(var: def bar(var) var; end) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("proc {|var: 1| var}")
+    end
   end
 
   def test_optional_self_reference
     bug9593 = '[ruby-core:61299] [Bug #9593]'
     o = Object.new
-    def o.foo(var = defined?(var)) var end
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = defined?(var)) var end")
+    end
     assert_equal(42, o.foo(42))
     assert_equal("local-variable", o.foo, bug9593)
 
     o = Object.new
-    def o.foo(var = var) var end
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = var) var end")
+    end
     assert_nil(o.foo, bug9593)
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = bar(var)) var end")
+    end
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = bar {var}) var end")
+    end
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = (def bar;end; var)) var end")
+    end
+
+    o = Object.new
+    assert_warn(/circular argument reference - var/) do
+      o.instance_eval("def foo(var = (def self.bar;end; var)) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("def foo(var = bar {|var| var}) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("def foo(var = def bar(var) var; end) var end")
+    end
+
+    o = Object.new
+    assert_warn("") do
+      o.instance_eval("proc {|var = 1| var}")
+    end
   end
 
   def test_warn_grouped_expression
@@ -204,18 +297,22 @@ WARN
 
   def test_duplicated_arg
     assert_syntax_error("def foo(a, a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_, _) end }
   end
 
   def test_duplicated_rest
     assert_syntax_error("def foo(a, *a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_, *_) end }
   end
 
   def test_duplicated_opt
     assert_syntax_error("def foo(a, a=1) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_, _=1) end }
   end
 
   def test_duplicated_opt_rest
     assert_syntax_error("def foo(a=1, *a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_=1, *_) end }
   end
 
   def test_duplicated_rest_opt
@@ -228,30 +325,37 @@ WARN
 
   def test_duplicated_opt_post
     assert_syntax_error("def foo(a=1, a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_=1, _) end }
   end
 
   def test_duplicated_kw
     assert_syntax_error("def foo(a, a: 1) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_, _: 1) end }
   end
 
   def test_duplicated_rest_kw
     assert_syntax_error("def foo(*a, a: 1) end", /duplicated argument name/)
+    assert_nothing_raised {def foo(*_, _: 1) end}
   end
 
   def test_duplicated_opt_kw
     assert_syntax_error("def foo(a=1, a: 1) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_=1, _: 1) end }
   end
 
   def test_duplicated_kw_kwrest
     assert_syntax_error("def foo(a: 1, **a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_: 1, **_) end }
   end
 
   def test_duplicated_rest_kwrest
     assert_syntax_error("def foo(*a, **a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(*_, **_) end }
   end
 
   def test_duplicated_opt_kwrest
     assert_syntax_error("def foo(a=1, **a) end", /duplicated argument name/)
+    assert_nothing_raised { def foo(_=1, **_) end }
   end
 
   def test_duplicated_when
@@ -275,6 +379,10 @@ WARN
         end
       }
     }
+  end
+
+  def test_invalid_next
+    assert_syntax_error("def m; next; end", /Invalid next/)
   end
 
   def test_lambda_with_space
@@ -441,6 +549,12 @@ eom
     bug10114 = '[ruby-core:64228] [Bug #10114]'
     code = "# -*- coding: utf-8 -*-\n" "def n \"\u{2208}\"; end"
     assert_syntax_error(code, /def n "\u{2208}"; end/, bug10114)
+  end
+
+  def test_bad_kwarg
+    bug10545 = '[ruby-dev:48742] [Bug #10545]'
+    src = 'def foo(A: a) end'
+    assert_syntax_error(src, /formal argument/, bug10545)
   end
 
   private

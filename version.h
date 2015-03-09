@@ -1,11 +1,10 @@
-#define RUBY_VERSION "2.2.0"
-#define RUBY_RELEASE_DATE "2014-09-17"
-#define RUBY_PATCHLEVEL -1
-#define RUBY_BRANCH_NAME "trunk"
+#define RUBY_VERSION "2.2.1"
+#define RUBY_RELEASE_DATE "2015-02-26"
+#define RUBY_PATCHLEVEL 85
 
-#define RUBY_RELEASE_YEAR 2014
-#define RUBY_RELEASE_MONTH 9
-#define RUBY_RELEASE_DAY 17
+#define RUBY_RELEASE_YEAR 2015
+#define RUBY_RELEASE_MONTH 2
+#define RUBY_RELEASE_DAY 26
 
 #include "ruby/version.h"
 
@@ -18,7 +17,7 @@
 #endif
 
 #if RUBY_PATCHLEVEL == -1
-#define RUBY_PATCHLEVEL_STR "preview1"
+#define RUBY_PATCHLEVEL_STR "dev"
 #else
 #define RUBY_PATCHLEVEL_STR "p"STRINGIZE(RUBY_PATCHLEVEL)
 #endif

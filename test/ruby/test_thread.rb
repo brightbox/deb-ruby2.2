@@ -1,7 +1,6 @@
 # -*- coding: us-ascii -*-
 require 'test/unit'
 require 'thread'
-require_relative 'envutil'
 
 class TestThread < Test::Unit::TestCase
   class Thread < ::Thread
@@ -124,7 +123,6 @@ class TestThread < Test::Unit::TestCase
     dir = File.dirname(__FILE__)
     lbtest = File.join(dir, "lbtest.rb")
     $:.unshift File.join(File.dirname(dir), 'ruby')
-    require 'envutil'
     $:.shift
     3.times {
       `#{EnvUtil.rubybin} #{lbtest}`
@@ -432,6 +430,16 @@ class TestThread < Test::Unit::TestCase
         Thread.current[:foo] = :baz
       end.join
     end
+  end
+
+  def test_thread_local_dynamic_symbol
+    bug10667 = '[ruby-core:67185] [Bug #10667]'
+    t = Thread.new {}.join
+    key_str = "foo#{rand}"
+    key_sym = key_str.to_sym
+    t.thread_variable_set(key_str, "bar")
+    assert_equal("bar", t.thread_variable_get(key_str), "#{bug10667}: string key")
+    assert_equal("bar", t.thread_variable_get(key_sym), "#{bug10667}: symbol key")
   end
 
   def test_select_wait
@@ -818,15 +826,19 @@ _eom
 
   def test_main_thread_status_at_exit
     assert_in_out_err([], <<-'INPUT', ["false false aborting"], [])
+require 'thread'
+q = Queue.new
 Thread.new(Thread.current) {|mth|
   begin
+    q.push nil
     mth.run
-    Thead.pass until mth.stop?
+    Thread.pass until mth.stop?
     p :mth_stopped # don't run if killed by rb_thread_terminate_all
   ensure
     puts "#{mth.alive?} #{mth.status} #{Thread.current.status}"
   end
 }
+q.pop
     INPUT
   end
 
