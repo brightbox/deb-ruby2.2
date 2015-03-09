@@ -2,7 +2,7 @@
 
   compile.c - ruby node tree -> VM instruction sequence
 
-  $Author: nobu $
+  $Author: naruse $
   created at: 04/01/01 03:42:15 JST
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -2409,7 +2409,7 @@ compile_array_keyword_arg(rb_iseq_t *iseq, LINK_ANCHOR *ret, const NODE * const 
 	{
 	    int len = (int)node->nd_alen / 2;
 	    rb_call_info_kw_arg_t *kw_arg  = (rb_call_info_kw_arg_t *)ruby_xmalloc(sizeof(rb_call_info_kw_arg_t) + sizeof(VALUE) * (len - 1));
-	    ID *keywords = kw_arg->keywords;
+	    VALUE *keywords = kw_arg->keywords;
 	    int i = 0;
 	    kw_arg->keyword_len = len;
 
@@ -2418,7 +2418,7 @@ compile_array_keyword_arg(rb_iseq_t *iseq, LINK_ANCHOR *ret, const NODE * const 
 	    for (i=0; node != NULL; i++, node = node->nd_next->nd_next) {
 		NODE *key_node = node->nd_head;
 		NODE *val_node = node->nd_next->nd_head;
-		keywords[i] = SYM2ID(key_node->nd_lit);
+		keywords[i] = key_node->nd_lit;
 		COMPILE(ret, "keyword values", val_node);
 	    }
 	    assert(i == len);
@@ -2467,11 +2467,14 @@ compile_array_(rb_iseq_t *iseq, LINK_ANCHOR *ret, NODE* node_root,
 		    rb_bug("compile_array: This node is not NODE_ARRAY, but %s", ruby_node_name(nd_type(node)));
 		}
 
-		if (type == COMPILE_ARRAY_TYPE_HASH && !node->nd_head) {
-		    opt_p = 0;
+		if (type != COMPILE_ARRAY_TYPE_ARRAY && !node->nd_head) {
 		    kw = node->nd_next;
-		    node = kw->nd_next;
-		    kw = kw->nd_head;
+		    node = 0;
+		    if (kw) {
+			opt_p = 0;
+			node = kw->nd_next;
+			kw = kw->nd_head;
+		    }
 		    break;
 		}
 		if (opt_p && nd_type(node->nd_head) != NODE_LIT) {
@@ -5841,12 +5844,14 @@ iseq_build_callinfo_from_hash(rb_iseq_t *iseq, VALUE op)
 	if (!NIL_P(vkw_arg)) {
 	    int i;
 	    int len = RARRAY_LENINT(vkw_arg);
-	    size_t n = sizeof(rb_call_info_kw_arg_t) + sizeof(ID) * (len - 1);
+	    size_t n = sizeof(rb_call_info_kw_arg_t) + sizeof(VALUE) * (len - 1);
 
 	    kw_arg = xmalloc(n);
 	    kw_arg->keyword_len = len;
 	    for (i = 0; i < len; i++) {
-		kw_arg->keywords[i] = SYM2ID(RARRAY_AREF(vkw_arg, i));
+		VALUE kw = RARRAY_AREF(vkw_arg, i);
+		SYM2ID(kw);	/* make immortal */
+		kw_arg->keywords[i] = kw;
 	    }
 	}
     }

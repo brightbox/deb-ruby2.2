@@ -2,7 +2,7 @@
 
   proc.c - Proc, Binding, Env
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Wed Jan 17 12:13:14 2007
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -1528,7 +1528,8 @@ rb_obj_singleton_method(VALUE obj, VALUE vid)
 			  QUOTE(vid), obj);
     }
     if (NIL_P(klass = rb_singleton_class_get(obj)) ||
-	!(me = rb_method_entry_at(klass, id))) {
+	UNDEFINED_METHOD_ENTRY_P(me = rb_method_entry_at(klass, id)) ||
+	UNDEFINED_REFINED_METHOD_P(me->def)) {
 	rb_name_error(id, "undefined singleton method `%"PRIsVALUE"' for `%"PRIsVALUE"'",
 		      QUOTE_ID(id), obj);
     }
@@ -2831,4 +2832,3 @@ Init_Binding(void)
     rb_define_method(rb_cBinding, "receiver", bind_receiver, 0);
     rb_define_global_function("binding", rb_f_binding, 0);
 }
-

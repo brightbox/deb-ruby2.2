@@ -643,9 +643,11 @@ _PROBES
     int main(void){ CONFTEST_FIRE(); return 0; }
 _CONF
     $CC $CFLAGS $CPPFLAGS -c -o conftest.o conftest.c &&
+    cp -p conftest.o conftest.oo &&
     $DTRACE -G -s conftest_provider.d conftest.o 2>/dev/null
   }; then
     rb_cv_prog_dtrace_g=yes
+    cmp -b conftest.o conftest.oo || rb_cv_prog_dtrace_g=rebuild
   else
     rb_cv_prog_dtrace_g=no
   fi
@@ -2306,7 +2308,7 @@ if test ${setjmp_prefix+set}; then
     if test "${setjmp_prefix}" && eval test '$ac_cv_func_'${setjmp_prefix}setjmp${setjmp_suffix} = no; then
 	AC_MSG_ERROR(${setjmp_prefix}setjmp${setjmp_suffix} is not available)
     fi
-elif { AS_CASE("$ac_cv_func___builtin_setjmp", [yes*], [true], [false]); }; then
+elif { AS_CASE("$ac_cv_func___builtin_setjmp", [yes*], [true], [false]) }; then
     setjmp_cast=`expr "$ac_cv_func___builtin_setjmp" : "yes with cast (\(.*\))"`
     setjmp_prefix=__builtin_
     setjmp_suffix=
@@ -3018,7 +3020,7 @@ if test "$with_dln_a_out" != yes; then
 	  "-undefined dynamic_lookup" \
 	  "-multiply_defined suppress" \
 	  ; do
-	  test "x${linker_flag}" = x || flag="${linker_flag}${flag// /,}"
+	  test "x${linker_flag}" = x || flag="${linker_flag}`echo ${flag} | tr ' ' ,`"
 	  RUBY_TRY_LDFLAGS([$flag], [], [flag=])
 	  if test "x$flag" != x; then
 	    RUBY_APPEND_OPTIONS(DLDFLAGS, [$flag])
@@ -3591,6 +3593,7 @@ if test "${enable_dtrace}" = "auto"; then
 fi
 
 LIBRUBY_A_OBJS='$(OBJS)'
+DTRACE_REBUILD=
 if test "${enable_dtrace}" = "yes"; then
     if test -z "$DTRACE"; then
         AC_MSG_ERROR([dtrace(1) is missing])
@@ -3603,9 +3606,11 @@ if test "${enable_dtrace}" = "yes"; then
             AC_MSG_ERROR([--enable-dtrace, however, USDT is not available])
         fi
         RUBY_DTRACE_POSTPROCESS()
-        if test "$rb_cv_prog_dtrace_g" = 'yes'; then
+        if test "$rb_cv_prog_dtrace_g" != 'no'; then
             DTRACE_OBJ='probes.$(OBJEXT)'
-            DTRACE_GLOMMED_OBJ='ruby-glommed.$(OBJEXT)'
+        fi
+        if test "$rb_cv_prog_dtrace_g" = 'rebuild'; then
+            DTRACE_REBUILD=yes
             LIBRUBY_A_OBJS='$(DTRACE_GLOMMED_OBJ)'
         fi
         AS_CASE("${target_os}", [freebsd*], [
@@ -3619,7 +3624,7 @@ else
 fi
 AC_SUBST(DTRACE_EXT)
 AC_SUBST(DTRACE_OBJ)
-AC_SUBST(DTRACE_GLOMMED_OBJ)
+AC_SUBST(DTRACE_REBUILD)
 AC_SUBST(LIBRUBY_A_OBJS)
 
 RUBY_SETJMP_TYPE

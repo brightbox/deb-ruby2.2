@@ -46,7 +46,7 @@ class TestFileExhaustive < Test::Unit::TestCase
   end
 
   def make_tmp_filename(prefix)
-    @hardlinkfile = @dir + "/" + prefix + File.basename(__FILE__) + ".#{$$}.test"
+    "#{@dir}/#{prefix}#{File.basename(__FILE__)}.#{$$}.test"
   end
 
   def test_path
@@ -291,11 +291,28 @@ class TestFileExhaustive < Test::Unit::TestCase
     assert_file.not_sticky?(@file)
   end
 
-  def test_identical_p
+  def test_path_identical_p
     assert_file.identical?(@file, @file)
     assert_file.not_identical?(@file, @zerofile)
     assert_file.not_identical?(@file, @nofile)
     assert_file.not_identical?(@nofile, @file)
+  end
+
+  def test_io_identical_p
+    open(@file) {|f|
+      assert_file.identical?(f, f)
+      assert_file.identical?(@file, f)
+      assert_file.identical?(f, @file)
+    }
+  end
+
+  def test_closed_io_identical_p
+    io = open(@file) {|f| f}
+    assert_raise(IOError) {
+      File.identical?(@file, io)
+    }
+    File.unlink(@file)
+    assert_file.not_exist?(@file)
   end
 
   def test_s_size
@@ -447,6 +464,7 @@ class TestFileExhaustive < Test::Unit::TestCase
       assert_equal(@file, File.expand_path(@file + "::$DATA"))
       assert_match(/\Ac:\//i, File.expand_path('c:'), '[ruby-core:31591]')
       assert_match(/\Ac:\//i, File.expand_path('c:foo', 'd:/bar'))
+      assert_match(/\Ae:\//i, File.expand_path('e:foo', 'd:/bar'))
       assert_match(%r'\Ac:/bar/foo\z'i, File.expand_path('c:foo', 'c:/bar'))
     when /darwin/
       ["\u{feff}", *"\u{2000}"..."\u{2100}"].each do |c|
@@ -794,6 +812,12 @@ class TestFileExhaustive < Test::Unit::TestCase
     obj = klass.new
     assert_equal("#{Dir.pwd}/a/b/c", File.expand_path(obj))
   end
+
+  def test_expand_path_with_drive_letter
+    bug10858 = '[ruby-core:68130] [Bug #10858]'
+    assert_match(%r'/bar/foo\z'i, File.expand_path('z:foo', 'bar'), bug10858)
+    assert_equal('z:/bar/foo', File.expand_path('z:foo', '/bar'), bug10858)
+  end if DRIVE
 
   def test_basename
     assert_equal(File.basename(@file).sub(/\.test$/, ""), File.basename(@file, ".test"))

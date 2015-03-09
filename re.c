@@ -2,7 +2,7 @@
 
   re.c -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Mon Aug  9 18:24:49 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -1787,7 +1787,7 @@ name_to_backref_error(VALUE name)
 static VALUE
 match_aref(int argc, VALUE *argv, VALUE match)
 {
-    VALUE idx, rest;
+    VALUE idx, rest, re;
 
     match_check(match);
     rb_scan_args(argc, argv, "11", &idx, &rest);
@@ -1808,7 +1808,8 @@ match_aref(int argc, VALUE *argv, VALUE match)
 		/* fall through */
 	      case T_STRING:
 		p = StringValuePtr(idx);
-		if (!rb_enc_compatible(RREGEXP(RMATCH(match)->regexp)->src, idx) ||
+		re = RMATCH(match)->regexp;
+		if (NIL_P(re) || !rb_enc_compatible(RREGEXP(re)->src, idx) ||
 		    (num = name_to_backref_number(RMATCH_REGS(match), RMATCH(match)->regexp,
 						  p, p + RSTRING_LEN(idx))) < 1) {
 		    name_to_backref_error(idx);
@@ -2298,9 +2299,10 @@ unescape_nonascii(const char *p, const char *end, rb_encoding *enc,
               case 'M': /* \M-X, \M-\C-X, \M-\cX */
                 p = p-2;
 		if (enc == rb_usascii_encoding()) {
+		    const char *pbeg = p;
 		    c = read_escaped_byte(&p, end, err);
 		    if (c == (char)-1) return -1;
-		    rb_str_buf_cat(buf, &c, 1);
+		    rb_str_buf_cat(buf, pbeg, p-pbeg);
 		}
 		else {
 		    if (unescape_escaped_nonascii(&p, end, enc, buf, encp, err) != 0)

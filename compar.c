@@ -2,7 +2,7 @@
 
   compar.c -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Thu Aug 26 14:39:48 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -20,7 +20,7 @@ rb_cmperr(VALUE x, VALUE y)
 {
     VALUE classname;
 
-    if (SPECIAL_CONST_P(y)) {
+    if (SPECIAL_CONST_P(y) || BUILTIN_TYPE(y) == T_FLOAT) {
 	classname = rb_inspect(y);
     }
     else {

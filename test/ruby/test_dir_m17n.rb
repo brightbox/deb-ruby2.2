@@ -303,6 +303,65 @@ class TestDir_M17N < Test::Unit::TestCase
     }
   end
 
+  def with_enc_path
+    with_tmpdir do |d|
+      names = %W"\u{391 392 393 394 395} \u{3042 3044 3046 3048 304a}"
+      names.each do |dir|
+        EnvUtil.with_default_external(Encoding::UTF_8) do
+          Dir.mkdir(dir) rescue next
+          begin
+            yield(dir)
+          ensure
+            File.chmod(0700, dir)
+          end
+        end
+      end
+    end
+  end
+
+  def test_glob_warning_opendir
+    with_enc_path do |dir|
+      open("#{dir}/x", "w") {}
+      File.chmod(0300, dir)
+      next if File.readable?(dir)
+      assert_warning(/#{dir}/) do
+        Dir.glob("#{dir}/*")
+      end
+    end
+  end
+
+  def test_glob_warning_match_all
+    with_enc_path do |dir|
+      open("#{dir}/x", "w") {}
+      File.chmod(0000, dir)
+      next if File.readable?(dir)
+      assert_warning(/#{dir}/) do
+        Dir.glob("#{dir}/x")
+      end
+    end
+  end
+
+  def test_glob_warning_match_dir
+    with_enc_path do |dir|
+      Dir.mkdir("#{dir}/x")
+      File.chmod(0000, dir)
+      next if File.readable?(dir)
+      assert_warning(/#{dir}/) do
+        Dir.glob("#{dir}/x/")
+      end
+    end
+  end
+
+  def test_glob_escape_multibyte
+    name = "\x81\\".force_encoding(Encoding::Shift_JIS)
+    with_tmpdir do
+      open(name, "w") {} rescue next
+      match, = Dir.glob("#{name}*")
+      next unless match and match.encoding == Encoding::Shift_JIS
+      assert_equal([name], Dir.glob("\\#{name}*"))
+    end
+  end
+
   def test_entries_compose
     bug7267 = '[ruby-core:48745] [Bug #7267]'
 
