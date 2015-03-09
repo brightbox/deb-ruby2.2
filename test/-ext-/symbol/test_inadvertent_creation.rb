@@ -202,7 +202,13 @@ module Test_Symbol
       Thread.current.thread_variable_set(:test, nil)
       name = noninterned_name
       assert_nil(Thread.current.thread_variable_get(name))
-      assert_not_interned(name)
+      assert_not_pinneddown(name)
+    end
+
+    def test_thread_variable_set
+      name = noninterned_name
+      Thread.current.thread_variable_set(name, 42)
+      assert_not_pinneddown(name)
     end
 
     def test_thread_variable?
@@ -351,6 +357,95 @@ module Test_Symbol
         system(".", in: name)
       }
       assert_not_pinneddown(name)
+    end
+
+    def assert_no_immortal_symbol_created(name)
+      name = noninterned_name(name)
+      yield(name)
+      assert_not_pinneddown(name)
+    end
+
+    def assert_no_immortal_symbol_in_method_missing(name)
+      assert_no_immortal_symbol_created("send should not leak - #{name}") do |name|
+        assert_raise(NoMethodError) {yield(name)}
+      end
+    end
+
+    def test_send_leak_string
+      assert_no_immortal_symbol_in_method_missing("str") do |name|
+        42.send(name)
+      end
+    end
+
+    def test_send_leak_symbol
+      assert_no_immortal_symbol_in_method_missing("sym") do |name|
+        42.send(name.to_sym)
+      end
+    end
+
+    def test_send_leak_string_custom_method_missing
+      x = Object.new
+      def x.method_missing(*); super; end
+      assert_no_immortal_symbol_in_method_missing("str mm") do |name|
+        x.send(name)
+      end
+    end
+
+    def test_send_leak_symbol_custom_method_missing
+      x = Object.new
+      def x.method_missing(*); super; end
+      assert_no_immortal_symbol_in_method_missing("sym mm") do |name|
+        x.send(name.to_sym)
+      end
+    end
+
+    def test_send_leak_string_no_optimization
+      assert_no_immortal_symbol_in_method_missing("str slow") do |name|
+        42.method(:send).call(name)
+      end
+    end
+
+    def test_send_leak_symbol_no_optimization
+      assert_no_immortal_symbol_in_method_missing("sym slow") do |name|
+        42.method(:send).call(name.to_sym)
+      end
+    end
+
+    def test_send_leak_string_custom_method_missing_no_optimization
+      x = Object.new
+      def x.method_missing(*); super; end
+      assert_no_immortal_symbol_in_method_missing("str mm slow") do |name|
+        x.method(:send).call(name)
+      end
+    end
+
+    def test_send_leak_symbol_custom_method_missing_no_optimization
+      x = Object.new
+      def x.method_missing(*); super; end
+      assert_no_immortal_symbol_in_method_missing("sym mm slow") do |name|
+        x.method(:send).call(name.to_sym)
+      end
+    end
+
+    def test_kwarg_symbol_leak_no_rest
+      foo = -> (arg: 42) {}
+      assert_no_immortal_symbol_created("kwarg no rest") do |name|
+        assert_raise(ArgumentError) { foo.call(name.to_sym => 42) }
+      end
+    end
+
+    def test_kwarg_symbol_leak_with_rest
+      foo = -> (arg: 2, **options) {}
+      assert_no_immortal_symbol_created("kwarg with rest") do |name|
+        foo.call(name.to_sym => 42)
+      end
+    end
+
+    def test_kwarg_symbol_leak_just_rest
+      foo = -> (**options) {}
+      assert_no_immortal_symbol_created("kwarg just rest") do |name|
+        foo.call(name.to_sym => 42)
+      end
     end
   end
 end

@@ -2,7 +2,7 @@
 
   vm_core.h -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: 04/01/01 19:41:38 JST
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -137,7 +137,7 @@ struct rb_control_frame_struct;
 
 typedef struct rb_call_info_kw_arg_struct {
     int keyword_len;
-    ID keywords[1];
+    VALUE keywords[1];
 } rb_call_info_kw_arg_t;
 
 /* rb_call_info_t contains calling information including inline cache */
@@ -975,7 +975,7 @@ rb_vm_living_threads_init(rb_vm_t *vm)
 static inline void
 rb_vm_living_threads_insert(rb_vm_t *vm, rb_thread_t *th)
 {
-    list_add(&vm->living_threads, &th->vmlt_node);
+    list_add_tail(&vm->living_threads, &th->vmlt_node);
     vm->living_thread_num++;
 }
 
@@ -1002,6 +1002,8 @@ void rb_vm_register_special_exception(enum ruby_special_exceptions sp, VALUE exc
 void rb_gc_mark_machine_stack(rb_thread_t *th);
 
 int rb_autoloading_value(VALUE mod, ID id, VALUE* value);
+
+void rb_vm_rewrite_cref_stack(NODE *node, VALUE old_klass, VALUE new_klass, NODE **new_cref_ptr);
 
 #define sysstack_error GET_VM()->special_exceptions[ruby_error_sysstack]
 

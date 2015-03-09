@@ -2,7 +2,7 @@
 
   vm_dump.c -
 
-  $Author: akr $
+  $Author: naruse $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -711,7 +711,7 @@ rb_print_backtrace(void)
 #endif
 }
 
-#ifdef __FreeBSD__
+#ifdef HAVE_LIBPROCSTAT
 #include <sys/user.h>
 #include <sys/sysctl.h>
 #include <sys/param.h>
@@ -1033,7 +1033,7 @@ rb_vm_bugreport(const void *ctx)
 	    }
 	}
 #endif /* __linux__ */
-#ifdef __FreeBSD__
+#ifdef HAVE_LIBPROCSTAT
 # define MIB_KERN_PROC_PID_LEN 4
 	int mib[MIB_KERN_PROC_PID_LEN];
 	struct kinfo_proc kp;

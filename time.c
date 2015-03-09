@@ -2,7 +2,7 @@
 
   time.c -
 
-  $Author: nobu $
+  $Author: naruse $
   created at: Tue Dec 28 14:31:59 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -1548,7 +1548,7 @@ timelocalw(struct vtm *vtm)
     tm.tm_hour = vtm->hour;
     tm.tm_min = vtm->min;
     tm.tm_sec = vtm->sec;
-    tm.tm_isdst = vtm->isdst;
+    tm.tm_isdst = vtm->isdst == VTM_ISDST_INITVAL ? -1 : vtm->isdst;
 
     if (find_time_t(&tm, 0, &t))
         goto no_localtime;
@@ -4197,6 +4197,9 @@ time_zone_name(const char *zone)
     VALUE name = rb_str_new_cstr(zone);
     if (!rb_enc_str_asciionly_p(name)) {
 	name = rb_external_str_with_enc(name, rb_locale_encoding());
+    }
+    else {
+	rb_enc_associate(name, rb_usascii_encoding());
     }
     return name;
 }

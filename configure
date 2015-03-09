@@ -706,7 +706,7 @@ INSTALLDOC
 CAPITARGET
 RDOCTARGET
 LIBRUBY_A_OBJS
-DTRACE_GLOMMED_OBJ
+DTRACE_REBUILD
 DTRACE_OBJ
 DTRACE_EXT
 EXECUTABLE_EXTS
@@ -21259,7 +21259,7 @@ $as_echo "$rb_cv_dlopen" >&6; }
 	  "-undefined dynamic_lookup" \
 	  "-multiply_defined suppress" \
 	  ; do
-	  test "x${linker_flag}" = x || flag="${linker_flag}${flag// /,}"
+	  test "x${linker_flag}" = x || flag="${linker_flag}`echo ${flag} | tr ' ' ,`"
 
     save_LDFLAGS="$LDFLAGS"
     LDFLAGS="$LDFLAGS $flag"
@@ -22650,6 +22650,7 @@ $as_echo "$rb_cv_dtrace_available" >&6; }
 fi
 
 LIBRUBY_A_OBJS='$(OBJS)'
+DTRACE_REBUILD=
 if test "${enable_dtrace}" = "yes"; then
     if test -z "$DTRACE"; then
         as_fn_error $? "dtrace(1) is missing" "$LINENO" 5
@@ -22699,9 +22700,11 @@ _PROBES
     int main(void){ CONFTEST_FIRE(); return 0; }
 _CONF
     $CC $CFLAGS $CPPFLAGS -c -o conftest.o conftest.c &&
+    cp -p conftest.o conftest.oo &&
     $DTRACE -G -s conftest_provider.d conftest.o 2>/dev/null
   }; then
     rb_cv_prog_dtrace_g=yes
+    cmp -b conftest.o conftest.oo || rb_cv_prog_dtrace_g=rebuild
   else
     rb_cv_prog_dtrace_g=no
   fi
@@ -22711,9 +22714,11 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_prog_dtrace_g" >&5
 $as_echo "$rb_cv_prog_dtrace_g" >&6; }
 
-        if test "$rb_cv_prog_dtrace_g" = 'yes'; then
+        if test "$rb_cv_prog_dtrace_g" != 'no'; then
             DTRACE_OBJ='probes.$(OBJEXT)'
-            DTRACE_GLOMMED_OBJ='ruby-glommed.$(OBJEXT)'
+        fi
+        if test "$rb_cv_prog_dtrace_g" = 'rebuild'; then
+            DTRACE_REBUILD=yes
             LIBRUBY_A_OBJS='$(DTRACE_GLOMMED_OBJ)'
         fi
         case "${target_os}" in #(
@@ -22830,7 +22835,7 @@ elif { case "$ac_cv_func___builtin_setjmp" in #(
     true ;; #(
   *) :
     false ;;
-esac; }; then
+esac }; then
     setjmp_cast=`expr "$ac_cv_func___builtin_setjmp" : "yes with cast (\(.*\))"`
     setjmp_prefix=__builtin_
     setjmp_suffix=
