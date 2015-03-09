@@ -1,3 +1,9 @@
+ruby2.2 (2.2.1-1bbox1~trusty1) trusty; urgency=low
+
+  * New upstream release, 2.2.1
+
+ -- John Leach <john@brightbox.co.uk>  Mon, 09 Mar 2015 22:11:15 +0000
+
 ruby2.2 (2.2.0-1bbox1~trusty1) trusty; urgency=low
 
   * New upstream release, 2.2.0
