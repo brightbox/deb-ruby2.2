@@ -1,8 +1,8 @@
-ruby2.2 (2.2.1-1bbox1~precise1) precise; urgency=medium
+ruby2.2 (2.2.1-1bbox1~precise2) precise; urgency=medium
 
   * New upstream release
 
- -- John Leach <john@brightbox.co.uk>  Mon, 09 Mar 2015 22:50:16 +0000
+ -- John Leach <john@brightbox.co.uk>  Thu, 12 Mar 2015 22:26:16 +0100
 
 ruby2.2 (2.2.0~preview1-1bbox1~trusty1) trusty; urgency=low
 
