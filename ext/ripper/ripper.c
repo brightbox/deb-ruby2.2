@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 2.7.12-4996.  */
+/* A Bison parser, made by GNU Bison 2.5.  */
 
 /* Bison implementation for Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
+      Copyright (C) 1984, 1989-1990, 2000-2011 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "2.7.12-4996"
+#define YYBISON_VERSION "2.5"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -58,11 +58,14 @@
 /* Pull parsers.  */
 #define YYPULL 1
 
+/* Using locations.  */
+#define YYLSP_NEEDED 0
 
 
 
 /* Copy the first part of user declarations.  */
-/* Line 371 of yacc.c  */
+
+/* Line 268 of yacc.c  */
 #line 12 "ripper.y"
 
 
@@ -786,16 +789,14 @@ static void token_info_pop(struct parser_params*, const char *token);
 #define token_info_pop(token) /* nothing */
 #endif
 
-/* Line 371 of yacc.c  */
-#line 791 "parse.c"
 
-# ifndef YY_NULL
-#  if defined __cplusplus && 201103L <= __cplusplus
-#   define YY_NULL nullptr
-#  else
-#   define YY_NULL 0
-#  endif
-# endif
+/* Line 268 of yacc.c  */
+#line 795 "parse.c"
+
+/* Enabling traces.  */
+#ifndef YYDEBUG
+# define YYDEBUG 1
+#endif
 
 /* Enabling verbose error messages.  */
 #ifdef YYERROR_VERBOSE
@@ -805,16 +806,11 @@ static void token_info_pop(struct parser_params*, const char *token);
 # define YYERROR_VERBOSE 0
 #endif
 
+/* Enabling the token table.  */
+#ifndef YYTOKEN_TABLE
+# define YYTOKEN_TABLE 0
+#endif
 
-/* Enabling traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 1
-#endif
-#if YYDEBUG
-#ifndef yydebug
-extern int yydebug;
-#endif
-#endif
 
 /* Tokens.  */
 #ifndef YYTOKENTYPE
@@ -942,10 +938,12 @@ extern int yydebug;
 #endif
 
 
+
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 {
-/* Line 387 of yacc.c  */
+
+/* Line 293 of yacc.c  */
 #line 739 "ripper.y"
 
     VALUE val;
@@ -955,8 +953,9 @@ typedef union YYSTYPE
     const struct vtable *vars;
 
 
-/* Line 387 of yacc.c  */
-#line 958 "parse.c"
+
+/* Line 293 of yacc.c  */
+#line 959 "parse.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -964,26 +963,11 @@ typedef union YYSTYPE
 #endif
 
 
-#ifdef YYPARSE_PARAM
-#if defined __STDC__ || defined __cplusplus
-int yyparse (void *YYPARSE_PARAM);
-#else
-int yyparse ();
-#endif
-#else /* ! YYPARSE_PARAM */
-#if defined __STDC__ || defined __cplusplus
-int yyparse (struct parser_params *parser);
-#else
-int yyparse ();
-#endif
-#endif /* ! YYPARSE_PARAM */
-
-
-
 /* Copy the second part of user declarations.  */
 
-/* Line 390 of yacc.c  */
-#line 985 "parse.c"
+
+/* Line 343 of yacc.c  */
+#line 971 "parse.c"
 
 #ifdef short
 # undef short
@@ -1036,33 +1020,24 @@ typedef short int yytype_int16;
 # if defined YYENABLE_NLS && YYENABLE_NLS
 #  if ENABLE_NLS
 #   include <libintl.h> /* INFRINGES ON USER NAME SPACE */
-#   define YY_(Msgid) dgettext ("bison-runtime", Msgid)
+#   define YY_(msgid) dgettext ("bison-runtime", msgid)
 #  endif
 # endif
 # ifndef YY_
-#  define YY_(Msgid) Msgid
-# endif
-#endif
-
-#ifndef __attribute__
-/* This feature is available in gcc versions 2.5 and later.  */
-# if (! defined __GNUC__ || __GNUC__ < 2 \
-      || (__GNUC__ == 2 && __GNUC_MINOR__ < 5))
-#  define __attribute__(Spec) /* empty */
+#  define YY_(msgid) msgid
 # endif
 #endif
 
 /* Suppress unused-variable warnings by "using" E.  */
 #if ! defined lint || defined __GNUC__
-# define YYUSE(E) ((void) (E))
+# define YYUSE(e) ((void) (e))
 #else
-# define YYUSE(E) /* empty */
+# define YYUSE(e) /* empty */
 #endif
-
 
 /* Identity function, used to suppress warnings about constant conditions.  */
 #ifndef lint
-# define YYID(N) (N)
+# define YYID(n) (n)
 #else
 #if (defined __STDC__ || defined __C99__FUNC__ \
      || defined __cplusplus || defined _MSC_VER)
@@ -1098,7 +1073,6 @@ YYID (yyi)
 #    if ! defined _ALLOCA_H && ! defined EXIT_SUCCESS && (defined __STDC__ || defined __C99__FUNC__ \
      || defined __cplusplus || defined _MSC_VER)
 #     include <stdlib.h> /* INFRINGES ON USER NAME SPACE */
-      /* Use EXIT_SUCCESS as a witness for stdlib.h.  */
 #     ifndef EXIT_SUCCESS
 #      define EXIT_SUCCESS 0
 #     endif
@@ -1190,20 +1164,20 @@ union yyalloc
 #endif
 
 #if defined YYCOPY_NEEDED && YYCOPY_NEEDED
-/* Copy COUNT objects from SRC to DST.  The source and destination do
+/* Copy COUNT objects from FROM to TO.  The source and destination do
    not overlap.  */
 # ifndef YYCOPY
 #  if defined __GNUC__ && 1 < __GNUC__
-#   define YYCOPY(Dst, Src, Count) \
-      __builtin_memcpy (Dst, Src, (Count) * sizeof (*(Src)))
+#   define YYCOPY(To, From, Count) \
+      __builtin_memcpy (To, From, (Count) * sizeof (*(From)))
 #  else
-#   define YYCOPY(Dst, Src, Count)              \
-      do                                        \
-        {                                       \
-          YYSIZE_T yyi;                         \
-          for (yyi = 0; yyi < (Count); yyi++)   \
-            (Dst)[yyi] = (Src)[yyi];            \
-        }                                       \
+#   define YYCOPY(To, From, Count)		\
+      do					\
+	{					\
+	  YYSIZE_T yyi;				\
+	  for (yyi = 0; yyi < (Count); yyi++)	\
+	    (To)[yyi] = (From)[yyi];		\
+	}					\
       while (YYID (0))
 #  endif
 # endif
@@ -1609,7 +1583,7 @@ static const yytype_uint16 yyrline[] =
 };
 #endif
 
-#if YYDEBUG || YYERROR_VERBOSE || 0
+#if YYDEBUG || YYERROR_VERBOSE || YYTOKEN_TABLE
 /* YYTNAME[SYMBOL-NUM] -- String name of the symbol SYMBOL-NUM.
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
@@ -1675,7 +1649,7 @@ static const char *const yytname[] =
   "f_optarg", "restarg_mark", "f_rest_arg", "blkarg_mark", "f_block_arg",
   "opt_f_block_arg", "singleton", "$@46", "assoc_list", "assocs", "assoc",
   "operation", "operation2", "operation3", "dot_or_colon", "opt_terms",
-  "opt_nl", "rparen", "rbracket", "trailer", "term", "terms", "none", YY_NULL
+  "opt_nl", "rparen", "rbracket", "trailer", "term", "terms", "none", 0
 };
 #endif
 
@@ -3240,11 +3214,11 @@ static const yytype_int16 yytable[] =
        0,     0,     0,   194
 };
 
-#define yypact_value_is_default(Yystate) \
-  (!!((Yystate) == (-836)))
+#define yypact_value_is_default(yystate) \
+  ((yystate) == (-836))
 
-#define yytable_value_is_error(Yytable_value) \
-  (!!((Yytable_value) == (-632)))
+#define yytable_value_is_error(yytable_value) \
+  ((yytable_value) == (-632))
 
 static const yytype_int16 yycheck[] =
 {
@@ -4502,35 +4476,62 @@ static const yytype_uint16 yystos[] =
 
 #define YYRECOVERING()  (!!yyerrstatus)
 
-#define YYBACKUP(Token, Value)                                  \
-do                                                              \
-  if (yychar == YYEMPTY)                                        \
-    {                                                           \
-      yychar = (Token);                                         \
-      yylval = (Value);                                         \
-      YYPOPSTACK (yylen);                                       \
-      yystate = *yyssp;                                         \
-      goto yybackup;                                            \
-    }                                                           \
-  else                                                          \
-    {                                                           \
+#define YYBACKUP(Token, Value)					\
+do								\
+  if (yychar == YYEMPTY && yylen == 1)				\
+    {								\
+      yychar = (Token);						\
+      yylval = (Value);						\
+      YYPOPSTACK (1);						\
+      goto yybackup;						\
+    }								\
+  else								\
+    {								\
       parser_yyerror (parser, YY_("syntax error: cannot back up")); \
       YYERROR;							\
     }								\
 while (YYID (0))
 
-/* Error token number */
+
 #define YYTERROR	1
 #define YYERRCODE	256
 
 
+/* YYLLOC_DEFAULT -- Set CURRENT to span from RHS[1] to RHS[N].
+   If N is 0, then set CURRENT to the empty location which ends
+   the previous symbol: RHS[0] (always defined).  */
+
+#define YYRHSLOC(Rhs, K) ((Rhs)[K])
+#ifndef YYLLOC_DEFAULT
+# define YYLLOC_DEFAULT(Current, Rhs, N)				\
+    do									\
+      if (YYID (N))                                                    \
+	{								\
+	  (Current).first_line   = YYRHSLOC (Rhs, 1).first_line;	\
+	  (Current).first_column = YYRHSLOC (Rhs, 1).first_column;	\
+	  (Current).last_line    = YYRHSLOC (Rhs, N).last_line;		\
+	  (Current).last_column  = YYRHSLOC (Rhs, N).last_column;	\
+	}								\
+      else								\
+	{								\
+	  (Current).first_line   = (Current).last_line   =		\
+	    YYRHSLOC (Rhs, 0).last_line;				\
+	  (Current).first_column = (Current).last_column =		\
+	    YYRHSLOC (Rhs, 0).last_column;				\
+	}								\
+    while (YYID (0))
+#endif
+
+
 /* This macro is provided for backward compatibility. */
+
 #ifndef YY_LOCATION_PRINT
 # define YY_LOCATION_PRINT(File, Loc) ((void) 0)
 #endif
 
 
 /* YYLEX -- calling `yylex' with the right arguments.  */
+
 #ifdef YYLEX_PARAM
 # define YYLEX yylex (&yylval, YYLEX_PARAM)
 #else
@@ -4581,8 +4582,6 @@ yy_symbol_value_print (yyoutput, yytype, yyvaluep, parser)
     struct parser_params *parser;
 #endif
 {
-  FILE *yyo = yyoutput;
-  YYUSE (yyo);
   if (!yyvaluep)
     return;
   YYUSE (parser);
@@ -4592,7 +4591,11 @@ yy_symbol_value_print (yyoutput, yytype, yyvaluep, parser)
 # else
   YYUSE (yyoutput);
 # endif
-  YYUSE (yytype);
+  switch (yytype)
+    {
+      default:
+	break;
+    }
 }
 
 
@@ -4835,11 +4838,12 @@ static int
 yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
                 yytype_int16 *yyssp, int yytoken)
 {
-  YYSIZE_T yysize0 = yytnamerr (YY_NULL, yytname[yytoken]);
+  YYSIZE_T yysize0 = yytnamerr (0, yytname[yytoken]);
   YYSIZE_T yysize = yysize0;
+  YYSIZE_T yysize1;
   enum { YYERROR_VERBOSE_ARGS_MAXIMUM = 5 };
   /* Internationalized format string. */
-  const char *yyformat = YY_NULL;
+  const char *yyformat = 0;
   /* Arguments of yyformat. */
   char const *yyarg[YYERROR_VERBOSE_ARGS_MAXIMUM];
   /* Number of reported tokens (one for the "unexpected", one per
@@ -4899,13 +4903,11 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
                     break;
                   }
                 yyarg[yycount++] = yytname[yyx];
-                {
-                  YYSIZE_T yysize1 = yysize + yytnamerr (YY_NULL, yytname[yyx]);
-                  if (! (yysize <= yysize1
-                         && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
-                    return 2;
-                  yysize = yysize1;
-                }
+                yysize1 = yysize + yytnamerr (0, yytname[yyx]);
+                if (! (yysize <= yysize1
+                       && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
+                  return 2;
+                yysize = yysize1;
               }
         }
     }
@@ -4925,12 +4927,10 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
 # undef YYCASE_
     }
 
-  {
-    YYSIZE_T yysize1 = yysize + yystrlen (yyformat);
-    if (! (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
-      return 2;
-    yysize = yysize1;
-  }
+  yysize1 = yysize + yystrlen (yyformat);
+  if (! (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
+    return 2;
+  yysize = yysize1;
 
   if (*yymsg_alloc < yysize)
     {
@@ -4988,10 +4988,29 @@ yydestruct (yymsg, yytype, yyvaluep, parser)
     yymsg = "Deleting";
   YY_SYMBOL_PRINT (yymsg, yytype, yyvaluep, yylocationp);
 
-  YYUSE (yytype);
+  switch (yytype)
+    {
+
+      default:
+	break;
+    }
 }
 
 
+/* Prevent warnings from -Wmissing-prototypes.  */
+#ifdef YYPARSE_PARAM
+#if defined __STDC__ || defined __cplusplus
+int yyparse (void *YYPARSE_PARAM);
+#else
+int yyparse ();
+#endif
+#else /* ! YYPARSE_PARAM */
+#if defined __STDC__ || defined __cplusplus
+int yyparse (struct parser_params *parser);
+#else
+int yyparse ();
+#endif
+#endif /* ! YYPARSE_PARAM */
 
 
 /*----------.
@@ -5023,31 +5042,8 @@ yyparse (parser)
 /* The lookahead symbol.  */
 int yychar;
 
-
-#if defined __GNUC__ && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
-/* Suppress an incorrect diagnostic about yylval being uninitialized.  */
-# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN \
-    _Pragma ("GCC diagnostic push") \
-    _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")\
-    _Pragma ("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
-# define YY_IGNORE_MAYBE_UNINITIALIZED_END \
-    _Pragma ("GCC diagnostic pop")
-#else
-/* Default value used for initialization, for pacifying older GCCs
-   or non-GCC compilers.  */
-static YYSTYPE yyval_default;
-# define YY_INITIAL_VALUE(Value) = Value
-#endif
-#ifndef YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
-# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
-# define YY_IGNORE_MAYBE_UNINITIALIZED_END
-#endif
-#ifndef YY_INITIAL_VALUE
-# define YY_INITIAL_VALUE(Value) /* Nothing. */
-#endif
-
 /* The semantic value of the lookahead symbol.  */
-YYSTYPE yylval YY_INITIAL_VALUE(yyval_default);
+YYSTYPE yylval;
 
     /* Number of syntax errors so far.  */
     int yynerrs;
@@ -5060,7 +5056,7 @@ YYSTYPE yylval YY_INITIAL_VALUE(yyval_default);
        `yyss': related to states.
        `yyvs': related to semantic values.
 
-       Refer to the stacks through separate pointers, to allow yyoverflow
+       Refer to the stacks thru separate pointers, to allow yyoverflow
        to reallocate them elsewhere.  */
 
     /* The state stack.  */
@@ -5078,7 +5074,7 @@ YYSTYPE yylval YY_INITIAL_VALUE(yyval_default);
   int yyn;
   int yyresult;
   /* Lookahead token as an internal (translated) token number.  */
-  int yytoken = 0;
+  int yytoken;
   /* The variables used to return semantic value and location from the
      action routines.  */
   YYSTYPE yyval;
@@ -5096,8 +5092,9 @@ YYSTYPE yylval YY_INITIAL_VALUE(yyval_default);
      Keep to zero when no symbol should be popped.  */
   int yylen = 0;
 
-  yyssp = yyss = yyssa;
-  yyvsp = yyvs = yyvsa;
+  yytoken = 0;
+  yyss = yyssa;
+  yyvs = yyvsa;
   yystacksize = YYINITDEPTH;
 
   YYDPRINTF ((stderr, "Starting parse\n"));
@@ -5106,6 +5103,14 @@ YYSTYPE yylval YY_INITIAL_VALUE(yyval_default);
   yyerrstatus = 0;
   yynerrs = 0;
   yychar = YYEMPTY; /* Cause a token to be read.  */
+
+  /* Initialize stack pointers.
+     Waste one element of value and location stack
+     so that they stay on the same level as the state stack.
+     The wasted elements are never initialized.  */
+  yyssp = yyss;
+  yyvsp = yyvs;
+
   goto yysetstate;
 
 /*------------------------------------------------------------.
@@ -5246,9 +5251,7 @@ yybackup:
   yychar = YYEMPTY;
 
   yystate = yyn;
-  YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   *++yyvsp = yylval;
-  YY_IGNORE_MAYBE_UNINITIALIZED_END
 
   goto yynewstate;
 
@@ -5285,7 +5288,8 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 903 "ripper.y"
     {
 			lex_state = EXPR_BEG;
@@ -5298,7 +5302,8 @@ yyreduce:
     break;
 
   case 3:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 912 "ripper.y"
     {
 #if 0
@@ -5323,7 +5328,8 @@ yyreduce:
     break;
 
   case 4:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 935 "ripper.y"
     {
 #if 0
@@ -5336,7 +5342,8 @@ yyreduce:
     break;
 
   case 5:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 946 "ripper.y"
     {
 #if 0
@@ -5349,7 +5356,8 @@ yyreduce:
     break;
 
   case 6:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 955 "ripper.y"
     {
 #if 0
@@ -5361,7 +5369,8 @@ yyreduce:
     break;
 
   case 7:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 963 "ripper.y"
     {
 #if 0
@@ -5373,7 +5382,8 @@ yyreduce:
     break;
 
   case 8:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 971 "ripper.y"
     {
 			(yyval.val) = remove_begin((yyvsp[(2) - (2)].val));
@@ -5381,7 +5391,8 @@ yyreduce:
     break;
 
   case 10:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 978 "ripper.y"
     {
 #if 0
@@ -5392,7 +5403,8 @@ yyreduce:
     break;
 
   case 11:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 985 "ripper.y"
     {
 #if 0
@@ -5408,7 +5420,8 @@ yyreduce:
     break;
 
   case 12:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1002 "ripper.y"
     {
 #if 0
@@ -5440,7 +5453,8 @@ yyreduce:
     break;
 
   case 13:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1032 "ripper.y"
     {
 #if 0
@@ -5453,7 +5467,8 @@ yyreduce:
     break;
 
   case 14:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1043 "ripper.y"
     {
 #if 0
@@ -5466,7 +5481,8 @@ yyreduce:
     break;
 
   case 15:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1052 "ripper.y"
     {
 #if 0
@@ -5478,7 +5494,8 @@ yyreduce:
     break;
 
   case 16:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1060 "ripper.y"
     {
 #if 0
@@ -5490,7 +5507,8 @@ yyreduce:
     break;
 
   case 17:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1068 "ripper.y"
     {
 			(yyval.val) = remove_begin((yyvsp[(2) - (2)].val));
@@ -5498,7 +5516,8 @@ yyreduce:
     break;
 
   case 18:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1074 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(1) - (1)].val);
@@ -5506,7 +5525,8 @@ yyreduce:
     break;
 
   case 19:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1078 "ripper.y"
     {
 			yyerror("BEGIN is permitted only at toplevel");
@@ -5518,7 +5538,8 @@ yyreduce:
     break;
 
   case 20:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1086 "ripper.y"
     {
 #if 0
@@ -5534,13 +5555,15 @@ yyreduce:
     break;
 
   case 21:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1098 "ripper.y"
     {lex_state = EXPR_FNAME;}
     break;
 
   case 22:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1099 "ripper.y"
     {
 #if 0
@@ -5552,7 +5575,8 @@ yyreduce:
     break;
 
   case 23:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1107 "ripper.y"
     {
 #if 0
@@ -5564,7 +5588,8 @@ yyreduce:
     break;
 
   case 24:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1115 "ripper.y"
     {
 #if 0
@@ -5579,7 +5604,8 @@ yyreduce:
     break;
 
   case 25:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1126 "ripper.y"
     {
 #if 0
@@ -5594,7 +5620,8 @@ yyreduce:
     break;
 
   case 26:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1137 "ripper.y"
     {
 #if 0
@@ -5606,7 +5633,8 @@ yyreduce:
     break;
 
   case 27:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1145 "ripper.y"
     {
 #if 0
@@ -5619,7 +5647,8 @@ yyreduce:
     break;
 
   case 28:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1154 "ripper.y"
     {
 #if 0
@@ -5632,7 +5661,8 @@ yyreduce:
     break;
 
   case 29:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1163 "ripper.y"
     {
 #if 0
@@ -5649,7 +5679,8 @@ yyreduce:
     break;
 
   case 30:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1176 "ripper.y"
     {
 #if 0
@@ -5666,7 +5697,8 @@ yyreduce:
     break;
 
   case 31:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1189 "ripper.y"
     {
 #if 0
@@ -5679,7 +5711,8 @@ yyreduce:
     break;
 
   case 32:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1198 "ripper.y"
     {
 			if (in_def || in_single) {
@@ -5695,7 +5728,8 @@ yyreduce:
     break;
 
   case 34:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1211 "ripper.y"
     {
 #if 0
@@ -5709,7 +5743,8 @@ yyreduce:
     break;
 
   case 35:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1221 "ripper.y"
     {
 			value_expr((yyvsp[(3) - (3)].val));
@@ -5718,7 +5753,8 @@ yyreduce:
     break;
 
   case 36:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1226 "ripper.y"
     {
 #if 0
@@ -5743,7 +5779,8 @@ yyreduce:
     break;
 
   case 37:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1247 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -5752,7 +5789,8 @@ yyreduce:
     break;
 
   case 38:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1252 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -5761,7 +5799,8 @@ yyreduce:
     break;
 
   case 39:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1257 "ripper.y"
     {
 #if 0
@@ -5775,7 +5814,8 @@ yyreduce:
     break;
 
   case 40:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1267 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -5784,7 +5824,8 @@ yyreduce:
     break;
 
   case 41:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1272 "ripper.y"
     {
 #if 0
@@ -5799,7 +5840,8 @@ yyreduce:
     break;
 
   case 42:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1283 "ripper.y"
     {
 #if 0
@@ -5812,7 +5854,8 @@ yyreduce:
     break;
 
   case 43:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1292 "ripper.y"
     {
 #if 0
@@ -5825,7 +5868,8 @@ yyreduce:
     break;
 
   case 45:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1304 "ripper.y"
     {
 #if 0
@@ -5838,7 +5882,8 @@ yyreduce:
     break;
 
   case 46:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1313 "ripper.y"
     {
 #if 0
@@ -5851,7 +5896,8 @@ yyreduce:
     break;
 
   case 48:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1326 "ripper.y"
     {
 #if 0
@@ -5863,7 +5909,8 @@ yyreduce:
     break;
 
   case 49:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1334 "ripper.y"
     {
 #if 0
@@ -5875,7 +5922,8 @@ yyreduce:
     break;
 
   case 50:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1342 "ripper.y"
     {
 #if 0
@@ -5887,7 +5935,8 @@ yyreduce:
     break;
 
   case 51:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1350 "ripper.y"
     {
 #if 0
@@ -5899,7 +5948,8 @@ yyreduce:
     break;
 
   case 53:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1361 "ripper.y"
     {
 #if 0
@@ -5913,7 +5963,8 @@ yyreduce:
     break;
 
   case 57:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1378 "ripper.y"
     {
 #if 0
@@ -5926,7 +5977,8 @@ yyreduce:
     break;
 
   case 58:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1389 "ripper.y"
     {
 			(yyvsp[(1) - (1)].vars) = dyna_push();
@@ -5938,7 +5990,8 @@ yyreduce:
     break;
 
   case 59:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1399 "ripper.y"
     {
 #if 0
@@ -5952,7 +6005,8 @@ yyreduce:
     break;
 
   case 60:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1411 "ripper.y"
     {
 #if 0
@@ -5964,7 +6018,8 @@ yyreduce:
     break;
 
   case 61:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1421 "ripper.y"
     {
 #if 0
@@ -5977,7 +6032,8 @@ yyreduce:
     break;
 
   case 62:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1430 "ripper.y"
     {
 #if 0
@@ -5994,7 +6050,8 @@ yyreduce:
     break;
 
   case 63:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1443 "ripper.y"
     {
 #if 0
@@ -6007,7 +6064,8 @@ yyreduce:
     break;
 
   case 64:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1452 "ripper.y"
     {
 #if 0
@@ -6023,7 +6081,8 @@ yyreduce:
     break;
 
   case 65:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1464 "ripper.y"
     {
 #if 0
@@ -6036,7 +6095,8 @@ yyreduce:
     break;
 
   case 66:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1473 "ripper.y"
     {
 #if 0
@@ -6052,7 +6112,8 @@ yyreduce:
     break;
 
   case 67:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1485 "ripper.y"
     {
 #if 0
@@ -6065,7 +6126,8 @@ yyreduce:
     break;
 
   case 68:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1494 "ripper.y"
     {
 #if 0
@@ -6078,7 +6140,8 @@ yyreduce:
     break;
 
   case 69:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1503 "ripper.y"
     {
 #if 0
@@ -6090,7 +6153,8 @@ yyreduce:
     break;
 
   case 70:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1511 "ripper.y"
     {
 #if 0
@@ -6102,7 +6166,8 @@ yyreduce:
     break;
 
   case 71:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1519 "ripper.y"
     {
 #if 0
@@ -6114,7 +6179,8 @@ yyreduce:
     break;
 
   case 73:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1530 "ripper.y"
     {
 #if 0
@@ -6126,7 +6192,8 @@ yyreduce:
     break;
 
   case 75:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1541 "ripper.y"
     {
 #if 0
@@ -6138,7 +6205,8 @@ yyreduce:
     break;
 
   case 76:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1551 "ripper.y"
     {
 #if 0
@@ -6150,7 +6218,8 @@ yyreduce:
     break;
 
   case 77:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1559 "ripper.y"
     {
 #if 0
@@ -6162,7 +6231,8 @@ yyreduce:
     break;
 
   case 78:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1567 "ripper.y"
     {
 #if 0
@@ -6174,7 +6244,8 @@ yyreduce:
     break;
 
   case 79:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1575 "ripper.y"
     {
 #if 0
@@ -6187,7 +6258,8 @@ yyreduce:
     break;
 
   case 80:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1584 "ripper.y"
     {
 #if 0
@@ -6199,7 +6271,8 @@ yyreduce:
     break;
 
   case 81:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1592 "ripper.y"
     {
 #if 0
@@ -6212,7 +6285,8 @@ yyreduce:
     break;
 
   case 82:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1601 "ripper.y"
     {
 #if 0
@@ -6224,7 +6298,8 @@ yyreduce:
     break;
 
   case 83:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1609 "ripper.y"
     {
 #if 0
@@ -6237,7 +6312,8 @@ yyreduce:
     break;
 
   case 84:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1618 "ripper.y"
     {
 #if 0
@@ -6249,7 +6325,8 @@ yyreduce:
     break;
 
   case 85:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1626 "ripper.y"
     {
 #if 0
@@ -6262,7 +6339,8 @@ yyreduce:
     break;
 
   case 87:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1638 "ripper.y"
     {
 #if 0
@@ -6274,7 +6352,8 @@ yyreduce:
     break;
 
   case 88:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1648 "ripper.y"
     {
 #if 0
@@ -6286,7 +6365,8 @@ yyreduce:
     break;
 
   case 89:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1656 "ripper.y"
     {
 #if 0
@@ -6298,7 +6378,8 @@ yyreduce:
     break;
 
   case 90:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1666 "ripper.y"
     {
 #if 0
@@ -6310,7 +6391,8 @@ yyreduce:
     break;
 
   case 91:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1674 "ripper.y"
     {
 #if 0
@@ -6322,7 +6404,8 @@ yyreduce:
     break;
 
   case 92:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1684 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -6330,7 +6413,8 @@ yyreduce:
     break;
 
   case 93:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1688 "ripper.y"
     {
 		        (yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -6338,7 +6422,8 @@ yyreduce:
     break;
 
   case 94:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1692 "ripper.y"
     {
 #if 0
@@ -6350,7 +6435,8 @@ yyreduce:
     break;
 
   case 95:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1700 "ripper.y"
     {
 #if 0
@@ -6362,7 +6448,8 @@ yyreduce:
     break;
 
   case 96:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1708 "ripper.y"
     {
 #if 0
@@ -6374,7 +6461,8 @@ yyreduce:
     break;
 
   case 97:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1716 "ripper.y"
     {
 #if 0
@@ -6386,7 +6474,8 @@ yyreduce:
     break;
 
   case 98:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1724 "ripper.y"
     {
 #if 0
@@ -6404,7 +6493,8 @@ yyreduce:
     break;
 
   case 99:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1738 "ripper.y"
     {
 #if 0
@@ -6422,7 +6512,8 @@ yyreduce:
     break;
 
   case 100:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1752 "ripper.y"
     {
 #if 0
@@ -6437,7 +6528,8 @@ yyreduce:
     break;
 
   case 101:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1765 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -6450,7 +6542,8 @@ yyreduce:
     break;
 
   case 102:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1774 "ripper.y"
     {
 		        (yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -6463,7 +6556,8 @@ yyreduce:
     break;
 
   case 103:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1783 "ripper.y"
     {
 #if 0
@@ -6475,7 +6569,8 @@ yyreduce:
     break;
 
   case 104:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1791 "ripper.y"
     {
 #if 0
@@ -6487,7 +6582,8 @@ yyreduce:
     break;
 
   case 105:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1799 "ripper.y"
     {
 #if 0
@@ -6499,7 +6595,8 @@ yyreduce:
     break;
 
   case 106:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1807 "ripper.y"
     {
 #if 0
@@ -6511,7 +6608,8 @@ yyreduce:
     break;
 
   case 107:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1815 "ripper.y"
     {
 #if 0
@@ -6529,7 +6627,8 @@ yyreduce:
     break;
 
   case 108:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1829 "ripper.y"
     {
 #if 0
@@ -6547,7 +6646,8 @@ yyreduce:
     break;
 
   case 109:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1843 "ripper.y"
     {
 #if 0
@@ -6561,7 +6661,8 @@ yyreduce:
     break;
 
   case 110:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1855 "ripper.y"
     {
 #if 0
@@ -6574,7 +6675,8 @@ yyreduce:
     break;
 
   case 112:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1867 "ripper.y"
     {
 #if 0
@@ -6586,7 +6688,8 @@ yyreduce:
     break;
 
   case 113:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1875 "ripper.y"
     {
 #if 0
@@ -6598,7 +6701,8 @@ yyreduce:
     break;
 
   case 114:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1883 "ripper.y"
     {
 #if 0
@@ -6610,7 +6714,8 @@ yyreduce:
     break;
 
   case 118:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1896 "ripper.y"
     {
 			lex_state = EXPR_ENDFN;
@@ -6619,7 +6724,8 @@ yyreduce:
     break;
 
   case 119:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1901 "ripper.y"
     {
 			lex_state = EXPR_ENDFN;
@@ -6632,7 +6738,8 @@ yyreduce:
     break;
 
   case 122:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1916 "ripper.y"
     {
 #if 0
@@ -6644,7 +6751,8 @@ yyreduce:
     break;
 
   case 124:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1927 "ripper.y"
     {
 #if 0
@@ -6656,13 +6764,15 @@ yyreduce:
     break;
 
   case 125:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1934 "ripper.y"
     {lex_state = EXPR_FNAME;}
     break;
 
   case 126:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1935 "ripper.y"
     {
 #if 0
@@ -6674,187 +6784,218 @@ yyreduce:
     break;
 
   case 127:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1944 "ripper.y"
     { ifndef_ripper((yyval.val) = '|'); }
     break;
 
   case 128:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1945 "ripper.y"
     { ifndef_ripper((yyval.val) = '^'); }
     break;
 
   case 129:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1946 "ripper.y"
     { ifndef_ripper((yyval.val) = '&'); }
     break;
 
   case 130:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1947 "ripper.y"
     { ifndef_ripper((yyval.val) = tCMP); }
     break;
 
   case 131:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1948 "ripper.y"
     { ifndef_ripper((yyval.val) = tEQ); }
     break;
 
   case 132:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1949 "ripper.y"
     { ifndef_ripper((yyval.val) = tEQQ); }
     break;
 
   case 133:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1950 "ripper.y"
     { ifndef_ripper((yyval.val) = tMATCH); }
     break;
 
   case 134:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1951 "ripper.y"
     { ifndef_ripper((yyval.val) = tNMATCH); }
     break;
 
   case 135:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1952 "ripper.y"
     { ifndef_ripper((yyval.val) = '>'); }
     break;
 
   case 136:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1953 "ripper.y"
     { ifndef_ripper((yyval.val) = tGEQ); }
     break;
 
   case 137:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1954 "ripper.y"
     { ifndef_ripper((yyval.val) = '<'); }
     break;
 
   case 138:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1955 "ripper.y"
     { ifndef_ripper((yyval.val) = tLEQ); }
     break;
 
   case 139:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1956 "ripper.y"
     { ifndef_ripper((yyval.val) = tNEQ); }
     break;
 
   case 140:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1957 "ripper.y"
     { ifndef_ripper((yyval.val) = tLSHFT); }
     break;
 
   case 141:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1958 "ripper.y"
     { ifndef_ripper((yyval.val) = tRSHFT); }
     break;
 
   case 142:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1959 "ripper.y"
     { ifndef_ripper((yyval.val) = '+'); }
     break;
 
   case 143:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1960 "ripper.y"
     { ifndef_ripper((yyval.val) = '-'); }
     break;
 
   case 144:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1961 "ripper.y"
     { ifndef_ripper((yyval.val) = '*'); }
     break;
 
   case 145:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1962 "ripper.y"
     { ifndef_ripper((yyval.val) = '*'); }
     break;
 
   case 146:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1963 "ripper.y"
     { ifndef_ripper((yyval.val) = '/'); }
     break;
 
   case 147:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1964 "ripper.y"
     { ifndef_ripper((yyval.val) = '%'); }
     break;
 
   case 148:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1965 "ripper.y"
     { ifndef_ripper((yyval.val) = tPOW); }
     break;
 
   case 149:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1966 "ripper.y"
     { ifndef_ripper((yyval.val) = tDSTAR); }
     break;
 
   case 150:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1967 "ripper.y"
     { ifndef_ripper((yyval.val) = '!'); }
     break;
 
   case 151:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1968 "ripper.y"
     { ifndef_ripper((yyval.val) = '~'); }
     break;
 
   case 152:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1969 "ripper.y"
     { ifndef_ripper((yyval.val) = tUPLUS); }
     break;
 
   case 153:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1970 "ripper.y"
     { ifndef_ripper((yyval.val) = tUMINUS); }
     break;
 
   case 154:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1971 "ripper.y"
     { ifndef_ripper((yyval.val) = tAREF); }
     break;
 
   case 155:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1972 "ripper.y"
     { ifndef_ripper((yyval.val) = tASET); }
     break;
 
   case 156:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1973 "ripper.y"
     { ifndef_ripper((yyval.val) = '`'); }
     break;
 
   case 198:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 1991 "ripper.y"
     {
 #if 0
@@ -6867,7 +7008,8 @@ yyreduce:
     break;
 
   case 199:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2000 "ripper.y"
     {
 #if 0
@@ -6881,7 +7023,8 @@ yyreduce:
     break;
 
   case 200:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2010 "ripper.y"
     {
 			value_expr((yyvsp[(3) - (3)].val));
@@ -6890,7 +7033,8 @@ yyreduce:
     break;
 
   case 201:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2015 "ripper.y"
     {
 #if 0
@@ -6904,7 +7048,8 @@ yyreduce:
     break;
 
   case 202:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2025 "ripper.y"
     {
 #if 0
@@ -6934,7 +7079,8 @@ yyreduce:
     break;
 
   case 203:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2051 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -6943,7 +7089,8 @@ yyreduce:
     break;
 
   case 204:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2056 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -6952,7 +7099,8 @@ yyreduce:
     break;
 
   case 205:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2061 "ripper.y"
     {
 			value_expr((yyvsp[(5) - (5)].val));
@@ -6961,7 +7109,8 @@ yyreduce:
     break;
 
   case 206:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2066 "ripper.y"
     {
 #if 0
@@ -6975,7 +7124,8 @@ yyreduce:
     break;
 
   case 207:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2076 "ripper.y"
     {
 #if 0
@@ -6989,7 +7139,8 @@ yyreduce:
     break;
 
   case 208:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2086 "ripper.y"
     {
 #if 0
@@ -7005,15 +7156,16 @@ yyreduce:
     break;
 
   case 209:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2098 "ripper.y"
     {
 #if 0
 			value_expr((yyvsp[(1) - (3)].val));
 			value_expr((yyvsp[(3) - (3)].val));
 			(yyval.val) = NEW_DOT2((yyvsp[(1) - (3)].val), (yyvsp[(3) - (3)].val));
-			if (nd_type((yyvsp[(1) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].val)->nd_lit) &&
-			    nd_type((yyvsp[(3) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].val)->nd_lit)) {
+			if ((yyvsp[(1) - (3)].val) && nd_type((yyvsp[(1) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].val)->nd_lit) &&
+			    (yyvsp[(3) - (3)].val) && nd_type((yyvsp[(3) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].val)->nd_lit)) {
 			    deferred_nodes = list_append(deferred_nodes, (yyval.val));
 			}
 #endif
@@ -7023,15 +7175,16 @@ yyreduce:
     break;
 
   case 210:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2112 "ripper.y"
     {
 #if 0
 			value_expr((yyvsp[(1) - (3)].val));
 			value_expr((yyvsp[(3) - (3)].val));
 			(yyval.val) = NEW_DOT3((yyvsp[(1) - (3)].val), (yyvsp[(3) - (3)].val));
-			if (nd_type((yyvsp[(1) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].val)->nd_lit) &&
-			    nd_type((yyvsp[(3) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].val)->nd_lit)) {
+			if ((yyvsp[(1) - (3)].val) && nd_type((yyvsp[(1) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].val)->nd_lit) &&
+			    (yyvsp[(3) - (3)].val) && nd_type((yyvsp[(3) - (3)].val)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].val)->nd_lit)) {
 			    deferred_nodes = list_append(deferred_nodes, (yyval.val));
 			}
 #endif
@@ -7041,7 +7194,8 @@ yyreduce:
     break;
 
   case 211:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2126 "ripper.y"
     {
 #if 0
@@ -7053,7 +7207,8 @@ yyreduce:
     break;
 
   case 212:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2134 "ripper.y"
     {
 #if 0
@@ -7065,7 +7220,8 @@ yyreduce:
     break;
 
   case 213:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2142 "ripper.y"
     {
 #if 0
@@ -7077,7 +7233,8 @@ yyreduce:
     break;
 
   case 214:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2150 "ripper.y"
     {
 #if 0
@@ -7089,7 +7246,8 @@ yyreduce:
     break;
 
   case 215:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2158 "ripper.y"
     {
 #if 0
@@ -7101,7 +7259,8 @@ yyreduce:
     break;
 
   case 216:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2166 "ripper.y"
     {
 #if 0
@@ -7113,7 +7272,8 @@ yyreduce:
     break;
 
   case 217:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2174 "ripper.y"
     {
 #if 0
@@ -7126,7 +7286,8 @@ yyreduce:
     break;
 
   case 218:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2183 "ripper.y"
     {
 #if 0
@@ -7138,7 +7299,8 @@ yyreduce:
     break;
 
   case 219:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2191 "ripper.y"
     {
 #if 0
@@ -7150,7 +7312,8 @@ yyreduce:
     break;
 
   case 220:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2199 "ripper.y"
     {
 #if 0
@@ -7162,7 +7325,8 @@ yyreduce:
     break;
 
   case 221:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2207 "ripper.y"
     {
 #if 0
@@ -7174,7 +7338,8 @@ yyreduce:
     break;
 
   case 222:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2215 "ripper.y"
     {
 #if 0
@@ -7186,7 +7351,8 @@ yyreduce:
     break;
 
   case 223:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2223 "ripper.y"
     {
 #if 0
@@ -7198,7 +7364,8 @@ yyreduce:
     break;
 
   case 224:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2231 "ripper.y"
     {
 #if 0
@@ -7210,7 +7377,8 @@ yyreduce:
     break;
 
   case 225:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2239 "ripper.y"
     {
 #if 0
@@ -7222,7 +7390,8 @@ yyreduce:
     break;
 
   case 226:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2247 "ripper.y"
     {
 #if 0
@@ -7234,7 +7403,8 @@ yyreduce:
     break;
 
   case 227:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2255 "ripper.y"
     {
 #if 0
@@ -7246,7 +7416,8 @@ yyreduce:
     break;
 
   case 228:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2263 "ripper.y"
     {
 #if 0
@@ -7258,7 +7429,8 @@ yyreduce:
     break;
 
   case 229:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2271 "ripper.y"
     {
 #if 0
@@ -7270,7 +7442,8 @@ yyreduce:
     break;
 
   case 230:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2279 "ripper.y"
     {
 #if 0
@@ -7282,7 +7455,8 @@ yyreduce:
     break;
 
   case 231:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2287 "ripper.y"
     {
 #if 0
@@ -7297,7 +7471,8 @@ yyreduce:
     break;
 
   case 232:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2298 "ripper.y"
     {
 #if 0
@@ -7309,7 +7484,8 @@ yyreduce:
     break;
 
   case 233:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2306 "ripper.y"
     {
 #if 0
@@ -7321,7 +7497,8 @@ yyreduce:
     break;
 
   case 234:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2314 "ripper.y"
     {
 #if 0
@@ -7333,7 +7510,8 @@ yyreduce:
     break;
 
   case 235:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2322 "ripper.y"
     {
 #if 0
@@ -7345,7 +7523,8 @@ yyreduce:
     break;
 
   case 236:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2330 "ripper.y"
     {
 #if 0
@@ -7357,7 +7536,8 @@ yyreduce:
     break;
 
   case 237:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2338 "ripper.y"
     {
 #if 0
@@ -7369,7 +7549,8 @@ yyreduce:
     break;
 
   case 238:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2346 "ripper.y"
     {
 #if 0
@@ -7381,13 +7562,15 @@ yyreduce:
     break;
 
   case 239:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2353 "ripper.y"
     {in_defined = 1;}
     break;
 
   case 240:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2354 "ripper.y"
     {
 			in_defined = 0;
@@ -7400,7 +7583,8 @@ yyreduce:
     break;
 
   case 241:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2363 "ripper.y"
     {
 			(yyval.val) = cond_stack;
@@ -7410,7 +7594,8 @@ yyreduce:
     break;
 
   case 242:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2369 "ripper.y"
     {
 			cond_stack = (yyvsp[(3) - (6)].val);
@@ -7418,7 +7603,8 @@ yyreduce:
     break;
 
   case 243:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2373 "ripper.y"
     {
 #if 0
@@ -7432,7 +7618,8 @@ yyreduce:
     break;
 
   case 244:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2383 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(1) - (1)].val);
@@ -7440,7 +7627,8 @@ yyreduce:
     break;
 
   case 245:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2389 "ripper.y"
     {
 #if 0
@@ -7454,7 +7642,8 @@ yyreduce:
     break;
 
   case 247:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2402 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(1) - (2)].val);
@@ -7462,7 +7651,8 @@ yyreduce:
     break;
 
   case 248:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2406 "ripper.y"
     {
 #if 0
@@ -7474,7 +7664,8 @@ yyreduce:
     break;
 
   case 249:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2414 "ripper.y"
     {
 #if 0
@@ -7486,7 +7677,8 @@ yyreduce:
     break;
 
   case 250:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2424 "ripper.y"
     {
 #if 0
@@ -7498,7 +7690,8 @@ yyreduce:
     break;
 
   case 255:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2440 "ripper.y"
     {
 		      (yyval.val) = (yyvsp[(1) - (2)].val);
@@ -7506,7 +7699,8 @@ yyreduce:
     break;
 
   case 256:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2444 "ripper.y"
     {
 #if 0
@@ -7518,7 +7712,8 @@ yyreduce:
     break;
 
   case 257:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2452 "ripper.y"
     {
 #if 0
@@ -7530,7 +7725,8 @@ yyreduce:
     break;
 
   case 258:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2462 "ripper.y"
     {
 #if 0
@@ -7543,7 +7739,8 @@ yyreduce:
     break;
 
   case 259:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2471 "ripper.y"
     {
 #if 0
@@ -7555,7 +7752,8 @@ yyreduce:
     break;
 
   case 260:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2479 "ripper.y"
     {
 #if 0
@@ -7569,7 +7767,8 @@ yyreduce:
     break;
 
   case 261:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2489 "ripper.y"
     {
 #if 0
@@ -7582,7 +7781,8 @@ yyreduce:
     break;
 
   case 262:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2500 "ripper.y"
     {
 			(yyval.val) = arg_add_block(arg_new(), (yyvsp[(1) - (1)].val));
@@ -7590,7 +7790,8 @@ yyreduce:
     break;
 
   case 263:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2506 "ripper.y"
     {
 			(yyval.val) = cmdarg_stack;
@@ -7599,7 +7800,8 @@ yyreduce:
     break;
 
   case 264:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2511 "ripper.y"
     {
 			/* CMDARG_POP() */
@@ -7609,7 +7811,8 @@ yyreduce:
     break;
 
   case 265:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2519 "ripper.y"
     {
 #if 0
@@ -7621,7 +7824,8 @@ yyreduce:
     break;
 
   case 266:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2529 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -7629,7 +7833,8 @@ yyreduce:
     break;
 
   case 267:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2533 "ripper.y"
     {
 			(yyval.val) = 0;
@@ -7637,7 +7842,8 @@ yyreduce:
     break;
 
   case 268:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2539 "ripper.y"
     {
 #if 0
@@ -7649,7 +7855,8 @@ yyreduce:
     break;
 
   case 269:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2547 "ripper.y"
     {
 #if 0
@@ -7661,7 +7868,8 @@ yyreduce:
     break;
 
   case 270:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2555 "ripper.y"
     {
 #if 0
@@ -7679,7 +7887,8 @@ yyreduce:
     break;
 
   case 271:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2569 "ripper.y"
     {
 #if 0
@@ -7697,7 +7906,8 @@ yyreduce:
     break;
 
   case 274:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2589 "ripper.y"
     {
 #if 0
@@ -7715,7 +7925,8 @@ yyreduce:
     break;
 
   case 275:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2603 "ripper.y"
     {
 #if 0
@@ -7734,7 +7945,8 @@ yyreduce:
     break;
 
   case 276:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2618 "ripper.y"
     {
 #if 0
@@ -7746,7 +7958,8 @@ yyreduce:
     break;
 
   case 287:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2638 "ripper.y"
     {
 #if 0
@@ -7758,7 +7971,8 @@ yyreduce:
     break;
 
   case 288:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2646 "ripper.y"
     {
 			(yyvsp[(1) - (1)].val) = cmdarg_stack;
@@ -7771,7 +7985,8 @@ yyreduce:
     break;
 
   case 289:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2656 "ripper.y"
     {
 			cmdarg_stack = (yyvsp[(1) - (4)].val);
@@ -7793,13 +8008,15 @@ yyreduce:
     break;
 
   case 290:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2673 "ripper.y"
     {lex_state = EXPR_ENDARG;}
     break;
 
   case 291:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2674 "ripper.y"
     {
 #if 0
@@ -7811,7 +8028,8 @@ yyreduce:
     break;
 
   case 292:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2682 "ripper.y"
     {
 			(yyvsp[(1) - (1)].val) = cmdarg_stack;
@@ -7820,13 +8038,15 @@ yyreduce:
     break;
 
   case 293:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2686 "ripper.y"
     {lex_state = EXPR_ENDARG;}
     break;
 
   case 294:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2687 "ripper.y"
     {
 			cmdarg_stack = (yyvsp[(1) - (5)].val);
@@ -7839,7 +8059,8 @@ yyreduce:
     break;
 
   case 295:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2696 "ripper.y"
     {
 #if 0
@@ -7851,7 +8072,8 @@ yyreduce:
     break;
 
   case 296:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2704 "ripper.y"
     {
 #if 0
@@ -7863,7 +8085,8 @@ yyreduce:
     break;
 
   case 297:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2712 "ripper.y"
     {
 #if 0
@@ -7875,7 +8098,8 @@ yyreduce:
     break;
 
   case 298:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2720 "ripper.y"
     {
 #if 0
@@ -7892,7 +8116,8 @@ yyreduce:
     break;
 
   case 299:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2733 "ripper.y"
     {
 #if 0
@@ -7904,7 +8129,8 @@ yyreduce:
     break;
 
   case 300:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2741 "ripper.y"
     {
 #if 0
@@ -7916,7 +8142,8 @@ yyreduce:
     break;
 
   case 301:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2749 "ripper.y"
     {
 #if 0
@@ -7928,7 +8155,8 @@ yyreduce:
     break;
 
   case 302:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2757 "ripper.y"
     {
 #if 0
@@ -7940,7 +8168,8 @@ yyreduce:
     break;
 
   case 303:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2765 "ripper.y"
     {
 #if 0
@@ -7952,13 +8181,15 @@ yyreduce:
     break;
 
   case 304:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2772 "ripper.y"
     {in_defined = 1;}
     break;
 
   case 305:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2773 "ripper.y"
     {
 			in_defined = 0;
@@ -7971,7 +8202,8 @@ yyreduce:
     break;
 
   case 306:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2782 "ripper.y"
     {
 #if 0
@@ -7983,7 +8215,8 @@ yyreduce:
     break;
 
   case 307:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2790 "ripper.y"
     {
 #if 0
@@ -7995,7 +8228,8 @@ yyreduce:
     break;
 
   case 308:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2798 "ripper.y"
     {
 #if 0
@@ -8009,7 +8243,8 @@ yyreduce:
     break;
 
   case 310:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2809 "ripper.y"
     {
 #if 0
@@ -8023,7 +8258,8 @@ yyreduce:
     break;
 
   case 311:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2819 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -8031,7 +8267,8 @@ yyreduce:
     break;
 
   case 312:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2826 "ripper.y"
     {
 #if 0
@@ -8044,7 +8281,8 @@ yyreduce:
     break;
 
   case 313:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2838 "ripper.y"
     {
 #if 0
@@ -8057,19 +8295,22 @@ yyreduce:
     break;
 
   case 314:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2846 "ripper.y"
     {COND_PUSH(1);}
     break;
 
   case 315:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2846 "ripper.y"
     {COND_POP();}
     break;
 
   case 316:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2849 "ripper.y"
     {
 #if 0
@@ -8082,19 +8323,22 @@ yyreduce:
     break;
 
   case 317:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2857 "ripper.y"
     {COND_PUSH(1);}
     break;
 
   case 318:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2857 "ripper.y"
     {COND_POP();}
     break;
 
   case 319:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2860 "ripper.y"
     {
 #if 0
@@ -8107,7 +8351,8 @@ yyreduce:
     break;
 
   case 320:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2871 "ripper.y"
     {
 #if 0
@@ -8120,7 +8365,8 @@ yyreduce:
     break;
 
   case 321:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2880 "ripper.y"
     {
 #if 0
@@ -8132,19 +8378,22 @@ yyreduce:
     break;
 
   case 322:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2888 "ripper.y"
     {COND_PUSH(1);}
     break;
 
   case 323:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2890 "ripper.y"
     {COND_POP();}
     break;
 
   case 324:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2893 "ripper.y"
     {
 #if 0
@@ -8209,7 +8458,8 @@ yyreduce:
     break;
 
   case 325:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2954 "ripper.y"
     {
 			if (in_def || in_single)
@@ -8223,7 +8473,8 @@ yyreduce:
     break;
 
   case 326:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2965 "ripper.y"
     {
 #if 0
@@ -8237,7 +8488,8 @@ yyreduce:
     break;
 
   case 327:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2975 "ripper.y"
     {
 			(yyval.num) = in_def;
@@ -8246,7 +8498,8 @@ yyreduce:
     break;
 
   case 328:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2980 "ripper.y"
     {
 			(yyval.num) = in_single;
@@ -8256,7 +8509,8 @@ yyreduce:
     break;
 
   case 329:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2987 "ripper.y"
     {
 #if 0
@@ -8272,7 +8526,8 @@ yyreduce:
     break;
 
   case 330:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 2999 "ripper.y"
     {
 			if (in_def || in_single)
@@ -8286,7 +8541,8 @@ yyreduce:
     break;
 
   case 331:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3010 "ripper.y"
     {
 #if 0
@@ -8300,7 +8556,8 @@ yyreduce:
     break;
 
   case 332:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3020 "ripper.y"
     {
 			in_def++;
@@ -8311,7 +8568,8 @@ yyreduce:
     break;
 
   case 333:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3029 "ripper.y"
     {
 #if 0
@@ -8329,13 +8587,15 @@ yyreduce:
     break;
 
   case 334:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3042 "ripper.y"
     {lex_state = EXPR_FNAME;}
     break;
 
   case 335:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3043 "ripper.y"
     {
 			in_single++;
@@ -8347,7 +8607,8 @@ yyreduce:
     break;
 
   case 336:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3053 "ripper.y"
     {
 #if 0
@@ -8365,7 +8626,8 @@ yyreduce:
     break;
 
   case 337:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3067 "ripper.y"
     {
 #if 0
@@ -8377,7 +8639,8 @@ yyreduce:
     break;
 
   case 338:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3075 "ripper.y"
     {
 #if 0
@@ -8389,7 +8652,8 @@ yyreduce:
     break;
 
   case 339:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3083 "ripper.y"
     {
 #if 0
@@ -8401,7 +8665,8 @@ yyreduce:
     break;
 
   case 340:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3091 "ripper.y"
     {
 #if 0
@@ -8413,7 +8678,8 @@ yyreduce:
     break;
 
   case 341:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3101 "ripper.y"
     {
 #if 0
@@ -8427,7 +8693,8 @@ yyreduce:
     break;
 
   case 342:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3113 "ripper.y"
     {
 			token_info_push("begin");
@@ -8435,7 +8702,8 @@ yyreduce:
     break;
 
   case 343:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3119 "ripper.y"
     {
 			token_info_push("if");
@@ -8443,7 +8711,8 @@ yyreduce:
     break;
 
   case 344:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3125 "ripper.y"
     {
 			token_info_push("unless");
@@ -8451,7 +8720,8 @@ yyreduce:
     break;
 
   case 345:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3131 "ripper.y"
     {
 			token_info_push("while");
@@ -8459,7 +8729,8 @@ yyreduce:
     break;
 
   case 346:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3137 "ripper.y"
     {
 			token_info_push("until");
@@ -8467,7 +8738,8 @@ yyreduce:
     break;
 
   case 347:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3143 "ripper.y"
     {
 			token_info_push("case");
@@ -8475,7 +8747,8 @@ yyreduce:
     break;
 
   case 348:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3149 "ripper.y"
     {
 			token_info_push("for");
@@ -8483,7 +8756,8 @@ yyreduce:
     break;
 
   case 349:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3155 "ripper.y"
     {
 			token_info_push("class");
@@ -8491,7 +8765,8 @@ yyreduce:
     break;
 
   case 350:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3161 "ripper.y"
     {
 			token_info_push("module");
@@ -8499,7 +8774,8 @@ yyreduce:
     break;
 
   case 351:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3167 "ripper.y"
     {
 			token_info_push("def");
@@ -8511,7 +8787,8 @@ yyreduce:
     break;
 
   case 352:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3177 "ripper.y"
     {
 			token_info_pop("end");
@@ -8519,25 +8796,29 @@ yyreduce:
     break;
 
   case 353:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3185 "ripper.y"
     { (yyval.val) = Qnil; }
     break;
 
   case 355:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3191 "ripper.y"
     { (yyval.val) = (yyvsp[(2) - (2)].val); }
     break;
 
   case 356:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3198 "ripper.y"
     { (yyval.val) = Qnil; }
     break;
 
   case 359:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3207 "ripper.y"
     {
 #if 0
@@ -8550,7 +8831,8 @@ yyreduce:
     break;
 
   case 361:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3219 "ripper.y"
     {
 #if 0
@@ -8562,7 +8844,8 @@ yyreduce:
     break;
 
   case 364:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3233 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -8574,7 +8857,8 @@ yyreduce:
     break;
 
   case 365:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3241 "ripper.y"
     {
 #if 0
@@ -8586,7 +8870,8 @@ yyreduce:
     break;
 
   case 366:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3251 "ripper.y"
     {
 #if 0
@@ -8598,7 +8883,8 @@ yyreduce:
     break;
 
   case 367:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3259 "ripper.y"
     {
 #if 0
@@ -8610,7 +8896,8 @@ yyreduce:
     break;
 
   case 368:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3269 "ripper.y"
     {
 #if 0
@@ -8622,7 +8909,8 @@ yyreduce:
     break;
 
   case 369:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3277 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(4) - (4)].val), 0);
@@ -8635,7 +8923,8 @@ yyreduce:
     break;
 
   case 370:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3286 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(4) - (6)].val), 0);
@@ -8648,7 +8937,8 @@ yyreduce:
     break;
 
   case 371:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3295 "ripper.y"
     {
 #if 0
@@ -8660,7 +8950,8 @@ yyreduce:
     break;
 
   case 372:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3303 "ripper.y"
     {
 #if 0
@@ -8672,7 +8963,8 @@ yyreduce:
     break;
 
   case 373:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3311 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(2) - (2)].val), 0);
@@ -8685,7 +8977,8 @@ yyreduce:
     break;
 
   case 374:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3320 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(2) - (4)].val), 0);
@@ -8701,7 +8994,8 @@ yyreduce:
     break;
 
   case 375:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3332 "ripper.y"
     {
 #if 0
@@ -8713,7 +9007,8 @@ yyreduce:
     break;
 
   case 376:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3340 "ripper.y"
     {
 #if 0
@@ -8725,7 +9020,8 @@ yyreduce:
     break;
 
   case 377:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3351 "ripper.y"
     {
 			(yyval.val) = new_args_tail((yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -8733,7 +9029,8 @@ yyreduce:
     break;
 
   case 378:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3355 "ripper.y"
     {
 			(yyval.val) = new_args_tail((yyvsp[(1) - (2)].val), Qnone, (yyvsp[(2) - (2)].val));
@@ -8741,7 +9038,8 @@ yyreduce:
     break;
 
   case 379:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3359 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, (yyvsp[(1) - (2)].val), (yyvsp[(2) - (2)].val));
@@ -8749,7 +9047,8 @@ yyreduce:
     break;
 
   case 380:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3363 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, Qnone, (yyvsp[(1) - (1)].val));
@@ -8757,7 +9056,8 @@ yyreduce:
     break;
 
   case 381:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3369 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -8765,7 +9065,8 @@ yyreduce:
     break;
 
   case 382:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3373 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, Qnone, Qnone);
@@ -8773,7 +9074,8 @@ yyreduce:
     break;
 
   case 383:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3379 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), Qnone, (yyvsp[(6) - (6)].val));
@@ -8781,7 +9083,8 @@ yyreduce:
     break;
 
   case 384:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3383 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (8)].val), (yyvsp[(3) - (8)].val), (yyvsp[(5) - (8)].val), (yyvsp[(7) - (8)].val), (yyvsp[(8) - (8)].val));
@@ -8789,7 +9092,8 @@ yyreduce:
     break;
 
   case 385:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3387 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), Qnone, Qnone, (yyvsp[(4) - (4)].val));
@@ -8797,7 +9101,8 @@ yyreduce:
     break;
 
   case 386:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3391 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), Qnone, (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -8805,7 +9110,8 @@ yyreduce:
     break;
 
   case 387:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3395 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (4)].val), Qnone, (yyvsp[(3) - (4)].val), Qnone, (yyvsp[(4) - (4)].val));
@@ -8813,7 +9119,8 @@ yyreduce:
     break;
 
   case 388:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3399 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (2)].val), Qnone, 1, Qnone, new_args_tail(Qnone, Qnone, Qnone));
@@ -8825,7 +9132,8 @@ yyreduce:
     break;
 
   case 389:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3407 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), Qnone, (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -8833,7 +9141,8 @@ yyreduce:
     break;
 
   case 390:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3411 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (2)].val), Qnone, Qnone, Qnone, (yyvsp[(2) - (2)].val));
@@ -8841,7 +9150,8 @@ yyreduce:
     break;
 
   case 391:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3415 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), Qnone, (yyvsp[(4) - (4)].val));
@@ -8849,7 +9159,8 @@ yyreduce:
     break;
 
   case 392:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3419 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -8857,7 +9168,8 @@ yyreduce:
     break;
 
   case 393:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3423 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (2)].val), Qnone, Qnone, (yyvsp[(2) - (2)].val));
@@ -8865,7 +9177,8 @@ yyreduce:
     break;
 
   case 394:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3427 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (4)].val), Qnone, (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -8873,7 +9186,8 @@ yyreduce:
     break;
 
   case 395:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3431 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, (yyvsp[(1) - (2)].val), Qnone, (yyvsp[(2) - (2)].val));
@@ -8881,7 +9195,8 @@ yyreduce:
     break;
 
   case 396:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3435 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, (yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -8889,7 +9204,8 @@ yyreduce:
     break;
 
   case 397:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3439 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, Qnone, Qnone, (yyvsp[(1) - (1)].val));
@@ -8897,7 +9213,8 @@ yyreduce:
     break;
 
   case 399:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3446 "ripper.y"
     {
 			command_start = TRUE;
@@ -8905,7 +9222,8 @@ yyreduce:
     break;
 
   case 400:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3452 "ripper.y"
     {
 			current_arg = 0;
@@ -8919,7 +9237,8 @@ yyreduce:
     break;
 
   case 401:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3462 "ripper.y"
     {
 #if 0
@@ -8932,7 +9251,8 @@ yyreduce:
     break;
 
   case 402:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3471 "ripper.y"
     {
 			current_arg = 0;
@@ -8945,7 +9265,8 @@ yyreduce:
     break;
 
   case 403:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3483 "ripper.y"
     {
 		      (yyval.val) = 0;
@@ -8953,7 +9274,8 @@ yyreduce:
     break;
 
   case 404:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3487 "ripper.y"
     {
 #if 0
@@ -8965,7 +9287,8 @@ yyreduce:
     break;
 
   case 405:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3499 "ripper.y"
     {
 			(yyval.val) = rb_ary_new3(1, (yyvsp[(1) - (1)].val));
@@ -8973,7 +9296,8 @@ yyreduce:
     break;
 
   case 406:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3506 "ripper.y"
     {
 			rb_ary_push((yyvsp[(1) - (3)].val), (yyvsp[(3) - (3)].val));
@@ -8981,7 +9305,8 @@ yyreduce:
     break;
 
   case 407:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3513 "ripper.y"
     {
 			new_bv(get_id((yyvsp[(1) - (1)].val)));
@@ -8993,7 +9318,8 @@ yyreduce:
     break;
 
   case 408:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3521 "ripper.y"
     {
 			(yyval.val) = 0;
@@ -9001,7 +9327,8 @@ yyreduce:
     break;
 
   case 409:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3526 "ripper.y"
     {
 			(yyval.vars) = dyna_push();
@@ -9009,7 +9336,8 @@ yyreduce:
     break;
 
   case 410:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3529 "ripper.y"
     {
 			(yyval.num) = lpar_beg;
@@ -9018,7 +9346,8 @@ yyreduce:
     break;
 
   case 411:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3534 "ripper.y"
     {
 			(yyval.num) = ruby_sourceline;
@@ -9026,7 +9355,8 @@ yyreduce:
     break;
 
   case 412:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3538 "ripper.y"
     {
 			lpar_beg = (yyvsp[(2) - (5)].num);
@@ -9041,7 +9371,8 @@ yyreduce:
     break;
 
   case 413:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3551 "ripper.y"
     {
 #if 0
@@ -9053,7 +9384,8 @@ yyreduce:
     break;
 
   case 414:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3559 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(1) - (1)].val);
@@ -9061,7 +9393,8 @@ yyreduce:
     break;
 
   case 415:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3565 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (3)].val);
@@ -9069,7 +9402,8 @@ yyreduce:
     break;
 
   case 416:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3569 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (3)].val);
@@ -9077,7 +9411,8 @@ yyreduce:
     break;
 
   case 417:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3575 "ripper.y"
     {
 			(yyvsp[(1) - (1)].vars) = dyna_push();
@@ -9088,7 +9423,8 @@ yyreduce:
     break;
 
   case 418:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3584 "ripper.y"
     {
 #if 0
@@ -9102,7 +9438,8 @@ yyreduce:
     break;
 
   case 419:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3596 "ripper.y"
     {
 #if 0
@@ -9122,7 +9459,8 @@ yyreduce:
     break;
 
   case 420:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3612 "ripper.y"
     {
 #if 0
@@ -9135,7 +9473,8 @@ yyreduce:
     break;
 
   case 421:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3621 "ripper.y"
     {
 #if 0
@@ -9151,7 +9490,8 @@ yyreduce:
     break;
 
   case 422:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3633 "ripper.y"
     {
 #if 0
@@ -9167,7 +9507,8 @@ yyreduce:
     break;
 
   case 423:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3647 "ripper.y"
     {
 #if 0
@@ -9180,7 +9521,8 @@ yyreduce:
     break;
 
   case 424:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3656 "ripper.y"
     {
 #if 0
@@ -9190,7 +9532,8 @@ yyreduce:
     break;
 
   case 425:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3662 "ripper.y"
     {
 #if 0
@@ -9204,7 +9547,8 @@ yyreduce:
     break;
 
   case 426:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3672 "ripper.y"
     {
 #if 0
@@ -9214,7 +9558,8 @@ yyreduce:
     break;
 
   case 427:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3678 "ripper.y"
     {
 #if 0
@@ -9228,7 +9573,8 @@ yyreduce:
     break;
 
   case 428:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3688 "ripper.y"
     {
 #if 0
@@ -9240,7 +9586,8 @@ yyreduce:
     break;
 
   case 429:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3696 "ripper.y"
     {
 #if 0
@@ -9250,7 +9597,8 @@ yyreduce:
     break;
 
   case 430:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3702 "ripper.y"
     {
 #if 0
@@ -9265,7 +9613,8 @@ yyreduce:
     break;
 
   case 431:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3713 "ripper.y"
     {
 #if 0
@@ -9275,7 +9624,8 @@ yyreduce:
     break;
 
   case 432:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3719 "ripper.y"
     {
 #if 0
@@ -9290,7 +9640,8 @@ yyreduce:
     break;
 
   case 433:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3730 "ripper.y"
     {
 #if 0
@@ -9302,7 +9653,8 @@ yyreduce:
     break;
 
   case 434:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3738 "ripper.y"
     {
 #if 0
@@ -9314,7 +9666,8 @@ yyreduce:
     break;
 
   case 435:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3746 "ripper.y"
     {
 #if 0
@@ -9330,7 +9683,8 @@ yyreduce:
     break;
 
   case 436:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3760 "ripper.y"
     {
 			(yyvsp[(1) - (1)].vars) = dyna_push();
@@ -9342,7 +9696,8 @@ yyreduce:
     break;
 
   case 437:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3769 "ripper.y"
     {
 #if 0
@@ -9356,7 +9711,8 @@ yyreduce:
     break;
 
   case 438:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3779 "ripper.y"
     {
 			(yyvsp[(1) - (1)].vars) = dyna_push();
@@ -9368,7 +9724,8 @@ yyreduce:
     break;
 
   case 439:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3788 "ripper.y"
     {
 #if 0
@@ -9382,7 +9739,8 @@ yyreduce:
     break;
 
   case 440:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3802 "ripper.y"
     {
 #if 0
@@ -9394,7 +9752,8 @@ yyreduce:
     break;
 
   case 443:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3818 "ripper.y"
     {
 #if 0
@@ -9415,7 +9774,8 @@ yyreduce:
     break;
 
   case 445:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3838 "ripper.y"
     {
 #if 0
@@ -9427,7 +9787,8 @@ yyreduce:
     break;
 
   case 446:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3846 "ripper.y"
     {
 #if 0
@@ -9439,7 +9800,8 @@ yyreduce:
     break;
 
   case 448:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3857 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -9447,7 +9809,8 @@ yyreduce:
     break;
 
   case 450:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3864 "ripper.y"
     {
 #if 0
@@ -9459,7 +9822,8 @@ yyreduce:
     break;
 
   case 453:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3876 "ripper.y"
     {
 #if 0
@@ -9471,7 +9835,8 @@ yyreduce:
     break;
 
   case 455:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3887 "ripper.y"
     {
 #if 0
@@ -9490,7 +9855,8 @@ yyreduce:
     break;
 
   case 458:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3906 "ripper.y"
     {
 #if 0
@@ -9502,7 +9868,8 @@ yyreduce:
     break;
 
   case 459:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3916 "ripper.y"
     {
 #if 0
@@ -9514,7 +9881,8 @@ yyreduce:
     break;
 
   case 460:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3926 "ripper.y"
     {
 #if 0
@@ -9543,7 +9911,8 @@ yyreduce:
     break;
 
   case 461:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 3953 "ripper.y"
     {
 #if 0
@@ -9623,7 +9992,8 @@ yyreduce:
     break;
 
   case 462:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4031 "ripper.y"
     {
 #if 0
@@ -9636,7 +10006,8 @@ yyreduce:
     break;
 
   case 463:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4040 "ripper.y"
     {
 #if 0
@@ -9648,7 +10019,8 @@ yyreduce:
     break;
 
   case 464:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4050 "ripper.y"
     {
 #if 0
@@ -9660,7 +10032,8 @@ yyreduce:
     break;
 
   case 465:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4058 "ripper.y"
     {
 #if 0
@@ -9672,7 +10045,8 @@ yyreduce:
     break;
 
   case 466:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4070 "ripper.y"
     {
 			(yyval.val) = dispatch0(word_new);
@@ -9681,7 +10055,8 @@ yyreduce:
     break;
 
   case 467:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4076 "ripper.y"
     {
 #if 0
@@ -9693,7 +10068,8 @@ yyreduce:
     break;
 
   case 468:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4086 "ripper.y"
     {
 #if 0
@@ -9706,7 +10082,8 @@ yyreduce:
     break;
 
   case 469:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4095 "ripper.y"
     {
 #if 0
@@ -9718,7 +10095,8 @@ yyreduce:
     break;
 
   case 470:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4105 "ripper.y"
     {
 #if 0
@@ -9730,7 +10108,8 @@ yyreduce:
     break;
 
   case 471:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4113 "ripper.y"
     {
 #if 0
@@ -9750,7 +10129,8 @@ yyreduce:
     break;
 
   case 472:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4131 "ripper.y"
     {
 #if 0
@@ -9763,7 +10143,8 @@ yyreduce:
     break;
 
   case 473:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4140 "ripper.y"
     {
 #if 0
@@ -9775,7 +10156,8 @@ yyreduce:
     break;
 
   case 474:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4150 "ripper.y"
     {
 #if 0
@@ -9788,7 +10170,8 @@ yyreduce:
     break;
 
   case 475:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4159 "ripper.y"
     {
 #if 0
@@ -9800,7 +10183,8 @@ yyreduce:
     break;
 
   case 476:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4169 "ripper.y"
     {
 #if 0
@@ -9812,7 +10196,8 @@ yyreduce:
     break;
 
   case 477:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4177 "ripper.y"
     {
 #if 0
@@ -9824,7 +10209,8 @@ yyreduce:
     break;
 
   case 478:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4187 "ripper.y"
     {
 #if 0
@@ -9836,7 +10222,8 @@ yyreduce:
     break;
 
   case 479:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4195 "ripper.y"
     {
 #if 0
@@ -9852,7 +10239,8 @@ yyreduce:
     break;
 
   case 480:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4209 "ripper.y"
     {
 #if 0
@@ -9864,7 +10252,8 @@ yyreduce:
     break;
 
   case 481:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4217 "ripper.y"
     {
 #if 0
@@ -9876,7 +10265,8 @@ yyreduce:
     break;
 
   case 482:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4227 "ripper.y"
     {
 #if 0
@@ -9888,7 +10278,8 @@ yyreduce:
     break;
 
   case 483:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4235 "ripper.y"
     {
 #if 0
@@ -9900,7 +10291,8 @@ yyreduce:
     break;
 
   case 484:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4245 "ripper.y"
     {
 #if 0
@@ -9912,7 +10304,8 @@ yyreduce:
     break;
 
   case 485:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4253 "ripper.y"
     {
 #if 0
@@ -9955,7 +10348,8 @@ yyreduce:
     break;
 
   case 487:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4295 "ripper.y"
     {
 			(yyval.node) = lex_strterm;
@@ -9965,7 +10359,8 @@ yyreduce:
     break;
 
   case 488:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4301 "ripper.y"
     {
 			lex_strterm = (yyvsp[(2) - (3)].node);
@@ -9978,7 +10373,8 @@ yyreduce:
     break;
 
   case 489:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4310 "ripper.y"
     {
 			(yyvsp[(1) - (1)].val) = cond_stack;
@@ -9989,7 +10385,8 @@ yyreduce:
     break;
 
   case 490:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4316 "ripper.y"
     {
 			(yyval.node) = lex_strterm;
@@ -9998,7 +10395,8 @@ yyreduce:
     break;
 
   case 491:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4320 "ripper.y"
     {
 			(yyval.num) = lex_state;
@@ -10007,7 +10405,8 @@ yyreduce:
     break;
 
   case 492:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4324 "ripper.y"
     {
 			(yyval.num) = brace_nest;
@@ -10016,7 +10415,8 @@ yyreduce:
     break;
 
   case 493:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4329 "ripper.y"
     {
 			cond_stack = (yyvsp[(1) - (7)].val);
@@ -10034,7 +10434,8 @@ yyreduce:
     break;
 
   case 494:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4345 "ripper.y"
     {
 #if 0
@@ -10046,7 +10447,8 @@ yyreduce:
     break;
 
   case 495:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4353 "ripper.y"
     {
 #if 0
@@ -10058,7 +10460,8 @@ yyreduce:
     break;
 
   case 496:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4361 "ripper.y"
     {
 #if 0
@@ -10070,7 +10473,8 @@ yyreduce:
     break;
 
   case 498:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4372 "ripper.y"
     {
 			lex_state = EXPR_END;
@@ -10083,7 +10487,8 @@ yyreduce:
     break;
 
   case 503:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4389 "ripper.y"
     {
 			lex_state = EXPR_END;
@@ -10096,7 +10501,8 @@ yyreduce:
     break;
 
   case 505:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4401 "ripper.y"
     {
 #if 0
@@ -10109,49 +10515,57 @@ yyreduce:
     break;
 
   case 515:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4424 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword_nil);}
     break;
 
   case 516:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4425 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword_self);}
     break;
 
   case 517:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4426 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword_true);}
     break;
 
   case 518:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4427 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword_false);}
     break;
 
   case 519:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4428 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword__FILE__);}
     break;
 
   case 520:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4429 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword__LINE__);}
     break;
 
   case 521:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4430 "ripper.y"
     {ifndef_ripper((yyval.val) = keyword__ENCODING__);}
     break;
 
   case 522:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4434 "ripper.y"
     {
 #if 0
@@ -10168,7 +10582,8 @@ yyreduce:
     break;
 
   case 523:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4447 "ripper.y"
     {
 #if 0
@@ -10180,7 +10595,8 @@ yyreduce:
     break;
 
   case 524:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4457 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -10192,7 +10608,8 @@ yyreduce:
     break;
 
   case 525:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4465 "ripper.y"
     {
 		        (yyval.val) = assignable((yyvsp[(1) - (1)].val), 0);
@@ -10204,7 +10621,8 @@ yyreduce:
     break;
 
   case 528:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4479 "ripper.y"
     {
 #if 0
@@ -10216,7 +10634,8 @@ yyreduce:
     break;
 
   case 529:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4487 "ripper.y"
     {
 			lex_state = EXPR_BEG;
@@ -10225,7 +10644,8 @@ yyreduce:
     break;
 
   case 530:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4492 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(3) - (4)].val);
@@ -10233,7 +10653,8 @@ yyreduce:
     break;
 
   case 531:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4496 "ripper.y"
     {
 #if 0
@@ -10247,7 +10668,8 @@ yyreduce:
     break;
 
   case 532:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4508 "ripper.y"
     {
 #if 0
@@ -10261,7 +10683,8 @@ yyreduce:
     break;
 
   case 533:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4517 "ripper.y"
     {
 			(yyval.num) = parser->parser_in_kwarg;
@@ -10270,7 +10693,8 @@ yyreduce:
     break;
 
   case 534:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4522 "ripper.y"
     {
 			parser->parser_in_kwarg = (yyvsp[(1) - (3)].num);
@@ -10281,7 +10705,8 @@ yyreduce:
     break;
 
   case 535:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4531 "ripper.y"
     {
 			(yyval.val) = new_args_tail((yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -10289,7 +10714,8 @@ yyreduce:
     break;
 
   case 536:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4535 "ripper.y"
     {
 			(yyval.val) = new_args_tail((yyvsp[(1) - (2)].val), Qnone, (yyvsp[(2) - (2)].val));
@@ -10297,7 +10723,8 @@ yyreduce:
     break;
 
   case 537:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4539 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, (yyvsp[(1) - (2)].val), (yyvsp[(2) - (2)].val));
@@ -10305,7 +10732,8 @@ yyreduce:
     break;
 
   case 538:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4543 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, Qnone, (yyvsp[(1) - (1)].val));
@@ -10313,7 +10741,8 @@ yyreduce:
     break;
 
   case 539:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4549 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -10321,7 +10750,8 @@ yyreduce:
     break;
 
   case 540:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4553 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, Qnone, Qnone);
@@ -10329,7 +10759,8 @@ yyreduce:
     break;
 
   case 541:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4559 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), Qnone, (yyvsp[(6) - (6)].val));
@@ -10337,7 +10768,8 @@ yyreduce:
     break;
 
   case 542:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4563 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (8)].val), (yyvsp[(3) - (8)].val), (yyvsp[(5) - (8)].val), (yyvsp[(7) - (8)].val), (yyvsp[(8) - (8)].val));
@@ -10345,7 +10777,8 @@ yyreduce:
     break;
 
   case 543:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4567 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), Qnone, Qnone, (yyvsp[(4) - (4)].val));
@@ -10353,7 +10786,8 @@ yyreduce:
     break;
 
   case 544:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4571 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), Qnone, (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -10361,7 +10795,8 @@ yyreduce:
     break;
 
   case 545:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4575 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (4)].val), Qnone, (yyvsp[(3) - (4)].val), Qnone, (yyvsp[(4) - (4)].val));
@@ -10369,7 +10804,8 @@ yyreduce:
     break;
 
   case 546:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4579 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (6)].val), Qnone, (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -10377,7 +10813,8 @@ yyreduce:
     break;
 
   case 547:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4583 "ripper.y"
     {
 			(yyval.val) = new_args((yyvsp[(1) - (2)].val), Qnone, Qnone, Qnone, (yyvsp[(2) - (2)].val));
@@ -10385,7 +10822,8 @@ yyreduce:
     break;
 
   case 548:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4587 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), Qnone, (yyvsp[(4) - (4)].val));
@@ -10393,7 +10831,8 @@ yyreduce:
     break;
 
   case 549:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4591 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (6)].val), (yyvsp[(3) - (6)].val), (yyvsp[(5) - (6)].val), (yyvsp[(6) - (6)].val));
@@ -10401,7 +10840,8 @@ yyreduce:
     break;
 
   case 550:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4595 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (2)].val), Qnone, Qnone, (yyvsp[(2) - (2)].val));
@@ -10409,7 +10849,8 @@ yyreduce:
     break;
 
   case 551:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4599 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, (yyvsp[(1) - (4)].val), Qnone, (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -10417,7 +10858,8 @@ yyreduce:
     break;
 
   case 552:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4603 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, (yyvsp[(1) - (2)].val), Qnone, (yyvsp[(2) - (2)].val));
@@ -10425,7 +10867,8 @@ yyreduce:
     break;
 
   case 553:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4607 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, (yyvsp[(1) - (4)].val), (yyvsp[(3) - (4)].val), (yyvsp[(4) - (4)].val));
@@ -10433,7 +10876,8 @@ yyreduce:
     break;
 
   case 554:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4611 "ripper.y"
     {
 			(yyval.val) = new_args(Qnone, Qnone, Qnone, Qnone, (yyvsp[(1) - (1)].val));
@@ -10441,7 +10885,8 @@ yyreduce:
     break;
 
   case 555:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4615 "ripper.y"
     {
 			(yyval.val) = new_args_tail(Qnone, Qnone, Qnone);
@@ -10450,7 +10895,8 @@ yyreduce:
     break;
 
   case 556:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4622 "ripper.y"
     {
 #if 0
@@ -10464,7 +10910,8 @@ yyreduce:
     break;
 
   case 557:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4632 "ripper.y"
     {
 #if 0
@@ -10478,7 +10925,8 @@ yyreduce:
     break;
 
   case 558:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4642 "ripper.y"
     {
 #if 0
@@ -10492,7 +10940,8 @@ yyreduce:
     break;
 
   case 559:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4652 "ripper.y"
     {
 #if 0
@@ -10506,7 +10955,8 @@ yyreduce:
     break;
 
   case 561:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4665 "ripper.y"
     {
 			formal_argument(get_id((yyvsp[(1) - (1)].val)));
@@ -10515,7 +10965,8 @@ yyreduce:
     break;
 
   case 562:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4672 "ripper.y"
     {
 			ID id = get_id((yyvsp[(1) - (1)].val));
@@ -10526,7 +10977,8 @@ yyreduce:
     break;
 
   case 563:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4681 "ripper.y"
     {
 			current_arg = 0;
@@ -10539,7 +10991,8 @@ yyreduce:
     break;
 
   case 564:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4690 "ripper.y"
     {
 			ID tid = internal_id();
@@ -10560,7 +11013,8 @@ yyreduce:
     break;
 
   case 565:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4711 "ripper.y"
     {
 			(yyval.val) = rb_ary_new3(1, (yyvsp[(1) - (1)].val));
@@ -10568,7 +11022,8 @@ yyreduce:
     break;
 
   case 566:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4716 "ripper.y"
     {
 #if 0
@@ -10583,7 +11038,8 @@ yyreduce:
     break;
 
   case 567:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4730 "ripper.y"
     {
 			ID id = get_id((yyvsp[(1) - (1)].val));
@@ -10594,7 +11050,8 @@ yyreduce:
     break;
 
   case 568:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4739 "ripper.y"
     {
 			current_arg = 0;
@@ -10608,7 +11065,8 @@ yyreduce:
     break;
 
   case 569:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4749 "ripper.y"
     {
 			current_arg = 0;
@@ -10622,7 +11080,8 @@ yyreduce:
     break;
 
   case 570:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4761 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (2)].val), (yyvsp[(2) - (2)].val));
@@ -10635,7 +11094,8 @@ yyreduce:
     break;
 
   case 571:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4770 "ripper.y"
     {
 			(yyval.val) = assignable((yyvsp[(1) - (1)].val), (NODE *)-1);
@@ -10648,7 +11108,8 @@ yyreduce:
     break;
 
   case 572:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4781 "ripper.y"
     {
 #if 0
@@ -10660,7 +11121,8 @@ yyreduce:
     break;
 
   case 573:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4789 "ripper.y"
     {
 #if 0
@@ -10678,7 +11140,8 @@ yyreduce:
     break;
 
   case 574:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4806 "ripper.y"
     {
 #if 0
@@ -10690,7 +11153,8 @@ yyreduce:
     break;
 
   case 575:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4814 "ripper.y"
     {
 #if 0
@@ -10708,7 +11172,8 @@ yyreduce:
     break;
 
   case 578:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4834 "ripper.y"
     {
 			shadowing_lvar(get_id((yyvsp[(2) - (2)].val)));
@@ -10717,7 +11182,8 @@ yyreduce:
     break;
 
   case 579:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4839 "ripper.y"
     {
 			(yyval.val) = internal_id();
@@ -10726,7 +11192,8 @@ yyreduce:
     break;
 
   case 580:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4846 "ripper.y"
     {
 			current_arg = 0;
@@ -10740,7 +11207,8 @@ yyreduce:
     break;
 
   case 581:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4858 "ripper.y"
     {
 			current_arg = 0;
@@ -10754,7 +11222,8 @@ yyreduce:
     break;
 
   case 582:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4870 "ripper.y"
     {
 #if 0
@@ -10766,7 +11235,8 @@ yyreduce:
     break;
 
   case 583:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4878 "ripper.y"
     {
 #if 0
@@ -10784,7 +11254,8 @@ yyreduce:
     break;
 
   case 584:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4894 "ripper.y"
     {
 #if 0
@@ -10796,7 +11267,8 @@ yyreduce:
     break;
 
   case 585:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4902 "ripper.y"
     {
 #if 0
@@ -10814,7 +11286,8 @@ yyreduce:
     break;
 
   case 588:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4922 "ripper.y"
     {
 #if 0
@@ -10831,7 +11304,8 @@ yyreduce:
     break;
 
   case 589:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4935 "ripper.y"
     {
 #if 0
@@ -10844,7 +11318,8 @@ yyreduce:
     break;
 
   case 592:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4950 "ripper.y"
     {
 #if 0
@@ -10863,7 +11338,8 @@ yyreduce:
     break;
 
   case 593:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4967 "ripper.y"
     {
 			(yyval.val) = (yyvsp[(2) - (2)].val);
@@ -10871,7 +11347,8 @@ yyreduce:
     break;
 
   case 594:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4971 "ripper.y"
     {
 #if 0
@@ -10883,7 +11360,8 @@ yyreduce:
     break;
 
   case 595:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4981 "ripper.y"
     {
 #if 0
@@ -10897,13 +11375,15 @@ yyreduce:
     break;
 
   case 596:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4990 "ripper.y"
     {lex_state = EXPR_BEG;}
     break;
 
   case 597:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 4991 "ripper.y"
     {
 #if 0
@@ -10934,7 +11414,8 @@ yyreduce:
     break;
 
   case 599:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5021 "ripper.y"
     {
 #if 0
@@ -10946,7 +11427,8 @@ yyreduce:
     break;
 
   case 600:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5033 "ripper.y"
     {
 			(yyval.val) = rb_ary_new3(1, (yyvsp[(1) - (1)].val));
@@ -10954,7 +11436,8 @@ yyreduce:
     break;
 
   case 601:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5038 "ripper.y"
     {
 #if 0
@@ -10980,7 +11463,8 @@ yyreduce:
     break;
 
   case 602:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5062 "ripper.y"
     {
 #if 0
@@ -10996,7 +11480,8 @@ yyreduce:
     break;
 
   case 603:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5074 "ripper.y"
     {
 #if 0
@@ -11008,7 +11493,8 @@ yyreduce:
     break;
 
   case 604:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5082 "ripper.y"
     {
 #if 0
@@ -11020,7 +11506,8 @@ yyreduce:
     break;
 
   case 605:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5090 "ripper.y"
     {
 #if 0
@@ -11036,31 +11523,36 @@ yyreduce:
     break;
 
   case 616:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5122 "ripper.y"
     { (yyval.val) = (yyvsp[(1) - (1)].val); }
     break;
 
   case 617:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5127 "ripper.y"
     { (yyval.val) = (yyvsp[(1) - (1)].val); }
     break;
 
   case 627:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5150 "ripper.y"
     {yyerrok;}
     break;
 
   case 630:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5155 "ripper.y"
     {yyerrok;}
     break;
 
   case 631:
-/* Line 1787 of yacc.c  */
+
+/* Line 1806 of yacc.c  */
 #line 5159 "ripper.y"
     {
 #if 0
@@ -11072,8 +11564,9 @@ yyreduce:
     break;
 
 
-/* Line 1787 of yacc.c  */
-#line 11073 "parse.c"
+
+/* Line 1806 of yacc.c  */
+#line 11568 "parse.c"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -11236,9 +11729,7 @@ yyerrlab1:
       YY_STACK_PRINT (yyss, yyssp);
     }
 
-  YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   *++yyvsp = yylval;
-  YY_IGNORE_MAYBE_UNINITIALIZED_END
 
 
   /* Shift the error token.  */
@@ -11262,7 +11753,7 @@ yyabortlab:
   yyresult = 1;
   goto yyreturn;
 
-#if !defined yyoverflow || YYERROR_VERBOSE
+#if !defined(yyoverflow) || YYERROR_VERBOSE
 /*-------------------------------------------------.
 | yyexhaustedlab -- memory exhaustion comes here.  |
 `-------------------------------------------------*/
@@ -11304,7 +11795,8 @@ yyreturn:
 }
 
 
-/* Line 2050 of yacc.c  */
+
+/* Line 2067 of yacc.c  */
 #line 5167 "ripper.y"
 
 # undef parser
@@ -17477,3 +17969,4 @@ InitVM_ripper(void)
 
 }
 #endif /* RIPPER */
+
