@@ -1,3 +1,72 @@
+Mon Apr 13 22:11:21 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* ext/openssl/lib/openssl/ssl.rb: stricter hostname verification
+	  following RFC 6125. with the patch provided by Tony Arcieri and
+	  Hiroshi Nakamura [ruby-core:61545] [Bug #9644]
+	* test/openssl/test_ssl.rb: add tests for above.
+
+Mon Apr 13 13:03:33 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* lib/securerandom.rb: skip Win32 libraries in SecureRandom if
+	  OpenSSL::Random is available.
+	  https://github.com/ruby/ruby/pull/848 [Bug #10948] [Bug #10995]
+
+Mon Apr 13 00:49:56 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (arg): fix segfault by null caused by syntax error.
+	  [ruby-core:68851] [Bug #10957]
+
+Mon Apr 13 00:49:56 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (primary): empty parentheses at cmdarg can be null.
+	  [ruby-core:68477] [Bug #10957]
+
+Mon Apr 13 00:44:12 2015  Eric Wong  <e@80x24.org>
+
+	* ext/io/wait/wait.c (io_nread): wrap return value with INT2FIX
+	  Thanks to Yura Sokolov <funny.falcon@gmail.com>
+	  [ruby-core:68369] [Bug#10923]
+	* test/io/wait/test_io_wait.rb (test_nread_buffered):
+	  fix broken test
+
+Mon Apr 13 00:16:32 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* vm_eval.c (vm_call_super): search next super class from the
+	  original class, to get rid of infinite recursion with
+	  prepending.  a patch by Seiei Higa <hanachin AT gmail.com> at
+	  [ruby-core:68434].  [ruby-core:68093] [Bug #10847]
+
+Mon Apr 13 00:09:48 2015  Koichi Sasada  <ko1@atdot.net>
+
+	* class.c (rb_prepend_module): need a WB for klass -> origin.
+
+Sun Apr 12 23:53:33 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* ext/fiddle/extconf.rb: needs --enable-shared when linked to
+	  libruby or fiddle.so.  since --with-static-linked-ext does no
+	  longer link extensions to ruby program with --enable-shared, the
+	  only combination needs --enable-static is --disable-shared and
+	  --with-static-linked-ext.  [ruby-dev:48901] [Bug #10960]
+
+Sun Apr 12 23:53:33 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* ext/fiddle/extconf.rb: make PIC objects if it will be linked as
+	  a shared object eventually.  [ruby-core:67128]
+
+Sun Mar 22 12:39:17 2015  SHIBATA Hiroshi  <shibata.hiroshi@gmail.com>
+
+	* spec/default.mspec: use default configuration file name.
+	  https://github.com/ruby/rubyspec/commit/cc69f337b06362e5607ffa3e3ad40ef7494960cf
+
+Sun Mar 22 12:39:17 2015  SHIBATA Hiroshi  <shibata.hiroshi@gmail.com>
+
+	* spec/default.mspec: remove specific version number.
+	  https://github.com/ruby/rubyspec/commit/7a909e925c1baa9c700bd44af9241aef6e596714
+
+Sun Mar 22 12:39:17 2015  SHIBATA Hiroshi  <shibata.hiroshi@gmail.com>
+
+	* common.mk: use ruby organization for rubyspec.
+
 Thu Feb 26 15:48:41 2015  NAKAMURA Usaku  <usa@ruby-lang.org>
 
 	* ext/win32/Win32API.rb (initialize): accept both a string and an array
