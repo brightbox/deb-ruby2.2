@@ -2,7 +2,7 @@
 
   vm_insnhelper.c - instruction helper functions.
 
-  $Author: naruse $
+  $Author: nagachika $
 
   Copyright (C) 2007 Koichi Sasada
 
@@ -186,16 +186,16 @@ lep_svar_set(rb_thread_t *th, VALUE *lep, rb_num_t key, VALUE val)
 
     switch (key) {
       case 0:
-	svar->u1.value = val;
+	RB_OBJ_WRITE(svar, &svar->u1.value, val);
 	return;
       case 1:
-	svar->u2.value = val;
+	RB_OBJ_WRITE(svar, &svar->u2.value, val);
 	return;
       default: {
 	VALUE ary = svar->u3.value;
 
 	if (NIL_P(ary)) {
-	    svar->u3.value = ary = rb_ary_new();
+	    RB_OBJ_WRITE(svar, &svar->u3.value, ary = rb_ary_new());
 	}
 	rb_ary_store(ary, key - DEFAULT_SPECIAL_VAR_COUNT, val);
       }
@@ -630,13 +630,11 @@ vm_throw_start(rb_thread_t * const th, rb_control_frame_t * const reg_cfp, int s
 	rb_iseq_t *base_iseq = GET_ISEQ();
 	escape_cfp = reg_cfp;
 
-      search_parent:
-	if (base_iseq->type != ISEQ_TYPE_BLOCK) {
+	while (base_iseq->type != ISEQ_TYPE_BLOCK) {
 	    if (escape_cfp->iseq->type == ISEQ_TYPE_CLASS) {
 		escape_cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(escape_cfp);
 		ep = escape_cfp->ep;
 		base_iseq = escape_cfp->iseq;
-		goto search_parent;
 	    }
 	    else {
 		ep = VM_EP_PREV_EP(ep);
@@ -2073,7 +2071,7 @@ vm_invoke_block(rb_thread_t *th, rb_control_frame_t *reg_cfp, rb_call_info_t *ci
     }
     iseq = block->iseq;
 
-    if (BUILTIN_TYPE(iseq) != T_NODE) {
+    if (!RUBY_VM_IFUNC_P(iseq)) {
 	int opt_pc;
 	const int arg_size = iseq->param.size;
 	int is_lambda = block_proc_is_lambda(block->proc);

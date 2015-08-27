@@ -2,7 +2,7 @@
 
   vm_dump.c -
 
-  $Author: naruse $
+  $Author: nagachika $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -36,7 +36,7 @@ control_frame_dump(rb_thread_t *th, rb_control_frame_t *cfp)
     const char *magic, *iseq_name = "-", *selfstr = "-", *biseq_name = "-";
     VALUE tmp;
 
-    if (cfp->block_iseq != 0 && BUILTIN_TYPE(cfp->block_iseq) != T_NODE) {
+    if (cfp->block_iseq != 0 && !RUBY_VM_IFUNC_P(cfp->block_iseq)) {
 	biseq_name = "";	/* RSTRING(cfp->block_iseq->location.label)->ptr; */
     }
 
@@ -735,7 +735,11 @@ procstat_vm(struct procstat *procstat, struct kinfo_proc *kipp)
 		ptrwidth, "START", ptrwidth, "END", "PRT", "RES",
 		"PRES", "REF", "SHD", "FL", "TP", "PATH");
 
+#ifdef HAVE_PROCSTAT_GETVMMAP
 	freep = procstat_getvmmap(procstat, kipp, &cnt);
+#else
+	freep = kinfo_getvmmap(kipp->ki_pid, &cnt);
+#endif
 	if (freep == NULL)
 		return;
 	for (i = 0; i < cnt; i++) {

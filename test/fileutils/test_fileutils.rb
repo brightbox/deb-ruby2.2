@@ -1,4 +1,4 @@
-# $Id: test_fileutils.rb 48409 2014-11-13 16:05:37Z akr $
+# $Id: test_fileutils.rb 50485 2015-05-13 15:32:22Z nagachika $
 
 require 'fileutils'
 require 'etc'
@@ -416,7 +416,8 @@ class TestFileUtils < Test::Unit::TestCase
 
     mkdir 'tmp/tmpdir'
     mkdir_p 'tmp/dest2/tmpdir'
-    assert_raise(Errno::EEXIST) {
+    assert_raise_with_message(Errno::EEXIST, %r' - tmp/dest2/tmpdir\z',
+                              '[ruby-core:68706] [Bug #11021]') {
       mv 'tmp/tmpdir', 'tmp/dest2'
     }
     mkdir 'tmp/dest2/tmpdir/junk'

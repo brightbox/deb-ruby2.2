@@ -2,7 +2,7 @@
 
   io.c -
 
-  $Author: nobu $
+  $Author: nagachika $
   created at: Fri Oct 15 18:08:59 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -5038,6 +5038,9 @@ rb_io_oflags_modestr(int oflags)
       case O_WRONLY:
 	return MODE_BINARY("w", "wb");
       case O_RDWR:
+	if (oflags & O_TRUNC) {
+	    return MODE_BINARY("w+", "wb+");
+	}
 	return MODE_BINARY("r+", "rb+");
     }
 }

@@ -3,7 +3,7 @@
  *
  *   Copyright (C) UENO Katsuhiro 2000-2003
  *
- * $Id: zlib.c 49285 2015-01-16 16:58:11Z naruse $
+ * $Id: zlib.c 51075 2015-06-30 19:15:53Z nagachika $
  */
 
 #include <ruby.h>
@@ -1852,7 +1852,7 @@ rb_inflate_s_allocate(VALUE klass)
  *   Have inflate use the window size from the zlib header of the compressed
  *   stream.
  *
- * (8..15)
+ * (8..15)::
  *   Overrides the window size of the inflate header in the compressed stream.
  *   The window size must be greater than or equal to the window size of the
  *   compressed stream.
