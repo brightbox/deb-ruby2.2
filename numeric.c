@@ -2,7 +2,7 @@
 
   numeric.c -
 
-  $Author: naruse $
+  $Author: nagachika $
   created at: Fri Aug 13 18:33:09 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -1137,10 +1137,14 @@ flo_eq(VALUE x, VALUE y)
 static VALUE
 flo_hash(VALUE num)
 {
-    double d;
+    return rb_dbl_hash(RFLOAT_VALUE(num));
+}
+
+VALUE
+rb_dbl_hash(double d)
+{
     st_index_t hash;
 
-    d = RFLOAT_VALUE(num);
     /* normalize -0.0 to 0.0 */
     if (d == 0.0) d = 0.0;
     hash = rb_memhash(&d, sizeof(d));
@@ -4175,9 +4179,14 @@ Init_Numeric(void)
      */
     rb_define_const(rb_cFloat, "MAX_10_EXP", INT2FIX(DBL_MAX_10_EXP));
     /*
-     *	The smallest positive integer in a double-precision floating point.
+     *	The smallest positive normalized number in a double-precision floating point.
      *
      *	Usually defaults to 2.2250738585072014e-308.
+     *
+     *	If the platform supports denormalized numbers,
+     *	there are numbers between zero and Float::MIN.
+     *	0.0.next_float returns the smallest positive floating point number
+     *	including denormalized numbers.
      */
     rb_define_const(rb_cFloat, "MIN", DBL2NUM(DBL_MIN));
     /*
@@ -4188,7 +4197,7 @@ Init_Numeric(void)
     rb_define_const(rb_cFloat, "MAX", DBL2NUM(DBL_MAX));
     /*
      *	The difference between 1 and the smallest double-precision floating
-     *	point number.
+     *	point number greater than 1.
      *
      *	Usually defaults to 2.2204460492503131e-16.
      */

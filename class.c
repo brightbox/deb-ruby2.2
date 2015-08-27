@@ -2,7 +2,7 @@
 
   class.c -
 
-  $Author: naruse $
+  $Author: nagachika $
   created at: Tue Aug 10 15:05:44 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -932,7 +932,7 @@ rb_prepend_module(VALUE klass, VALUE module)
 	OBJ_WB_UNPROTECT(origin); /* TODO: conservative shading. Need more survey. */
 	RCLASS_SET_SUPER(origin, RCLASS_SUPER(klass));
 	RCLASS_SET_SUPER(klass, origin);
-	RCLASS_ORIGIN(klass) = origin;
+	RB_OBJ_WRITE(klass, &RCLASS_ORIGIN(klass), origin);
 	RCLASS_M_TBL_WRAPPER(origin) = RCLASS_M_TBL_WRAPPER(klass);
 	RCLASS_M_TBL_INIT(klass);
 	st_foreach(RCLASS_M_TBL(origin), move_refined_method,
@@ -1531,7 +1531,8 @@ singleton_class_of(VALUE obj)
 {
     VALUE klass;
 
-    if (FIXNUM_P(obj) || FLONUM_P(obj) || SYMBOL_P(obj)) {
+    if (FIXNUM_P(obj) || FLONUM_P(obj) || STATIC_SYM_P(obj)) {
+      no_singleton:
 	rb_raise(rb_eTypeError, "can't define singleton");
     }
     if (SPECIAL_CONST_P(obj)) {
@@ -1541,9 +1542,9 @@ singleton_class_of(VALUE obj)
 	return klass;
     }
     else {
-	enum ruby_value_type type = BUILTIN_TYPE(obj);
-	if (type == T_FLOAT || type == T_BIGNUM) {
-	    rb_raise(rb_eTypeError, "can't define singleton");
+	switch (BUILTIN_TYPE(obj)) {
+	  case T_FLOAT: case T_BIGNUM: case T_SYMBOL:
+	    goto no_singleton;
 	}
     }
 

@@ -2,7 +2,7 @@
 
   parse.y -
 
-  $Author: naruse $
+  $Author: nagachika $
   created at: Fri May 28 18:02:42 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -692,9 +692,7 @@ new_args_tail_gen(struct parser_params *parser, VALUE k, VALUE kr, VALUE b)
 # define rb_warningV(fmt,a) ripper_warningV(parser, (fmt), (a))
 static void ripper_warn0(struct parser_params*, const char*);
 static void ripper_warnI(struct parser_params*, const char*, int);
-#if 0				/* not in use right now */
 static void ripper_warnS(struct parser_params*, const char*, const char*);
-#endif
 static void ripper_warnV(struct parser_params*, const char*, VALUE);
 static void ripper_warning0(struct parser_params*, const char*);
 static void ripper_warningS(struct parser_params*, const char*, const char*);
@@ -2100,8 +2098,8 @@ arg		: lhs '=' arg
 			value_expr($1);
 			value_expr($3);
 			$$ = NEW_DOT2($1, $3);
-			if (nd_type($1) == NODE_LIT && FIXNUM_P($1->nd_lit) &&
-			    nd_type($3) == NODE_LIT && FIXNUM_P($3->nd_lit)) {
+			if ($1 && nd_type($1) == NODE_LIT && FIXNUM_P($1->nd_lit) &&
+			    $3 && nd_type($3) == NODE_LIT && FIXNUM_P($3->nd_lit)) {
 			    deferred_nodes = list_append(deferred_nodes, $$);
 			}
 		    /*%
@@ -2114,8 +2112,8 @@ arg		: lhs '=' arg
 			value_expr($1);
 			value_expr($3);
 			$$ = NEW_DOT3($1, $3);
-			if (nd_type($1) == NODE_LIT && FIXNUM_P($1->nd_lit) &&
-			    nd_type($3) == NODE_LIT && FIXNUM_P($3->nd_lit)) {
+			if ($1 && nd_type($1) == NODE_LIT && FIXNUM_P($1->nd_lit) &&
+			    $3 && nd_type($3) == NODE_LIT && FIXNUM_P($3->nd_lit)) {
 			    deferred_nodes = list_append(deferred_nodes, $$);
 			}
 		    /*%
@@ -3534,14 +3532,20 @@ lambda		:   {
 		    {
 			$<num>$ = ruby_sourceline;
 		    }
+		    {
+			$<val>$ = cmdarg_stack;
+			cmdarg_stack = 0;
+		    }
 		  lambda_body
 		    {
 			lpar_beg = $<num>2;
+			cmdarg_stack = $<val>5;
+			CMDARG_LEXPOP();
 		    /*%%%*/
-			$$ = NEW_LAMBDA($3, $5);
+			$$ = NEW_LAMBDA($3, $6);
 			nd_set_line($$, $<num>4);
 		    /*%
-			$$ = dispatch2(lambda, $3, $5);
+			$$ = dispatch2(lambda, $3, $6);
 		    %*/
 			dyna_pop($<vars>1);
 		    }
@@ -7603,6 +7607,27 @@ tokenize_ident(struct parser_params *parser, const enum lex_state_e last_state)
 }
 
 static int
+parse_numvar(struct parser_params *parser)
+{
+    size_t len;
+    int overflow;
+    unsigned long n = ruby_scan_digits(tok()+1, toklen()-1, 10, &len, &overflow);
+    const unsigned long nth_ref_max =
+	(FIXNUM_MAX / 2 < INT_MAX) ? FIXNUM_MAX / 2 : INT_MAX;
+    /* NTH_REF is left-shifted to be ORed with back-ref flag and
+     * turned into a Fixnum, in compile.c */
+
+    if (overflow || n > nth_ref_max) {
+	/* compile_error()? */
+	rb_warnS("`%s' is too big for a number variable, always nil", tok());
+	return 0;		/* $0 is $PROGRAM_NAME, not NTH_REF */
+    }
+    else {
+	return (int)n;
+    }
+}
+
+static int
 parse_gvar(struct parser_params *parser, const enum lex_state_e last_state)
 {
     register int c;
@@ -7680,7 +7705,7 @@ parse_gvar(struct parser_params *parser, const enum lex_state_e last_state)
 	pushback(c);
 	if (IS_lex_state_for(last_state, EXPR_FNAME)) goto gvar;
 	tokfix();
-	set_yylval_node(NEW_NTH_REF(atoi(tok()+1)));
+	set_yylval_node(NEW_NTH_REF(parse_numvar(parser)));
 	return tNTH_REF;
 
       default:
@@ -11048,14 +11073,12 @@ ripper_warnI(struct parser_params *parser, const char *fmt, int a)
                STR_NEW2(fmt), INT2NUM(a));
 }
 
-#if 0				/* not in use right now */
 static void
 ripper_warnS(struct parser_params *parser, const char *fmt, const char *str)
 {
     rb_funcall(parser->value, id_warn, 2,
                STR_NEW2(fmt), STR_NEW2(str));
 }
-#endif
 
 static void
 ripper_warnV(struct parser_params *parser, const char *fmt, VALUE v)

@@ -18088,6 +18088,17 @@ _ACEOF
 fi
 done
 
+for ac_func in fgetattrlist
+do :
+  ac_fn_c_check_func "$LINENO" "fgetattrlist" "ac_cv_func_fgetattrlist"
+if test "x$ac_cv_func_fgetattrlist" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_FGETATTRLIST 1
+_ACEOF
+
+fi
+done
+
 for ac_func in fmod
 do :
   ac_fn_c_check_func "$LINENO" "fmod" "ac_cv_func_fmod"
@@ -21495,6 +21506,19 @@ _ACEOF
 
 fi
 
+    if test "x$ac_cv_lib_procstat_procstat_open_sysctl" = xyes; then
+	for ac_func in procstat_getvmmap
+do :
+  ac_fn_c_check_func "$LINENO" "procstat_getvmmap" "ac_cv_func_procstat_getvmmap"
+if test "x$ac_cv_func_procstat_getvmmap" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_PROCSTAT_GETVMMAP 1
+_ACEOF
+
+fi
+done
+
+    fi
      ;; #(
   *) :
      ;;

@@ -2,7 +2,7 @@
 
   vm_core.h -
 
-  $Author: naruse $
+  $Author: nagachika $
   created at: 04/01/01 19:41:38 JST
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -642,7 +642,6 @@ typedef struct rb_thread_struct {
     enum rb_thread_status status;
     int to_kill;
     int priority;
-    int mark_stack_len;
 
     native_thread_data_t native_thread_data;
     void *blocking_region_buffer;
@@ -913,7 +912,7 @@ rb_block_t *rb_vm_control_frame_block_ptr(rb_control_frame_t *cfp);
 #define RUBY_VM_CONTROL_FRAME_STACK_OVERFLOW_P(th, cfp) \
   (!RUBY_VM_VALID_CONTROL_FRAME_P((cfp), RUBY_VM_END_CONTROL_FRAME(th)))
 
-#define RUBY_VM_IFUNC_P(ptr)        (BUILTIN_TYPE(ptr) == T_NODE)
+#define RUBY_VM_IFUNC_P(ptr)        RB_TYPE_P((VALUE)(ptr), T_NODE)
 #define RUBY_VM_NORMAL_ISEQ_P(ptr) \
   ((ptr) && !RUBY_VM_IFUNC_P(ptr))
 

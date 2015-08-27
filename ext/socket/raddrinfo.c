@@ -1210,7 +1210,7 @@ rsock_inspect_sockaddr(struct sockaddr *sockaddr_arg, socklen_t socklen, VALUE r
           }
 #endif
 
-#ifdef AF_PACKET
+#if defined(AF_PACKET) && defined(__linux__)
           /* GNU/Linux */
           case AF_PACKET:
           {
@@ -1643,6 +1643,7 @@ addrinfo_mload(VALUE self, VALUE ary)
 
         len = res->ai->ai_addrlen;
         memcpy(&ss, res->ai->ai_addr, res->ai->ai_addrlen);
+        rb_freeaddrinfo(res);
         break;
       }
     }

@@ -17,7 +17,7 @@ RUBYLIB       = $(PATH_SEPARATOR)
 RUBYOPT       = -
 RUN_OPTS      = --disable-gems
 
-SPEC_GIT_BASE = git://github.com/nurse
+SPEC_GIT_BASE = git://github.com/ruby
 MSPEC_GIT_URL = $(SPEC_GIT_BASE)/mspec.git
 RUBYSPEC_GIT_URL = $(SPEC_GIT_BASE)/rubyspec.git
 
@@ -686,7 +686,8 @@ compile.$(OBJEXT): {$(VPATH)}opt_sc.inc {$(VPATH)}optunifs.inc
 
 win32/win32.$(OBJEXT): {$(VPATH)}win32/win32.c {$(VPATH)}dln.h {$(VPATH)}dln_find.c \
   {$(VPATH)}internal.h $(RUBY_H_INCLUDES) $(PLATFORM_D)
-win32/file.$(OBJEXT): {$(VPATH)}win32/file.c $(RUBY_H_INCLUDES) $(PLATFORM_D)
+win32/file.$(OBJEXT): {$(VPATH)}win32/file.c {$(VPATH)}thread.h \
+  $(RUBY_H_INCLUDES) $(PLATFORM_D)
 
 $(NEWLINE_C): $(srcdir)/enc/trans/newline.trans $(srcdir)/tool/transcode-tblgen.rb
 	$(Q) $(BASERUBY) "$(srcdir)/tool/transcode-tblgen.rb" -vo $@ $(srcdir)/enc/trans/newline.trans
@@ -1357,6 +1358,7 @@ file.$(OBJEXT): {$(VPATH)}missing.h
 file.$(OBJEXT): {$(VPATH)}oniguruma.h
 file.$(OBJEXT): {$(VPATH)}st.h
 file.$(OBJEXT): {$(VPATH)}subst.h
+file.$(OBJEXT): {$(VPATH)}thread.h
 file.$(OBJEXT): {$(VPATH)}util.h
 gc.$(OBJEXT): $(CCAN_DIR)/check_type/check_type.h
 gc.$(OBJEXT): $(CCAN_DIR)/container_of/container_of.h
@@ -1448,6 +1450,7 @@ hash.$(OBJEXT): {$(VPATH)}oniguruma.h
 hash.$(OBJEXT): {$(VPATH)}probes.h
 hash.$(OBJEXT): {$(VPATH)}st.h
 hash.$(OBJEXT): {$(VPATH)}subst.h
+hash.$(OBJEXT): {$(VPATH)}symbol.h
 hash.$(OBJEXT): {$(VPATH)}util.h
 hash.$(OBJEXT): {$(VPATH)}vm_opts.h
 inits.$(OBJEXT): $(hdrdir)/ruby/ruby.h

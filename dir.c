@@ -2,7 +2,7 @@
 
   dir.c -
 
-  $Author: naruse $
+  $Author: nagachika $
   created at: Wed Jan  5 09:51:01 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -103,13 +103,23 @@ char *strchr(char*,char);
 #include <sys/mount.h>
 #include <sys/vnode.h>
 
+# if defined HAVE_FGETATTRLIST || !defined HAVE_GETATTRLIST
+#   define need_normalization(dirp, path) need_normalization(dirp)
+# else
+#   define need_normalization(dirp, path) need_normalization(path)
+# endif
 static inline int
-need_normalization(DIR *dirp)
+need_normalization(DIR *dirp, const char *path)
 {
-# ifdef HAVE_GETATTRLIST
+# if defined HAVE_FGETATTRLIST || defined HAVE_GETATTRLIST
     u_int32_t attrbuf[SIZEUP32(fsobj_tag_t)];
     struct attrlist al = {ATTR_BIT_MAP_COUNT, 0, ATTR_CMN_OBJTAG,};
-    if (!fgetattrlist(dirfd(dirp), &al, attrbuf, sizeof(attrbuf), 0)) {
+#   if defined HAVE_FGETATTRLIST
+    int ret = fgetattrlist(dirfd(dirp), &al, attrbuf, sizeof(attrbuf), 0);
+#   else
+    int ret = getattrlist(path, &al, attrbuf, sizeof(attrbuf), 0);
+#   endif
+    if (!ret) {
 	const fsobj_tag_t *tag = (void *)(attrbuf+1);
 	switch (*tag) {
 	  case VT_HFS:
@@ -694,7 +704,7 @@ dir_each(VALUE dir)
     RETURN_ENUMERATOR(dir, 0, 0);
     GetDIR(dir, dirp);
     rewinddir(dirp->dir);
-    IF_NORMALIZE_UTF8PATH(norm_p = need_normalization(dirp->dir));
+    IF_NORMALIZE_UTF8PATH(norm_p = need_normalization(dirp->dir, RSTRING_PTR(dirp->path)));
     while ((dp = READDIR(dirp->dir, dirp->enc)) != NULL) {
 	const char *name = dp->d_name;
 	size_t namlen = NAMLEN(dp);
@@ -1481,12 +1491,34 @@ replace_real_basename(char *path, long base, rb_encoding *enc, int norm_p)
     free(wplain);
     if (h == INVALID_HANDLE_VALUE) return path;
     FindClose(h);
-    tmp = rb_w32_conv_from_wchar(fd.cFileName, enc);
-    wlen = RSTRING_LEN(tmp);
-    path = GLOB_REALLOC(path, base + wlen + 1);
-    memcpy(path + base, RSTRING_PTR(tmp), wlen);
-    path[base + wlen] = 0;
-    rb_str_resize(tmp, 0);
+    if (tmp) {
+	char *buf;
+	tmp = rb_w32_conv_from_wchar(fd.cFileName, enc);
+	wlen = RSTRING_LEN(tmp);
+	buf = GLOB_REALLOC(path, base + wlen + 1);
+	if (buf) {
+	    path = buf;
+	    memcpy(path + base, RSTRING_PTR(tmp), wlen);
+	    path[base + wlen] = 0;
+	}
+	rb_str_resize(tmp, 0);
+    }
+    else {
+	char *utf8filename;
+	wlen = WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, NULL, 0, NULL, NULL);
+	utf8filename = GLOB_REALLOC(0, wlen);
+	if (utf8filename) {
+	    char *buf;
+	    WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, utf8filename, wlen, NULL, NULL);
+	    buf = GLOB_REALLOC(path, base + wlen + 1);
+	    if (buf) {
+		path = buf;
+		memcpy(path + base, utf8filename, wlen);
+		path[base + wlen] = 0;
+	    }
+	    GLOB_FREE(utf8filename);
+	}
+    }
     return path;
 }
 #elif USE_NAME_ON_FS == 1
@@ -1639,7 +1671,7 @@ glob_helper(
 # endif
 	    return 0;
 	}
-	IF_NORMALIZE_UTF8PATH(norm_p = need_normalization(dirp));
+	IF_NORMALIZE_UTF8PATH(norm_p = need_normalization(dirp, *path ? path : "."));
 
 # if NORMALIZE_UTF8PATH
 	if (!(norm_p || magical || recursive)) {
