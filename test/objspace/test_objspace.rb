@@ -196,7 +196,7 @@ class TestObjSpace < Test::Unit::TestCase
 
   def test_dump_flags
     info = ObjectSpace.dump("foo".freeze)
-    assert_match /"wb_protected":true, "old":true, "long_lived":true, "marked":true/, info
+    assert_match /"wb_protected":true, "old":true/, info
     assert_match /"fstring":true/, info
   end
 
@@ -232,6 +232,15 @@ class TestObjSpace < Test::Unit::TestCase
     assert_match /"embedded":true, "bytesize":11, "value":"hello world", "encoding":"UTF-8"/, info
     assert_match /"file":"#{Regexp.escape __FILE__}", "line":#{line}/, info
     assert_match /"method":"#{loc.base_label}"/, info
+  end
+
+  def test_dump_special_consts
+    # [ruby-core:69692] [Bug #11291]
+    assert_equal('{}', ObjectSpace.dump(nil))
+    assert_equal('{}', ObjectSpace.dump(true))
+    assert_equal('{}', ObjectSpace.dump(false))
+    assert_equal('{}', ObjectSpace.dump(0))
+    assert_equal('{}', ObjectSpace.dump(:foo))
   end
 
   def test_dump_all

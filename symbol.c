@@ -122,7 +122,7 @@ static const struct st_hash_type symhash = {
 void
 Init_sym(void)
 {
-    VALUE dsym_fstrs = rb_hash_new();
+    VALUE dsym_fstrs = rb_ident_hash_new();
     global_symbols.dsymbol_fstr_hash = dsym_fstrs;
     rb_gc_register_mark_object(dsym_fstrs);
     rb_obj_hide(dsym_fstrs);
@@ -506,11 +506,17 @@ static VALUE
 dsymbol_alloc(const VALUE klass, const VALUE str, rb_encoding * const enc, const ID type)
 {
     const VALUE dsym = rb_newobj_of(klass, T_SYMBOL | FL_WB_PROTECTED);
+    st_index_t hashval;
 
     rb_enc_associate(dsym, enc);
     OBJ_FREEZE(dsym);
     RB_OBJ_WRITE(dsym, &RSYMBOL(dsym)->fstr, str);
     RSYMBOL(dsym)->id = type;
+
+    /* we want hashval to be in Fixnum range [ruby-core:15713] r15672 */
+    hashval = rb_str_hash(str);
+    hashval <<= 1;
+    RSYMBOL(dsym)->hashval = (st_index_t)RSHIFT(hashval, 1);
 
     register_sym(str, dsym);
     rb_hash_aset(global_symbols.dsymbol_fstr_hash, str, Qtrue);

@@ -2,7 +2,7 @@
 
   vm.c -
 
-  $Author: naruse $
+  $Author: nagachika $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -44,7 +44,7 @@ rb_vm_search_cf_from_ep(const rb_thread_t * const th, rb_control_frame_t *cfp, c
 	    cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(cfp);
 	}
 
-	rb_bug("rb_vm_search_cf_from_ep: no corresponding cfp");
+	return NULL;
     }
 }
 
@@ -380,7 +380,7 @@ env_mark(void * const ptr)
     RUBY_MARK_UNLESS_NULL(env->block.proc);
 
     if (env->block.iseq) {
-	if (BUILTIN_TYPE(env->block.iseq) == T_NODE) {
+	if (RUBY_VM_IFUNC_P(env->block.iseq)) {
 	    RUBY_MARK_UNLESS_NULL((VALUE)env->block.iseq);
 	}
 	else {
@@ -768,7 +768,7 @@ invoke_block_from_c(rb_thread_t *th, const rb_block_t *block,
     if (SPECIAL_CONST_P(block->iseq)) {
 	return Qnil;
     }
-    else if (BUILTIN_TYPE(block->iseq) != T_NODE) {
+    else if (!RUBY_VM_IFUNC_P(block->iseq)) {
 	VALUE ret;
 	const rb_iseq_t *iseq = block->iseq;
 	const rb_control_frame_t *cfp;
@@ -1146,6 +1146,12 @@ vm_iter_break(rb_thread_t *th, VALUE val)
     VALUE *ep = VM_CF_PREV_EP(cfp);
     rb_control_frame_t *target_cfp = rb_vm_search_cf_from_ep(th, cfp, ep);
 
+#if 0				/* raise LocalJumpError */
+    if (!target_cfp) {
+	rb_vm_localjump_error("unexpected break", val, TAG_BREAK);
+    }
+#endif
+
     th->state = TAG_BREAK;
     th->errinfo = (VALUE)NEW_THROW_OBJECT(val, (VALUE)target_cfp, TAG_BREAK);
     TH_JUMP_TAG(th, TAG_BREAK);
@@ -1287,6 +1293,30 @@ vm_frametype_name(const rb_control_frame_t *cfp)
 }
 #endif
 
+static void
+hook_before_rewind(rb_thread_t *th, rb_control_frame_t *cfp)
+{
+    switch (VM_FRAME_TYPE(th->cfp)) {
+      case VM_FRAME_MAGIC_METHOD:
+	RUBY_DTRACE_METHOD_RETURN_HOOK(th, 0, 0);
+	EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_RETURN, th->cfp->self, 0, 0, Qnil);
+	break;
+      case VM_FRAME_MAGIC_BLOCK:
+      case VM_FRAME_MAGIC_LAMBDA:
+	if (VM_FRAME_TYPE_BMETHOD_P(th->cfp)) {
+	    EXEC_EVENT_HOOK(th, RUBY_EVENT_B_RETURN, th->cfp->self, 0, 0, Qnil);
+	    EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_RETURN, th->cfp->self, th->cfp->me->called_id, th->cfp->me->klass, Qnil);
+	}
+	else {
+	    EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_B_RETURN, th->cfp->self, 0, 0, Qnil);
+	}
+	break;
+      case VM_FRAME_MAGIC_CLASS:
+	EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_END, th->cfp->self, 0, 0, Qnil);
+	break;
+    }
+}
+
 /* evaluator body */
 
 /*                  finish
@@ -1385,7 +1415,6 @@ vm_frametype_name(const rb_control_frame_t *cfp)
   };
  */
 
-
 static VALUE
 vm_exec(rb_thread_t *th)
 {
@@ -1455,15 +1484,9 @@ vm_exec(rb_thread_t *th)
 			    }
 			}
 			if (!catch_iseqval) {
-			    result = GET_THROWOBJ_VAL(err);
 			    th->errinfo = Qnil;
-
-			    switch (VM_FRAME_TYPE(cfp)) {
-			      case VM_FRAME_MAGIC_LAMBDA:
-				EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_B_RETURN, th->cfp->self, 0, 0, Qnil);
-				break;
-			    }
-
+			    result = GET_THROWOBJ_VAL(err);
+			    hook_before_rewind(th, th->cfp);
 			    vm_pop_frame(th);
 			    goto finish_vme;
 			}
@@ -1606,26 +1629,7 @@ vm_exec(rb_thread_t *th)
 	}
 	else {
 	    /* skip frame */
-
-	    switch (VM_FRAME_TYPE(th->cfp)) {
-	      case VM_FRAME_MAGIC_METHOD:
-		RUBY_DTRACE_METHOD_RETURN_HOOK(th, 0, 0);
-		EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_RETURN, th->cfp->self, 0, 0, Qnil);
-		break;
-	      case VM_FRAME_MAGIC_BLOCK:
-	      case VM_FRAME_MAGIC_LAMBDA:
-		if (VM_FRAME_TYPE_BMETHOD_P(th->cfp)) {
-		    EXEC_EVENT_HOOK(th, RUBY_EVENT_B_RETURN, th->cfp->self, 0, 0, Qnil);
-		    EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_RETURN, th->cfp->self, th->cfp->me->called_id, th->cfp->me->klass, Qnil);
-		}
-		else {
-		    EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_B_RETURN, th->cfp->self, 0, 0, Qnil);
-		}
-		break;
-	      case VM_FRAME_MAGIC_CLASS:
-		EXEC_EVENT_HOOK_AND_POP_FRAME(th, RUBY_EVENT_END, th->cfp->self, 0, 0, Qnil);
-		break;
-	    }
+	    hook_before_rewind(th, th->cfp);
 
 	    if (VM_FRAME_TYPE_FINISH_P(th->cfp)) {
 		vm_pop_frame(th);
@@ -2015,7 +2019,6 @@ rb_thread_mark(void *ptr)
 	    rb_control_frame_t *limit_cfp = (void *)(th->stack + th->stack_size);
 
 	    rb_gc_mark_values((long)(sp - p), p);
-	    rb_gc_mark_locations(sp, sp + th->mark_stack_len);
 
 	    while (cfp != limit_cfp) {
 		rb_iseq_t *iseq = cfp->iseq;
@@ -2264,7 +2267,11 @@ vm_define_method(rb_thread_t *th, VALUE obj, ID id, VALUE iseqval,
 
 #define REWIND_CFP(expr) do { \
     rb_thread_t *th__ = GET_THREAD(); \
-    th__->cfp++; expr; th__->cfp--; \
+    VALUE *const curr_sp = (th__->cfp++)->sp; \
+    VALUE *const saved_sp = th__->cfp->sp; \
+    th__->cfp->sp = curr_sp; \
+    expr; \
+    (th__->cfp--)->sp = saved_sp; \
 } while (0)
 
 static VALUE

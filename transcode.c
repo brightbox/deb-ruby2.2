@@ -2,7 +2,7 @@
 
   transcode.c -
 
-  $Author: nobu $
+  $Author: nagachika $
   created at: Tue Oct 30 16:10:22 JST 2007
 
   Copyright (C) 2007 Martin Duerst
@@ -370,15 +370,12 @@ load_transcoder_entry(transcoder_entry_t *entry)
         char *const path = RSTRING_PTR(fn);
 	const int safe = rb_safe_level();
 
-        entry->lib = NULL;
-
         memcpy(path, transcoder_lib_prefix, sizeof(transcoder_lib_prefix) - 1);
         memcpy(path + sizeof(transcoder_lib_prefix) - 1, lib, len);
         rb_str_set_len(fn, total_len);
         FL_UNSET(fn, FL_TAINT);
         OBJ_FREEZE(fn);
-        if (!rb_require_safe(fn, safe > 3 ? 3 : safe))
-            return NULL;
+        rb_require_safe(fn, safe > 3 ? 3 : safe);
     }
 
     if (entry->transcoder)
@@ -2202,7 +2199,7 @@ rb_econv_set_replacement(rb_econv_t *ec,
 
     encname2 = rb_econv_encoding_to_insert_output(ec);
 
-    if (encoding_equal(encname, encname2)) {
+    if (!*encname2 || encoding_equal(encname, encname2)) {
         str2 = xmalloc(len);
         MEMCPY(str2, str, unsigned char, len); /* xxx: str may be invalid */
         len2 = len;
