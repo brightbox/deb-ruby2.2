@@ -510,6 +510,17 @@ class TestArgf < Test::Unit::TestCase
     end
   end
 
+  def test_readpartial_eof_twice
+    ruby('-W1', '-e', <<-SRC, @t1.path) do |f|
+      $stderr = $stdout
+      print ARGF.readpartial(256)
+      ARGF.readpartial(256) rescue p($!.class)
+      ARGF.readpartial(256) rescue p($!.class)
+    SRC
+      assert_equal("1\n2\nEOFError\nEOFError\n", f.read)
+    end
+  end
+
   def test_getc
     ruby('-e', <<-SRC, @t1.path, @t2.path, @t3.path) do |f|
       s = ""
@@ -855,5 +866,13 @@ class TestArgf < Test::Unit::TestCase
       assert_match(/deprecated/, f.gets)
       assert_equal([49, 10, 50, 10, 51, 10, 52, 10, 53, 10, 54, 10], Marshal.load(f.read))
     end
+  end
+
+  def test_wrong_type
+    assert_separately([], <<-'end;')
+      bug11610 = '[ruby-core:71140] [Bug #11610]'
+      ARGV[0] = nil
+      assert_raise(TypeError, bug11610) {gets}
+    end;
   end
 end

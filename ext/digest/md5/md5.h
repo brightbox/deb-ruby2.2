@@ -41,12 +41,12 @@
 
 /* $OrigId: md5.h,v 1.2 2001/03/26 08:57:14 matz Exp $ */
 /* $RoughId: md5.h,v 1.3 2002/02/24 08:14:31 knu Exp $ */
-/* $Id: md5.h 46827 2014-07-15 14:59:20Z nobu $ */
+/* $Id: md5.h 52739 2015-11-24 15:28:43Z nagachika $ */
 
 #ifndef MD5_INCLUDED
 #  define MD5_INCLUDED
 
-#include "defs.h"
+#include "../defs.h"
 
 /*
  * This code has some adaptations for the Ghostscript environment, but it

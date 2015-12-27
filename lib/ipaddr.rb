@@ -7,7 +7,7 @@
 #
 # You can redistribute and/or modify it under the same terms as Ruby.
 #
-# $Id: ipaddr.rb 46277 2014-05-31 07:36:51Z hsbt $
+# $Id: ipaddr.rb 52741 2015-11-24 15:49:21Z nagachika $
 #
 # Contact:
 #   - Akinori MUSHA <knu@iDaemons.org> (current maintainer)
@@ -410,7 +410,7 @@ class IPAddr
   # Set current netmask to given mask.
   def mask!(mask)
     if mask.kind_of?(String)
-      if mask =~ /^\d+$/
+      if mask =~ /\A\d+\z/
         prefixlen = mask.to_i
       else
         m = IPAddr.new(mask)
@@ -478,7 +478,7 @@ class IPAddr
       end
     end
     prefix, prefixlen = addr.split('/')
-    if prefix =~ /^\[(.*)\]$/i
+    if prefix =~ /\A\[(.*)\]\z/i
       prefix = $1
       family = Socket::AF_INET6
     end
