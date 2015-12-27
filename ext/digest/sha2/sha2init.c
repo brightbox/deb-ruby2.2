@@ -1,7 +1,8 @@
 /* $RoughId: sha2init.c,v 1.3 2001/07/13 20:00:43 knu Exp $ */
-/* $Id: sha2init.c 47745 2014-09-30 08:29:02Z nobu $ */
+/* $Id: sha2init.c 52739 2015-11-24 15:28:43Z nagachika $ */
 
-#include "digest.h"
+#include <ruby/ruby.h>
+#include "../digest.h"
 #if defined(SHA2_USE_OPENSSL)
 #include "sha2ossl.h"
 #else
