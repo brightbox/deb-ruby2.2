@@ -3708,6 +3708,7 @@ rb_io_each_codepoint(VALUE io)
     READ_CHECK(fptr);
     if (NEED_READCONV(fptr)) {
 	SET_BINARY_MODE(fptr);
+	r = 1;		/* no invalid char yet */
 	for (;;) {
 	    make_readconv(fptr, 0);
 	    for (;;) {
@@ -3726,13 +3727,16 @@ rb_io_each_codepoint(VALUE io)
 		}
 		if (more_char(fptr) == MORE_CHAR_FINISHED) {
                     clear_readconv(fptr);
-		    /* ignore an incomplete character before EOF */
+		    if (!MBCLEN_CHARFOUND_P(r)) {
+			enc = fptr->encs.enc;
+			goto invalid;
+		    }
 		    return io;
 		}
 	    }
 	    if (MBCLEN_INVALID_P(r)) {
-		rb_raise(rb_eArgError, "invalid byte sequence in %s",
-			 rb_enc_name(fptr->encs.enc));
+		enc = fptr->encs.enc;
+		goto invalid;
 	    }
 	    n = MBCLEN_CHARFOUND_LEN(r);
 	    if (fptr->encs.enc) {
@@ -3762,7 +3766,24 @@ rb_io_each_codepoint(VALUE io)
 	    rb_yield(UINT2NUM(c));
 	}
 	else if (MBCLEN_INVALID_P(r)) {
+	  invalid:
 	    rb_raise(rb_eArgError, "invalid byte sequence in %s", rb_enc_name(enc));
+	}
+	else if (MBCLEN_NEEDMORE_P(r)) {
+	    char cbuf[8], *p = cbuf;
+	    int more = MBCLEN_NEEDMORE_LEN(r);
+	    if (more > numberof(cbuf)) goto invalid;
+	    more += n = fptr->rbuf.len;
+	    if (more > numberof(cbuf)) goto invalid;
+	    while ((n = (int)read_buffered_data(p, more, fptr)) > 0 &&
+		   (p += n, (more -= n) > 0)) {
+		if (io_fillbuf(fptr) < 0) goto invalid;
+		if ((n = fptr->rbuf.len) > more) n = more;
+	    }
+	    r = rb_enc_precise_mbclen(cbuf, p, enc);
+	    if (!MBCLEN_CHARFOUND_P(r)) goto invalid;
+	    c = rb_enc_codepoint(cbuf, p, enc);
+	    rb_yield(UINT2NUM(c));
 	}
 	else {
 	    continue;
@@ -5118,9 +5139,11 @@ parse_mode_enc(const char *estr, rb_encoding **enc_p, rb_encoding **enc2_p, int 
 	    fmode |= FMODE_SETENC_BY_BOM;
 	    estr += 4;
             len -= 4;
-	    memcpy(encname, estr, len);
-	    encname[len] = '\0';
-	    estr = encname;
+	    if (len > 0 && len <= ENCODING_MAXNAMELEN) {
+		memcpy(encname, estr, len);
+		encname[len] = '\0';
+		estr = encname;
+	    }
 	}
 	idx = rb_enc_find_index(estr);
     }
@@ -7920,9 +7943,11 @@ argf_next_argv(VALUE argf)
     if (ARGF.next_p == 1) {
       retry:
 	if (RARRAY_LEN(ARGF.argv) > 0) {
-	    ARGF.filename = rb_str_encode_ospath(rb_ary_shift(ARGF.argv));
-	    fn = StringValueCStr(ARGF.filename);
-	    if (strlen(fn) == 1 && fn[0] == '-') {
+	    VALUE filename = rb_ary_shift(ARGF.argv);
+	    StringValueCStr(filename);
+	    ARGF.filename = rb_str_encode_ospath(filename);
+	    fn = StringValueCStr(filename);
+	    if (RSTRING_LEN(filename) == 1 && fn[0] == '-') {
 		ARGF.current_file = rb_stdin;
 		if (ARGF.inplace) {
 		    rb_warn("Can't do inplace edit for stdio; skipping");
@@ -7931,7 +7956,7 @@ argf_next_argv(VALUE argf)
 	    }
 	    else {
 		VALUE write_io = Qnil;
-		int fr = rb_sysopen(ARGF.filename, O_RDONLY, 0);
+		int fr = rb_sysopen(filename, O_RDONLY, 0);
 
 		if (ARGF.inplace) {
 		    struct stat st;
@@ -7945,7 +7970,7 @@ argf_next_argv(VALUE argf)
 			rb_io_close(rb_stdout);
 		    }
 		    fstat(fr, &st);
-		    str = ARGF.filename;
+		    str = filename;
 		    if (*ARGF.inplace) {
 			str = rb_str_dup(str);
 			rb_str_cat2(str, ARGF.inplace);
@@ -7955,14 +7980,14 @@ argf_next_argv(VALUE argf)
 			(void)unlink(RSTRING_PTR(str));
 			if (rename(fn, RSTRING_PTR(str)) < 0) {
 			    rb_warn("Can't rename %"PRIsVALUE" to %"PRIsVALUE": %s, skipping file",
-				    ARGF.filename, str, strerror(errno));
+				    filename, str, strerror(errno));
 			    goto retry;
 			}
 			fr = rb_sysopen(str, O_RDONLY, 0);
 #else
 			if (rename(fn, RSTRING_PTR(str)) < 0) {
 			    rb_warn("Can't rename %"PRIsVALUE" to %"PRIsVALUE": %s, skipping file",
-				    ARGF.filename, str, strerror(errno));
+				    filename, str, strerror(errno));
 			    close(fr);
 			    goto retry;
 			}
@@ -7974,13 +7999,13 @@ argf_next_argv(VALUE argf)
 #else
 			if (unlink(fn) < 0) {
 			    rb_warn("Can't remove %"PRIsVALUE": %s, skipping file",
-				    ARGF.filename, strerror(errno));
+				    filename, strerror(errno));
 			    close(fr);
 			    goto retry;
 			}
 #endif
 		    }
-		    fw = rb_sysopen(ARGF.filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+		    fw = rb_sysopen(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
 #ifndef NO_SAFE_RENAME
 		    fstat(fw, &st2);
 #ifdef HAVE_FCHMOD
@@ -7996,9 +8021,9 @@ argf_next_argv(VALUE argf)
 			err = chown(fn, st.st_uid, st.st_gid);
 #endif
 			if (err && getuid() == 0 && st2.st_uid == 0) {
-			    const char *wkfn = RSTRING_PTR(ARGF.filename);
+			    const char *wkfn = RSTRING_PTR(filename);
 			    rb_warn("Can't set owner/group of %"PRIsVALUE" to same as %"PRIsVALUE": %s, skipping file",
-				    ARGF.filename, str, strerror(errno));
+				    filename, str, strerror(errno));
 			    (void)close(fr);
 			    (void)close(fw);
 			    (void)unlink(wkfn);
@@ -11160,7 +11185,9 @@ argf_getpartial(int argc, VALUE *argv, VALUE argf, int nonblock)
     }
 
     if (!next_argv()) {
-        rb_str_resize(str, 0);
+	if (!NIL_P(str)) {
+	    rb_str_resize(str, 0);
+	}
         rb_eof_error();
     }
     if (ARGF_GENERIC_INPUT_P()) {

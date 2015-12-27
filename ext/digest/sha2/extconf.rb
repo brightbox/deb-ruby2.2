@@ -1,11 +1,10 @@
 # -*- coding: us-ascii -*-
 # $RoughId: extconf.rb,v 1.4 2001/08/14 19:54:51 knu Exp $
-# $Id: extconf.rb 47802 2014-10-05 02:03:55Z nobu $
+# $Id: extconf.rb 52739 2015-11-24 15:28:43Z nagachika $
 
 require "mkmf"
 
 $defs << "-DHAVE_CONFIG_H"
-$INCFLAGS << " -I$(srcdir)/.."
 
 $objs = [ "sha2init.#{$OBJEXT}" ]
 
@@ -27,6 +26,4 @@ have_header("sys/cdefs.h")
 
 $preload = %w[digest]
 
-if have_type("uint64_t", "defs.h", $defs.join(' '))
-  create_makefile("digest/sha2")
-end
+create_makefile("digest/sha2")

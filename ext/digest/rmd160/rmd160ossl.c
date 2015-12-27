@@ -1,6 +1,6 @@
-/* $Id: rmd160ossl.c 25189 2009-10-02 12:04:37Z akr $ */
+/* $Id: rmd160ossl.c 52743 2015-11-24 16:09:58Z nagachika $ */
 
-#include "defs.h"
+#include "../defs.h"
 #include "rmd160ossl.h"
 
 void RMD160_Finish(RMD160_CTX *ctx, char *buf) {

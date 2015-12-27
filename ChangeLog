@@ -1,3 +1,389 @@
+Wed Dec 16 21:10:19 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* ext/fiddle/handle.c: check tainted string arguments.
+	  Patch provided by tenderlove and nobu.
+
+	* test/fiddle/test_handle.rb (class TestHandle): add test for above.
+
+
+Wed Dec 16 02:38:19 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* io.c (parse_mode_enc): fix buffer overflow.
+
+Sat Dec 12 17:19:27 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* doc/NEWS-0.2.2: add description about incompatible change in Hash
+	  duplicated key overriding policy. [Bug #10315] [Bug #11501]
+
+Fri Dec 11 22:41:15 2015  Eric Wong  <e@80x24.org>
+
+	* insns.def (opt_case_dispatch): avoid converting Infinity
+	* test/ruby/test_optimization.rb (test_opt_case_dispatch_inf): new
+	  [ruby-dev:49423] [Bug #11804]'
+
+Thu Dec 10 00:23:07 2015  Rei Odaira  <Rei.Odaira@gmail.com>
+
+	* configure.in: pthread_getattr_np is broken on AIX.
+	  More specifically, the stack address and size returned are
+	  not correct.
+
+Thu Dec 10 00:19:18 2015  NAKAMURA Usaku  <usa@ruby-lang.org>
+
+	* common.mk (update-gems): use BASERUBY instead of RUNRUBY.
+
+Wed Dec  9 01:49:13 2015  Eric Wong  <e@80x24.org>
+
+	* insns.def (opt_case_dispatch): check Float#=== redefinition
+	* test/ruby/test_optimization.rb (test_opt_case_dispatch): new
+	  [ruby-core:71920] [Bug #11784]
+
+Wed Dec  9 01:46:23 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* ruby_atomic.h (ATOMIC_SIZE_CAS): fix the argument order of
+	  InterlockedCompareExchange64.  new value and then old value is
+	  the last.
+
+Wed Dec  9 01:28:54 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* encoding.c (enc_m_loader): defer finding encoding object not to
+	  be infected by marshal source.  [ruby-core:71793] [Bug #11760]
+
+	* marshal.c (r_object0): enable compatible loader on USERDEF
+	  class.  the loader function is called with the class itself,
+	  instead of an allocated object, and the loaded data.
+
+	* marshal.c (compat_allocator_table): initialize
+	  compat_allocator_tbl on demand.
+
+	* object.c (rb_undefined_alloc): extract from rb_obj_alloc.
+
+Wed Dec  9 01:24:57 2015  Rei Odaira  <Rei.Odaira@gmail.com>
+
+	* ext/-test-/file/fs.c: need to include sys/statvfs.h
+	  to use statvfs().
+
+	* ext/-test-/file/extconf.rb: check the existence of
+	  sys/statvfs.h
+
+Fri Dec  4 04:46:33 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* sprintf.c (rb_str_format): fix wrong shifting position in
+	  Rational conversion when not at the beginning of the result.
+	  [ruby-core:71806] [Bug #11766]
+
+Fri Dec  4 02:42:37 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* range.c (range_to_s): should be infected by the receiver.
+	  str2 infects by appending.  [ruby-core:71811] [Bug #11767]
+
+Wed Dec  2 03:17:01 2015  NARUSE, Yui  <naruse@ruby-lang.org>
+
+	* ext/readline/extconf.rb: call dir_config("libedit")
+	  if --enable-libedit is spcified. [Bug #11751]
+	  patched by John Hein
+
+Wed Dec  2 02:59:42 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (parser_here_document): store dispatched result of
+	  on_tstring_content at the last fragment of a here document.
+
+Tue Dec  1 02:52:17 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* test/ruby/test_gc.rb: merge partially r52391 to get rid of CI error.
+
+Tue Dec  1 02:27:41 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* io.c (rb_io_each_codepoint): raise an exception at incomplete
+	  character before EOF when conversion takes place.  [Bug #11444]
+
+Sun Nov 29 18:02:44 2015  Shugo Maeda  <shugo@ruby-lang.org>
+
+	* io.c (argf_getpartial): should not resize str if the second
+	  argument is not given.
+	  [ruby-core:71668] [Bug #11738]
+
+Sun Nov 29 17:48:39 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* vm_eval.c (local_var_list_add): skip internal local variable
+	  name by its type but not if it has a name.  internal local
+	  variable names are just unique per frame, not globally.
+	  [ruby-core:71437] [Bug #11674]
+
+Sun Nov 29 17:13:16 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* io.c (rb_io_each_codepoint): read more data when read partially.
+	  [ruby-core:70379] [Bug #11444]
+
+Sun Nov 29 16:46:25 2015  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* lib/net/http.rb: set hostname before call ossl_ssl_set_session.
+	  [Bug #11401][ruby-core:70152][fix GH-964] Patch by @mkarnebeek
+
+Sun Nov 29 16:33:30 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* transcode.c (rb_econv_open0): rb_econv_t::source_encoding_name
+	  and rb_econv_t::destination_encoding_name should refer static
+	  strings always or NULL.  [ruby-core:70247] [Bug #11416]
+
+Sun Nov 29 16:11:32 2015  Eric Wong  <e@80x24.org>
+
+	* iseq.c (iseq_data_to_ary): dump kw_arg as symbol
+	* test/-ext-/iseq_load/test_iseq_load.rb: test kw_arg roundtrip
+	  [ruby-core:69891] [Bug #11338]
+
+Sun Nov 29 02:55:56 2015  Kazuhiro NISHIYAMA  <zn@mbf.nifty.com>
+
+	* gc.c (__has_feature): move into internal.h.
+
+	* internal.h (__has_feature): ditto.
+
+	* internal.h (__has_extension): new macro.
+
+	* internal.h (STATIC_ASSERT): use _Static_assert with
+	  clang. [ruby-core:69931] [Bug #11343]
+
+Sat Nov 28 06:28:55 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (literal_concat_gen, evstr2dstr_gen): keep literal
+	  encoding beginning with an interpolation same as the source file
+	  encoding.  [ruby-core:70703] [Bug #11519]
+
+Sat Nov 28 06:12:32 2015  NARUSE, Yui  <naruse@ruby-lang.org>
+
+	* ext/openssl/ossl_ssl.c (ssl_npn_select_cb): explicitly raise error
+	  in ext/openssl instead of OpenSSL itself because LibreSSL
+	  silently truncate the selected protocol name by casting the length
+	  from int to unsigned char. [Bug #11369]
+	  Patch by Jeremy Evans <merch-redmine@jeremyevans.net>
+
+Sat Nov 28 05:50:58 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* vm_eval.c (send_internal): set method_missing_reason before
+	  invoking overriding method_missing method so that the default
+	  method_missing can achieve it properly.
+	  [ruby-core:68515] [Bug #10969]
+
+Sat Nov 28 05:47:27 2015  Rei Odaira  <Rei.Odaira@gmail.com>
+
+	* test/ruby/test_symbol.rb (test_symbol_fstr_leak): add a warm-up
+	  code and check RSS to avoid false positive on AIX and false
+	  negative on Mac OS X. [Bug #10686]
+
+Sat Nov 28 05:47:27 2015  Rei Odaira  <Rei.Odaira@gmail.com>
+
+	* test/ruby/test_symbol.rb: avoid a false positive in AIX.
+
+Sat Nov 28 05:35:28 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* test/objspace/test_objspace.rb
+	  (test_trace_object_allocations_start_stop_clear): clear object
+	  allocation table first to get rid of erroneous detection for obj3.
+	  [ruby-dev:49095] [Bug #11271]
+
+Sat Nov 28 05:21:06 2015  Koichi Sasada  <ko1@atdot.net>
+
+	* insns.def (defined): skip respond_to_missing? when
+	  a method is available.
+	  [Bug #11211]
+
+	* test/ruby/test_defined.rb: add a test for this fix.
+
+Wed Nov 25 01:05:29 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* ext/digest/sha1/sha1ossl.c: fix defs.h path to catch up changes in
+	  r52739.[Bug #3231]
+
+	* ext/digest/rmd160/rmd160ossl.c: ditto.
+
+Wed Nov 25 00:54:15 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (kwd_append): fix segv after invalid keyword argument,
+	  preceding keyword list is NULL when syntax error is there.
+	  [ruby-core:71356] [Bug #11663]
+
+Wed Nov 25 00:47:07 2015  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* lib/ipaddr.rb, test/test_ipaddr.rb: Reject invalid address contained
+	  EOL string. Patch by @kachick [fix GH-942][Bug #11513]
+
+Wed Nov 25 00:32:44 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* compile.c (iseq_build_from_ary_body): register cdhash to the
+	  iseq constant body instead of compile time mark array, not to
+	  get GCed.  [ruby-core:70708] [Feature #8543]
+
+Wed Nov 25 00:14:28 2015  NARUSE, Yui  <naruse@ruby-lang.org>
+
+	* ext/digest/*/*.[ch]: include ruby.h before digest.h to avoid
+	  includeing ext/digest/extconf.h. [Bug #3231]
+	  https://msdn.microsoft.com/library/36k2cdd4.aspx
+
+	* ext/digest/*/extconf.rb: remove ext/digest from include search path
+	  to avoid confusion of cl.exe.
+
+	* ext/digest/*/*.[ch]: explicitly specify def.h's path.
+
+Wed Nov 25 00:03:42 2015  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* Added missing reference of GitHub
+
+Wed Nov 25 00:03:42 2015  Trevor Rowe  <trevorrowe@gmail.com>
+
+	* lib/net/http.rb: Fixed regression for Net::HTTP::PUT with "Expect-100"
+	  header. [fix GH-949]
+	* test/net/http/test_http.rb: added test.
+
+Mon Nov 23 00:19:51 2015  Koichi Sasada  <ko1@atdot.net>
+
+	* vm_insnhelper.c (vm_invoke_block): we should not expect ci->argc is
+	  stable after invoking a block. [Bug #11451]
+
+	* test/ruby/test_yield.rb: add a test. This test script is given by
+	  Alex Dowad.
+
+Thu Nov 19 01:06:07 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* load.c (rb_load_internal0): stop separating exits at loading
+	  from exits from execution.  TAG_FATAL is the only case that
+	  `errinfo` is a Fixnum, and should continue to exit by JUMP_TAG
+	  but not raising as an ordinary exception.
+	  [ruby-core:70169] [Bug #11404]
+
+Thu Nov 19 01:06:07 2015  Alex Dowad  <alexinbeijing@gmail.com>
+
+	* load.c (rb_load_internal0): extra check before returning
+	  TAG_RAISE when a non-local transfer of control happens while
+	  loading and parsing a Ruby source file.
+	  [ruby-core:70169] [Bug #11404]
+
+Thu Nov 19 01:06:07 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* load.c (rb_load_internal0): do not raise any exceptions but
+	  return the result tag state.
+
+	* load.c (rb_load_protect): reduce nested EXEC_TAGs.
+
+Thu Nov 19 00:41:09 2015  NARUSE, Yui  <naruse@ruby-lang.org>
+
+	* enc/euc_jp.c (mbc_case_fold): check given string is valid or not,
+	  and if invalid, return 1. [Bug #11486]
+
+Thu Nov 19 00:15:23 2015  Zachary Scott  <zzak@ruby-lang.org>
+
+	* ext/openssl/ossl_pkey.c: Merge ruby/openssl@b9ea8ef [Bug #10735]
+
+Thu Nov 19 00:01:14 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* io.c (argf_next_argv): check ARGV element type, and try
+	  conversion if necessary.  [ruby-core:71140] [Bug #11610]
+
+Wed Nov 18 23:29:32 2015  Aaron Patterson <tenderlove@ruby-lang.org>
+
+	* ext/openssl/ossl_ssl.c (ossl_ssl_method_tab): Only add SSLv3 support
+	  if the SSL library supports it.  Thanks Kurt Roeckx <kurt@roeckx.be>
+	  [Bug #11376]
+
+	* ext/openssl/extconf.rb: check for SSLv3 support in the SSL
+	  implementation.
+
+	* test/openssl/test_ssl.rb (class OpenSSL): Skip tests that need SSLv3
+	  if there is no support.
+
+Mon Nov 16 03:39:59 2015  CHIKANAGA Tomoyuki  <nagachika@ruby-lang.org>
+
+	* tool/runruby.rb: rubyspec now requires other FDs not to be closed
+	  since 7b6ce1fee.
+
+Sun Nov  8 23:30:56 2015  Koichi Sasada  <ko1@atdot.net>
+
+	* vm_trace.c (rb_threadptr_exec_event_hooks_orig):
+	  maintain trace_running counter on internal events.
+
+	  This patch is made by Takashi Kokubun <takashikkbn@gmail.com>.
+	  [Bug #11603] https://github.com/ruby/ruby/pull/1059
+
+Sun Nov  1 03:52:41 2015  Aaron Patterson <tenderlove@ruby-lang.org>
+
+	* test/openssl/test_ssl_session.rb: Fix tests so that they take in to
+	  account OpenSSL installations that have SSLv3 disabled by default.
+	  Thanks Jeremy Evans <code@jeremyevans.net> for the patches.
+	  [Bug #11366] [Bug #11367]
+
+Sun Nov  1 03:40:43 2015  SHIBATA Hiroshi  <shibata.hiroshi@gmail.com>
+
+	* test/openssl/test_ssl_session.rb (OpenSSL#test_ctx_client_session_cb):
+	  fix test failure with OpenSSL disabled SSLv3 protocol.
+	  [ruby-core:63772] [Bug #10046]
+
+Tue Oct 27 23:58:32 2015  Koichi Sasada  <ko1@atdot.net>
+
+	* vm.c (hook_before_rewind): prevent kicking :return event while
+	  finishing vm_exec func because invoke_block_from_c() kick a :return
+	  event for bmethods.
+	  [Bug #11492]
+
+	* test/ruby/test_settracefunc.rb: add a test.
+
+Tue Oct 27 23:38:26 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* configure.in: check for libunwind.h, which is not available in
+	  very old OS X SDK.  [ruby-core:71080] [Bug #11591]
+
+Tue Oct 27 23:32:51 2015  Masatoshi SEKI  <m_seki@mva.biglobe.ne.jp>
+
+	* test/drb/test_drb.rb: Run Rinda/DRb tests on localhost. [Fix GH-1027]
+	  patch by voxik.
+
+	* test/rinda/test_rinda.rb: ditto
+
+Tue Oct  6 01:29:02 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y (IS_BEG): include labeled argument state, which was
+	  EXPR_LABELARG.  [ruby-dev:49221] [Bug #11456]
+
+Tue Oct  6 01:29:02 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* parse.y: fix syntax error at do-block after a conditional
+	  operator.  separate label-allowed and after-a-label states from
+	  others as bit flags.  [ruby-dev:48790] [Bug #10653]
+
+Mon Oct  5 03:29:23 2015  Tanaka Akira  <akr@fsij.org>
+
+	* enum.c (nmin_filter): Fix limit value.
+	  patch by Helder Pereira.
+	  [Bug #11471] [ruby-core:70477]
+
+Wed Sep 30 03:44:36 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* lib/rss/rss.rb (Time#w3cdtf): fix zero-trimmed width of fraction
+	  digits.  [ruby-core:70667] [Bug #11509]
+
+Wed Sep 30 03:34:25 2015  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	* re.c (rb_memsearch_wchar, rb_memsearch_qchar): test matching
+	  till the end of string.  [ruby-core:70592] [Bug #11488]
+
+	* test/ruby/test_m17n.rb (test_include?, test_index): add tests by
+	  Tom Stuart.
+
+Wed Sep 30 03:24:29 2015  NARUSE, Yui  <naruse@ruby-lang.org>
+
+	* thread_pthread.c (reserve_stack): ensure the memory is really
+	  allocated. [Bug #11457]
+
+Tue Aug 25 01:01:01 2015  Koichi Sasada <ko1@atdot.net>
+
+	* insns.def (defineclass): introduce an ad-hoc patch to avoid
+	  an issue reported on [Bug #10871].
+
+	  This patch does not fix completely. For example, method definition
+	  in a block (like 1.times{def ...; end}) still causes same issue.
+	  To solve all, we need a huge patch and it seems difficult for
+	  stable branch.
+
+	  Use Ruby 2.3 and later to solve this issue completely.
+	  (See [Bug #10943])
+
 Tue Aug 18 22:52:50 2015  NAKAMURA Usaku  <usa@ruby-lang.org>
 
 	* tool/downloader.rb: support old versions of ruby.
