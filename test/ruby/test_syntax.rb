@@ -326,6 +326,27 @@ WARN
     assert_valid_syntax("{foo: /=/}", bug11456)
   end
 
+  def test_percent_string_after_label
+    bug11812 = '[ruby-core:72084]'
+    assert_valid_syntax('{label:%w(*)}', bug11812)
+    assert_valid_syntax('{label: %w(*)}', bug11812)
+  end
+
+  def test_heredoc_after_label
+    bug11849 = '[ruby-core:72396] [Bug #11849]'
+    assert_valid_syntax("{label:<<DOC\n""DOC\n""}", bug11849)
+    assert_valid_syntax("{label:<<-DOC\n""DOC\n""}", bug11849)
+    assert_valid_syntax("{label: <<DOC\n""DOC\n""}", bug11849)
+    assert_valid_syntax("{label: <<-DOC\n""DOC\n""}", bug11849)
+  end
+
+  def test_cmdarg_kwarg_lvar_clashing_method
+    bug12073 = '[ruby-core:73816] [Bug#12073]'
+    a = 1
+    assert_valid_syntax("a b: 1")
+    assert_valid_syntax("a = 1; a b: 1", bug12073)
+  end
+
   def test_duplicated_arg
     assert_syntax_error("def foo(a, a) end", /duplicated argument name/)
     assert_nothing_raised { def foo(_, _) end }
@@ -610,6 +631,30 @@ eom
     bug11192 = '[ruby-core:69393] [Bug #11192]'
     assert_warn(/too big/, bug11192) do
       eval('$99999999999999999')
+    end
+  end
+
+  def test_alias_symbol
+    bug8851 = '[ruby-dev:47681] [Bug #8851]'
+    formats = ['%s', ":'%s'", ':"%s"', '%%s(%s)']
+    all_assertions(bug8851) do |all|
+      formats.product(formats) do |form1, form2|
+        all.for(code = "alias #{form1 % 'a'} #{form2 % 'p'}") do
+          assert_valid_syntax(code)
+        end
+      end
+    end
+  end
+
+  def test_undef_symbol
+    bug8851 = '[ruby-dev:47681] [Bug #8851]'
+    formats = ['%s', ":'%s'", ':"%s"', '%%s(%s)']
+    all_assertions(bug8851) do |all|
+      formats.product(formats) do |form1, form2|
+        all.for(code = "undef #{form1 % 'a'}, #{form2 % 'p'}") do
+          assert_valid_syntax(code)
+        end
+      end
     end
   end
 

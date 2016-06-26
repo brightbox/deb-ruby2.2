@@ -5,7 +5,7 @@
 # License::
 #   You can redistribute it and/or modify it under the same terms of Ruby's
 #   license; either the dual license version in 2003, or any later version.
-# Revision:: $Id: logger.rb 47272 2014-08-25 04:03:33Z nobu $
+# Revision:: $Id: logger.rb 54072 2016-03-09 15:25:13Z nagachika $
 #
 # A simple system for logging messages.  See Logger for more documentation.
 
@@ -201,7 +201,7 @@ require 'monitor'
 #
 class Logger
   VERSION = "1.2.7"
-  _, name, rev = %w$Id: logger.rb 47272 2014-08-25 04:03:33Z nobu $
+  _, name, rev = %w$Id: logger.rb 54072 2016-03-09 15:25:13Z nagachika $
   if name
     name = name.chomp(",v")
   else
@@ -361,7 +361,7 @@ class Logger
   # * Append open does not need to lock file.
   # * If the OS supports multi I/O, records possibly may be mixed.
   #
-  def add(severity, message = nil, progname = nil, &block)
+  def add(severity, message = nil, progname = nil)
     severity ||= UNKNOWN
     if @logdev.nil? or severity < @level
       return true

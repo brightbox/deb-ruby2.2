@@ -2235,7 +2235,7 @@ INSN_ENTRY(opt_mod){
 	    long div, mod;
 
 	    if (y == 0)
-		rb_num_zerodiv();
+		goto INSN_LABEL(normal_dispatch);
 	    if (y < 0) {
 		if (x < 0)
 		    div = -x / -y;

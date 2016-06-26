@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: mailto.rb 48516 2014-11-20 15:19:17Z usa $
+# Revision:: $Id: mailto.rb 54341 2016-03-28 17:23:34Z nagachika $
 #
 # See URI for general documentation
 #
@@ -135,6 +135,10 @@ module URI
       @to = nil
       @headers = []
 
+      unless @opaque
+        raise InvalidComponentError,
+          "missing opaque part for mailto URL"
+      end
       to, header = @opaque.split('?', 2)
       # allow semicolon as a addr-spec separator
       # http://support.microsoft.com/kb/820868

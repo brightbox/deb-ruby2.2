@@ -2,7 +2,7 @@
 
   compile.c - ruby node tree -> VM instruction sequence
 
-  $Author: nagachika $
+  $Author: usa $
   created at: 04/01/01 03:42:15 JST
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -41,6 +41,13 @@ typedef struct iseq_link_anchor {
     LINK_ELEMENT *last;
 } LINK_ANCHOR;
 
+typedef enum {
+    LABEL_RESCUE_NONE,
+    LABEL_RESCUE_BEG,
+    LABEL_RESCUE_END,
+    LABEL_RESCUE_TYPE_MAX
+} LABEL_RESCUE_TYPE;
+
 typedef struct iseq_label_data {
     LINK_ELEMENT link;
     int label_no;
@@ -48,6 +55,7 @@ typedef struct iseq_label_data {
     int sc_state;
     int set;
     int sp;
+    unsigned int rescued: 2;
 } LABEL;
 
 typedef struct iseq_insn_data {
@@ -187,9 +195,18 @@ r_value(VALUE value)
 #define ADD_INSN(seq, line, insn) \
   ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_body(iseq, (line), BIN(insn), 0))
 
+/* insert an instruction before prev */
+#define INSERT_BEFORE_INSN(prev, line, insn) \
+  INSERT_ELEM_PREV(&(prev)->link, (LINK_ELEMENT *) new_insn_body(iseq, (line), BIN(insn), 0))
+
 /* add an instruction with some operands (1, 2, 3, 5) */
 #define ADD_INSN1(seq, line, insn, op1) \
   ADD_ELEM((seq), (LINK_ELEMENT *) \
+           new_insn_body(iseq, (line), BIN(insn), 1, (VALUE)(op1)))
+
+/* insert an instruction with some operands (1, 2, 3, 5) before prev */
+#define INSERT_BEFORE_INSN1(prev, line, insn, op1) \
+  INSERT_ELEM_PREV(&(prev)->link, (LINK_ELEMENT *) \
            new_insn_body(iseq, (line), BIN(insn), 1, (VALUE)(op1)))
 
 /* add an instruction with label operand (alias of ADD_INSN1) */
@@ -488,6 +505,9 @@ rb_iseq_compile_node(VALUE self, NODE *node)
 		LABEL *start = iseq->compile_data->start_label = NEW_LABEL(0);
 		LABEL *end = iseq->compile_data->end_label = NEW_LABEL(0);
 
+		start->rescued = LABEL_RESCUE_BEG;
+		end->rescued = LABEL_RESCUE_END;
+
 		ADD_TRACE(ret, FIX2INT(iseq->location.first_lineno), RUBY_EVENT_B_CALL);
 		ADD_LABEL(ret, start);
 		COMPILE(ret, "block body", node->nd_body);
@@ -737,6 +757,20 @@ compile_data_alloc_adjust(rb_iseq_t *iseq)
 }
 
 /*
+ * elem1, elemX => elemX, elem2, elem1
+ */
+static void
+INSERT_ELEM_PREV(LINK_ELEMENT *elem1, LINK_ELEMENT *elem2)
+{
+    elem2->prev = elem1->prev;
+    elem2->next = elem1;
+    elem1->prev = elem2;
+    if (elem2->prev) {
+	elem2->prev->next = elem2;
+    }
+}
+
+/*
  * elem1, elemX => elem1, elem2, elemX
  */
 static void
@@ -779,6 +813,12 @@ static LINK_ELEMENT *
 FIRST_ELEMENT(LINK_ANCHOR *anchor)
 {
     return anchor->anchor.next;
+}
+
+static LINK_ELEMENT *
+LAST_ELEMENT(LINK_ANCHOR *anchor)
+{
+    return anchor->last;
 }
 
 static LINK_ELEMENT *
@@ -2009,26 +2049,54 @@ iseq_specialized_instruction(rb_iseq_t *iseq, INSN *iobj)
     return COMPILE_OK;
 }
 
+static inline int
+tailcallable_p(rb_iseq_t *iseq)
+{
+    switch (iseq->type) {
+      case ISEQ_TYPE_RESCUE:
+      case ISEQ_TYPE_ENSURE:
+	/* rescue block can't tail call because of errinfo */
+	return FALSE;
+      default:
+	return TRUE;
+    }
+}
+
 static int
 iseq_optimize(rb_iseq_t *iseq, LINK_ANCHOR *anchor)
 {
     LINK_ELEMENT *list;
     const int do_peepholeopt = iseq->compile_data->option->peephole_optimization;
-    const int do_tailcallopt = iseq->compile_data->option->tailcall_optimization;
+    const int do_tailcallopt = tailcallable_p(iseq) &&
+	iseq->compile_data->option->tailcall_optimization;
     const int do_si = iseq->compile_data->option->specialized_instruction;
     const int do_ou = iseq->compile_data->option->operands_unification;
+    int rescue_level = 0;
+    int tailcallopt = do_tailcallopt;
+
     list = FIRST_ELEMENT(anchor);
 
     while (list) {
 	if (list->type == ISEQ_ELEMENT_INSN) {
 	    if (do_peepholeopt) {
-		iseq_peephole_optimize(iseq, list, do_tailcallopt);
+		iseq_peephole_optimize(iseq, list, tailcallopt);
 	    }
 	    if (do_si) {
 		iseq_specialized_instruction(iseq, (INSN *)list);
 	    }
 	    if (do_ou) {
 		insn_operands_unification((INSN *)list);
+	    }
+	}
+	if (list->type == ISEQ_ELEMENT_LABEL) {
+	    switch (((LABEL *)list)->rescued) {
+	      case LABEL_RESCUE_BEG:
+		rescue_level++;
+		tailcallopt = FALSE;
+		break;
+	      case LABEL_RESCUE_END:
+		if (!--rescue_level) tailcallopt = do_tailcallopt;
+		break;
 	    }
 	}
 	list = list->next;
@@ -2663,19 +2731,22 @@ compile_massign_lhs(rb_iseq_t *iseq, LINK_ANCHOR *ret, NODE *node)
 	INSN *iobj;
 	rb_call_info_t *ci;
 	VALUE dupidx;
+	int line = nd_line(node);
 
 	COMPILE_POPED(ret, "masgn lhs (NODE_ATTRASGN)", node);
 
-	POP_ELEMENT(ret);        /* pop pop insn */
-	iobj = (INSN *)POP_ELEMENT(ret); /* pop send insn */
+	iobj = (INSN *)get_prev_insn((INSN *)LAST_ELEMENT(ret)); /* send insn */
 	ci = (rb_call_info_t *)iobj->operands[0];
-	ci->orig_argc += 1; ci->argc = ci->orig_argc;
+	ci->orig_argc += 1;
 	dupidx = INT2FIX(ci->orig_argc);
 
-	ADD_INSN1(ret, nd_line(node), topn, dupidx);
-	ADD_ELEM(ret, (LINK_ELEMENT *)iobj);
-	ADD_INSN(ret, nd_line(node), pop);	/* result */
-	ADD_INSN(ret, nd_line(node), pop);	/* rhs    */
+	INSERT_BEFORE_INSN1(iobj, line, topn, dupidx);
+	if (ci->flag & VM_CALL_ARGS_SPLAT) {
+	    --ci->orig_argc;
+	    INSERT_BEFORE_INSN1(iobj, line, newarray, INT2FIX(1));
+	    INSERT_BEFORE_INSN(iobj, line, concatarray);
+	}
+	ADD_INSN(ret, line, pop);	/* result */
 	break;
       }
       case NODE_MASGN: {
@@ -3076,6 +3147,8 @@ defined_expr(rb_iseq_t *iseq, LINK_ANCHOR *ret,
 						       ("defined guard in "),
 						       iseq->location.label),
 					 ISEQ_TYPE_DEFINED_GUARD, 0);
+	lstart->rescued = LABEL_RESCUE_BEG;
+	lend->rescued = LABEL_RESCUE_END;
 	APPEND_LABEL(ret, lcur, lstart);
 	ADD_LABEL(ret, lend);
 	ADD_CATCH_ENTRY(CATCH_TYPE_RESCUE, lstart, lend, rescue, lfinish[1]);
@@ -3846,6 +3919,8 @@ iseq_compile_each(rb_iseq_t *iseq, LINK_ANCHOR *ret, NODE * node, int poped)
 	    rb_str_concat(rb_str_new2("rescue in "), iseq->location.label),
 	    ISEQ_TYPE_RESCUE, line);
 
+	lstart->rescued = LABEL_RESCUE_BEG;
+	lend->rescued = LABEL_RESCUE_END;
 	ADD_LABEL(ret, lstart);
 	COMPILE(ret, "rescue head", node->nd_head);
 	ADD_LABEL(ret, lend);

@@ -137,7 +137,7 @@ struct rb_fiber_struct {
      * then this fiber can't "resume" any more after that.
      * You shouldn't mix "transfer" and "resume".
      */
-    int transfered;
+    int transferred;
 
 #if FIBER_USE_NATIVE
 #ifdef _WIN32
@@ -1093,7 +1093,7 @@ rb_cont_call(int argc, VALUE *argv, VALUE contval)
  *  comes with a small 4KB stack. This enables the fiber to be paused from deeply
  *  nested function calls within the fiber block.
  *
- *  When a fiber is created it will not run automatically. Rather it must be
+ *  When a fiber is created it will not run automatically. Rather it must
  *  be explicitly asked to run using the <code>Fiber#resume</code> method.
  *  The code running inside the fiber can give up control by calling
  *  <code>Fiber.yield</code> in which case it yields control back to caller
@@ -1486,7 +1486,7 @@ rb_fiber_resume(VALUE fibval, int argc, const VALUE *argv)
     if (fib->prev != 0 || fib->cont.type == ROOT_FIBER_CONTEXT) {
 	rb_raise(rb_eFiberError, "double resume");
     }
-    if (fib->transfered != 0) {
+    if (fib->transferred != 0) {
 	rb_raise(rb_eFiberError, "cannot resume transferred Fiber");
     }
 
@@ -1598,7 +1598,7 @@ rb_fiber_m_transfer(int argc, VALUE *argv, VALUE fibval)
 {
     rb_fiber_t *fib;
     GetFiberPtr(fibval, fib);
-    fib->transfered = 1;
+    fib->transferred = 1;
     return fiber_switch(fib, argc, argv, 0);
 }
 

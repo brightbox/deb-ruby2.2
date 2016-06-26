@@ -301,11 +301,16 @@ static VALUE
 sockopt_bool(VALUE self)
 {
     int i;
+    long len;
     VALUE data = sockopt_data(self);
     StringValue(data);
-    if (RSTRING_LEN(data) != sizeof(int))
+    len = RSTRING_LEN(data);
+    if (len == 1) {
+        return *RSTRING_PTR(data) == 0 ? Qfalse : Qtrue;
+    }
+    if (len != sizeof(int))
         rb_raise(rb_eTypeError, "size differ.  expected as sizeof(int)=%d but %ld",
-                 (int)sizeof(int), (long)RSTRING_LEN(data));
+                 (int)sizeof(int), (long)len);
     memcpy((char*)&i, RSTRING_PTR(data), sizeof(int));
     return i == 0 ? Qfalse : Qtrue;
 }
@@ -928,7 +933,12 @@ inspect_tcpi_usec(VALUE ret, const char *prefix, uint32_t t)
     rb_str_catf(ret, "%s%u.%06us", prefix, t / 1000000, t % 1000000);
 }
 
-#if defined(__linux__) || defined(__sun)
+#if !defined __FreeBSD__ && ( \
+    defined HAVE_STRUCT_TCP_INFO_TCPI_LAST_DATA_SENT || \
+    defined HAVE_STRUCT_TCP_INFO_TCPI_LAST_DATA_RECV || \
+    defined HAVE_STRUCT_TCP_INFO_TCPI_LAST_ACK_SENT  || \
+    defined HAVE_STRUCT_TCP_INFO_TCPI_LAST_ACK_RECV  || \
+    0)
 static void
 inspect_tcpi_msec(VALUE ret, const char *prefix, uint32_t t)
 {

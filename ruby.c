@@ -2,7 +2,7 @@
 
   ruby.c -
 
-  $Author: nobu $
+  $Author: usa $
   created at: Tue Aug 10 12:47:31 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -338,7 +338,9 @@ translit_char_bin(char *p, int from, int to)
 	p++;
     }
 }
+#endif
 
+#ifdef _WIN32
 # define UTF8_PATH 1
 #endif
 

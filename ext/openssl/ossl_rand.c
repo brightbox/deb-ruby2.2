@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_rand.c 47782 2014-10-04 00:01:07Z zzak $
+ * $Id: ossl_rand.c 54688 2016-04-22 07:37:36Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  *
@@ -148,6 +148,7 @@ ossl_rand_pseudo_bytes(VALUE self, VALUE len)
     return str;
 }
 
+#ifdef HAVE_RAND_EGD
 /*
  *  call-seq:
  *     egd(filename) -> true
@@ -186,6 +187,7 @@ ossl_rand_egd_bytes(VALUE self, VALUE filename, VALUE len)
     }
     return Qtrue;
 }
+#endif /* HAVE_RAND_EGD */
 
 /*
  *  call-seq:
@@ -219,8 +221,10 @@ Init_ossl_rand(void)
     rb_define_module_function(mRandom, "write_random_file", ossl_rand_write_file, 1);
     rb_define_module_function(mRandom, "random_bytes", ossl_rand_bytes, 1);
     rb_define_module_function(mRandom, "pseudo_bytes", ossl_rand_pseudo_bytes, 1);
+#ifdef HAVE_RAND_EGD
     rb_define_module_function(mRandom, "egd", ossl_rand_egd, 1);
     rb_define_module_function(mRandom, "egd_bytes", ossl_rand_egd_bytes, 2);
+#endif /* HAVE_RAND_EGD */
     rb_define_module_function(mRandom, "status?", ossl_rand_status, 0);
 }
 
