@@ -12,7 +12,7 @@
   (See the file 'LICENCE'.)
 
 = Version
-  $Id: extconf.rb 52649 2015-11-18 14:38:49Z nagachika $
+  $Id: extconf.rb 54688 2016-04-22 07:37:36Z usa $
 =end
 
 require "mkmf"
@@ -87,6 +87,7 @@ have_func("HMAC_CTX_init")
 have_func("PEM_def_callback")
 have_func("PKCS5_PBKDF2_HMAC")
 have_func("PKCS5_PBKDF2_HMAC_SHA1")
+have_func("RAND_egd")
 have_func("X509V3_set_nconf")
 have_func("X509V3_EXT_nconf_nid")
 have_func("X509_CRL_add0_revoked")
@@ -112,7 +113,7 @@ have_func("TLSv1_1_client_method")
 have_func("TLSv1_2_method")
 have_func("TLSv1_2_server_method")
 have_func("TLSv1_2_client_method")
-have_macro("OPENSSL_NPN_NEGOTIATED", ['openssl/ssl.h']) && $defs.push("-DHAVE_OPENSSL_NPN_NEGOTIATED")
+have_func("SSL_CTX_set_next_proto_select_cb")
 unless have_func("SSL_set_tlsext_host_name", ['openssl/ssl.h'])
   have_macro("SSL_set_tlsext_host_name", ['openssl/ssl.h']) && $defs.push("-DHAVE_SSL_SET_TLSEXT_HOST_NAME")
 end

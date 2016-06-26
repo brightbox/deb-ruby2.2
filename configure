@@ -8846,6 +8846,10 @@ esac
 		ac_cv_func_isinf=yes
 		ac_cv_func_isnan=yes
 		 ;; #(
+  aix*) :
+    	LIBS="-lm $LIBS"
+		ac_cv_func_round=no
+		 ;; #(
   nacl) :
 
   LIBS="-lm $LIBS"
@@ -19550,6 +19554,66 @@ fi
 $as_echo "$rb_cv_atan2_inf_c99" >&6; }
 if test "x$rb_cv_atan2_inf_c99" = xyes; then :
   $as_echo "#define ATAN2_INF_C99 1" >>confdefs.h
+
+fi
+
+if test "x$ac_cv_func_lgamma_r" = xyes; then :
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether lgamma_r handles -0.0" >&5
+$as_echo_n "checking whether lgamma_r handles -0.0... " >&6; }
+if ${rb_cv_lgamma_r_m0+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+	if test "$cross_compiling" = yes; then :
+  rb_cv_lgamma_r_m0=yes
+
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <math.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
+int
+main(int argc, char **argv)
+{
+    int sign;
+    double x = lgamma_r(-0.0, &sign);
+
+    /* should be [+inf, -1] */
+    if (x <= 0) return EXIT_FAILURE;
+    if (!isinf(x)) return EXIT_FAILURE;
+    if (sign != -1) return EXIT_FAILURE;
+    return EXIT_SUCCESS;
+}
+
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  rb_cv_lgamma_r_m0=yes
+else
+  rb_cv_lgamma_r_m0=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $rb_cv_lgamma_r_m0" >&5
+$as_echo "$rb_cv_lgamma_r_m0" >&6; }
+    if test "x$rb_cv_lgamma_r_m0" = xno; then :
+  $as_echo "#define LGAMMA_R_M0_FIX 1" >>confdefs.h
+
+fi
 
 fi
 

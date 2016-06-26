@@ -2,7 +2,7 @@
 
   math.c -
 
-  $Author: akr $
+  $Author: usa $
   created at: Tue Jan 25 14:12:56 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -773,6 +773,38 @@ math_erfc(VALUE obj, VALUE x)
     Need_Float(x);
     return DBL2NUM(erfc(RFLOAT_VALUE(x)));
 }
+
+#if defined __MINGW32__
+static inline double
+ruby_tgamma(const double d)
+{
+    const double g = tgamma(d);
+    if (isinf(g)) {
+	if (d == 0.0 && signbit(d)) return -INFINITY;
+    }
+    if (isnan(g)) {
+	if (!signbit(d)) return INFINITY;
+    }
+    return g;
+}
+#define tgamma(d) ruby_tgamma(d)
+#endif
+
+#if defined LGAMMA_R_M0_FIX
+static inline double
+ruby_lgamma_r(const double d, int *sign)
+{
+    const double g = lgamma_r(d, sign);
+    if (isinf(g)) {
+	if (d == 0.0 && signbit(d)) {
+	    *sign = -1;
+	    return INFINITY;
+	}
+    }
+    return g;
+}
+#define lgamma_r(d, sign) ruby_lgamma_r(d, sign)
+#endif
 
 /*
  * call-seq:

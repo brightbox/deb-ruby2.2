@@ -60,6 +60,20 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
     }
   end
 
+  def test_ssl_sysread_blocking_error
+    start_server(OpenSSL::SSL::VERIFY_NONE, true) { |server, port|
+      server_connect(port) { |ssl|
+        ssl.write("abc\n")
+        assert_raise(TypeError) { ssl.sysread(4, exception: false) }
+        buf = ''
+        assert_raise(ArgumentError) { ssl.sysread(4, buf, exception: false) }
+        assert_equal '', buf
+        assert_equal buf.object_id, ssl.sysread(4, buf).object_id
+        assert_equal "abc\n", buf
+      }
+    }
+  end
+
   def test_connect_and_close
     start_server(OpenSSL::SSL::VERIFY_NONE, true){|server, port|
       sock = TCPSocket.new("127.0.0.1", port)
@@ -795,7 +809,9 @@ end
     }
   end
 
-if OpenSSL::OPENSSL_VERSION_NUMBER > 0x10001000
+if OpenSSL::OPENSSL_VERSION_NUMBER > 0x10001000 &&
+	OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+  # NPN may be disabled by OpenSSL configure option
 
   def test_npn_protocol_selection_ary
     advertised = ["http/1.1", "spdy/2"]
