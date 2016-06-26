@@ -9,7 +9,6 @@ then
         update-alternatives \
 		--install /usr/bin/ruby ruby /usr/bin/ruby${RUBYVER} 51 \
         --slave /usr/bin/erb erb /usr/bin/erb${RUBYVER} \
-        --slave /usr/bin/testrb testrb /usr/bin/testrb${RUBYVER} \
         --slave /usr/bin/rake rake /usr/bin/rake${RUBYVER} \
         --slave /usr/bin/irb irb /usr/bin/irb${RUBYVER} \
         --slave /usr/bin/rdoc rdoc /usr/bin/rdoc${RUBYVER} \
