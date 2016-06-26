@@ -1,6 +1,7 @@
-ruby2.2 (2.2.5-1bbox1~xenial1) xenial; urgency=medium
+ruby2.2 (2.2.5-1bbox2~xenial1) xenial; urgency=medium
 
   * New upstream release, 2.2.5
+  * Remove testrb binary alternative
 
  -- John Leach <john@brightbox.co.uk>  Sun, 26 Jun 2016 12:07:33 +0100
 
