@@ -8813,7 +8813,7 @@ yyreduce:
 #line 3202 "ripper.y"
     {
 #if 0
-			(yyval.val) = NEW_IF(cond((yyvsp[(2) - (5)].val)), (yyvsp[(4) - (5)].val), (yyvsp[(5) - (5)].val));
+			(yyval.val) = NEW_IF(cond(newline_node((yyvsp[(2) - (5)].val))), (yyvsp[(4) - (5)].val), (yyvsp[(5) - (5)].val));
 			fixpos((yyval.val), (yyvsp[(2) - (5)].val));
 #endif
 			(yyval.val) = dispatch3(elsif, (yyvsp[(2) - (5)].val), (yyvsp[(4) - (5)].val), escape_Qundef((yyvsp[(5) - (5)].val)));
@@ -12090,7 +12090,7 @@ coverage(VALUE fname, int n)
 {
     VALUE coverages = rb_get_coverages();
     if (RTEST(coverages) && RBASIC(coverages)->klass == 0) {
-	VALUE lines = rb_ary_tmp_new_fill(n);
+	VALUE lines = n > 0 ? rb_ary_tmp_new_fill(n) : rb_ary_tmp_new(0);
 	rb_hash_aset(coverages, fname, lines);
 	return lines;
     }

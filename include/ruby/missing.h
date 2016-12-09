@@ -3,7 +3,7 @@
   missing.h - prototype for *.c in ./missing, and
   	      for missing timeval struct
 
-  $Author: nobu $
+  $Author: usa $
   created at: Sat May 11 23:46:03 JST 2002
 
 ************************************************/
@@ -168,6 +168,13 @@ RUBY_EXTERN int isinf(double);
 #ifndef isnan
 # ifndef HAVE_ISNAN
 RUBY_EXTERN int isnan(double);
+# endif
+#endif
+
+#ifndef isfinite
+# ifndef HAVE_ISFINITE
+#   define HAVE_ISFINITE 1
+#   define isfinite(x) finite(x)
 # endif
 #endif
 

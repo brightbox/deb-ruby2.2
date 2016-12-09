@@ -8783,7 +8783,7 @@ yyreduce:
 #line 3202 "parse.y"
     {
 		    /*%%%*/
-			(yyval.node) = NEW_IF(cond((yyvsp[(2) - (5)].node)), (yyvsp[(4) - (5)].node), (yyvsp[(5) - (5)].node));
+			(yyval.node) = NEW_IF(cond(newline_node((yyvsp[(2) - (5)].node))), (yyvsp[(4) - (5)].node), (yyvsp[(5) - (5)].node));
 			fixpos((yyval.node), (yyvsp[(2) - (5)].node));
 		    /*%
 			$$ = dispatch3(elsif, $2, $4, escape_Qundef($5));
@@ -12000,7 +12000,7 @@ coverage(VALUE fname, int n)
 {
     VALUE coverages = rb_get_coverages();
     if (RTEST(coverages) && RBASIC(coverages)->klass == 0) {
-	VALUE lines = rb_ary_tmp_new_fill(n);
+	VALUE lines = n > 0 ? rb_ary_tmp_new_fill(n) : rb_ary_tmp_new(0);
 	rb_hash_aset(coverages, fname, lines);
 	return lines;
     }

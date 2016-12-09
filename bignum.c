@@ -2,7 +2,7 @@
 
   bignum.c -
 
-  $Author: akr $
+  $Author: usa $
   created at: Fri Jun 10 00:48:55 JST 1994
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -6248,7 +6248,7 @@ rb_big_fdiv(VALUE x, VALUE y)
  *
  *    123456789 ** 2      #=> 15241578750190521
  *    123456789 ** 1.2    #=> 5126464716.09932
- *    123456789 ** -2     #=> 6.5610001194102e-17
+ *    123456789 ** -2     #=> (1/15241578750190521)
  */
 
 VALUE
@@ -6789,7 +6789,7 @@ rb_big_aref(VALUE x, VALUE y)
  * See also Object#hash.
  */
 
-static VALUE
+VALUE
 rb_big_hash(VALUE x)
 {
     st_index_t hash;

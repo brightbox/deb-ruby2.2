@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_pkey_dsa.c 47744 2014-09-30 05:25:32Z nobu $
+ * $Id: ossl_pkey_dsa.c 55935 2016-08-16 11:33:35Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -497,10 +497,11 @@ ossl_dsa_sign(VALUE self, VALUE data)
     VALUE str;
 
     GetPKeyDSA(self, pkey);
-    StringValue(data);
-    if (!DSA_PRIVATE(self, pkey->pkey.dsa)) {
+    if (!pkey->pkey.dsa->q)
+	ossl_raise(eDSAError, "incomplete DSA");
+    if (!DSA_PRIVATE(self, pkey->pkey.dsa))
 	ossl_raise(eDSAError, "Private DSA key needed!");
-    }
+    StringValue(data);
     str = rb_str_new(0, ossl_dsa_buf_size(pkey));
     if (!DSA_sign(0, (unsigned char *)RSTRING_PTR(data), RSTRING_LENINT(data),
 		  (unsigned char *)RSTRING_PTR(str),

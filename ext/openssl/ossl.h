@@ -1,5 +1,5 @@
 /*
- * $Id: ossl.h 44582 2014-01-13 00:57:42Z nobu $
+ * $Id: ossl.h 56727 2016-11-11 22:36:50Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -165,7 +165,8 @@ VALUE ossl_exc_new(VALUE, const char *, ...);
 /*
  * Verify callback
  */
-extern int ossl_verify_cb_idx;
+extern int ossl_store_ctx_ex_verify_cb_idx;
+extern int ossl_store_ex_verify_cb_idx;
 
 struct ossl_verify_cb_args {
     VALUE proc;

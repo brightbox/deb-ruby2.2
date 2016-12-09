@@ -2,7 +2,7 @@
 
   gc.c -
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Tue Oct  5 09:44:46 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -4389,7 +4389,7 @@ gc_mark_roots(rb_objspace_t *objspace, const char **categoryp)
     MARK_CHECKPOINT("vm");
     SET_STACK_END;
     rb_vm_mark(th->vm);
-    if (th->vm->self) gc_mark_set(objspace, th->vm->self);
+    if (th->vm->self) gc_mark(objspace, th->vm->self);
 
     MARK_CHECKPOINT("finalizers");
     mark_tbl(objspace, finalizer_table);

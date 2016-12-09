@@ -2,7 +2,7 @@
 
   cont.c -
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Thu May 23 09:03:43 2007
 
   Copyright (C) 2007 Koichi Sasada
@@ -479,6 +479,10 @@ cont_new(VALUE klass)
 
 static VALUE
 cont_capture(volatile int *stat)
+#if defined(__clang__) && \
+    __clang_major__ == 3 && __clang_minor__ == 8 && __clang_patch__ == 0
+__attribute__ ((optnone))
+#endif
 {
     rb_context_t *cont;
     rb_thread_t *th = GET_THREAD();

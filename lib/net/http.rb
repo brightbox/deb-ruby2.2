@@ -385,7 +385,7 @@ module Net   #:nodoc:
   class HTTP < Protocol
 
     # :stopdoc:
-    Revision = %q$Revision: 52785 $.split[1]
+    Revision = %q$Revision: 56787 $.split[1]
     HTTPVersion = '1.1'
     begin
       require 'zlib'
@@ -1413,7 +1413,7 @@ module Net   #:nodoc:
           begin
             res = HTTPResponse.read_new(@socket)
             res.decode_content = req.decode_content
-          end while res.kind_of?(HTTPContinue)
+          end while res.kind_of?(HTTPInformation)
 
           res.uri = req.uri
 

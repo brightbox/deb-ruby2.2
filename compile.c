@@ -245,6 +245,7 @@ r_value(VALUE value)
 #define ADD_TRACE(seq, line, event) \
   do { \
       if ((event) == RUBY_EVENT_LINE && iseq->coverage && \
+	  (line) > 0 && \
 	  (line) != iseq->compile_data->last_coverable_line) { \
 	  RARRAY_ASET(iseq->coverage, (line) - 1, INT2FIX(0)); \
 	  iseq->compile_data->last_coverable_line = (line); \
@@ -929,6 +930,8 @@ new_label_body(rb_iseq_t *iseq, long line)
     labelobj->label_no = iseq->compile_data->label_no++;
     labelobj->sc_state = 0;
     labelobj->sp = -1;
+    labelobj->set = 0;
+    labelobj->rescued = LABEL_RESCUE_NONE;
     return labelobj;
 }
 
