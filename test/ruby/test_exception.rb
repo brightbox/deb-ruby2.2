@@ -180,6 +180,16 @@ class TestException < Test::Unit::TestCase
     }
   end
 
+  def test_throw_false
+    bug12743 = '[ruby-core:77229] [Bug #12743]'
+    e = assert_raise_with_message(UncaughtThrowError, /false/, bug12743) {
+      Thread.start {
+        throw false
+      }.join
+    }
+    assert_same(false, e.tag, bug12743)
+  end
+
   def test_else_no_exception
     begin
       assert(true)
@@ -758,5 +768,52 @@ $stderr = $stdout; raise "\x82\xa0"') do |outs, errs, status|
     a = Class.new {def method_missing(*) super end}.new
     assert_raise(NameError) {a.instance_eval("foo")}
     assert_raise(NoMethodError, bug10969) {a.public_send("bar", true)}
+  end
+
+  def test_undefined_backtrace
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}")
+    begin;
+      class Exception
+        undef backtrace
+      end
+
+      assert_raise(RuntimeError) {
+        raise RuntimeError, "hello"
+      }
+    end;
+  end
+
+  def test_redefined_backtrace
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}")
+    begin;
+      $exc = nil
+
+      class Exception
+        undef backtrace
+        def backtrace
+          $exc = self
+        end
+      end
+
+      e = assert_raise(RuntimeError) {
+        raise RuntimeError, "hello"
+      }
+      assert_same(e, $exc)
+    end;
+  end
+
+  def test_wrong_backtrace
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}")
+    begin;
+      class Exception
+        undef backtrace
+        def backtrace(a)
+        end
+      end
+
+      assert_raise(RuntimeError) {
+        raise RuntimeError, "hello"
+      }
+    end;
   end
 end

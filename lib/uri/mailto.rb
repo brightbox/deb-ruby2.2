@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: mailto.rb 54341 2016-03-28 17:23:34Z nagachika $
+# Revision:: $Id: mailto.rb 55941 2016-08-16 12:02:37Z usa $
 #
 # See URI for general documentation
 #
@@ -134,6 +134,9 @@ module URI
 
       @to = nil
       @headers = []
+
+      # The RFC3986 parser does not normally populate opaque
+      @opaque = "?#{@query}" if @query && !@opaque
 
       unless @opaque
         raise InvalidComponentError,

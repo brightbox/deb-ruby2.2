@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_ssl.c 54428 2016-03-29 20:36:59Z nagachika $
+ * $Id: ossl_ssl.c 56798 2016-11-15 06:33:36Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2000-2002  GOTOU Yuuzou <gotoyuzo@notwork.org>
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
@@ -345,7 +345,7 @@ ossl_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
 
     ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     cb = (VALUE)SSL_get_ex_data(ssl, ossl_ssl_ex_vcb_idx);
-    X509_STORE_CTX_set_ex_data(ctx, ossl_verify_cb_idx, (void*)cb);
+    X509_STORE_CTX_set_ex_data(ctx, ossl_store_ctx_ex_verify_cb_idx, (void *)cb);
     return ossl_verify_cb(preverify_ok, ctx);
 }
 
@@ -614,19 +614,16 @@ ssl_npn_select_cb_common(VALUE cb, const unsigned char **out, unsigned char *out
 {
     VALUE selected;
     long len;
-    unsigned char l;
     VALUE protocols = rb_ary_new();
+    unsigned char l;
+    const unsigned char *in_end = in + inlen;
 
-    /* The format is len_1|proto_1|...|len_n|proto_n\0 */
-    while (l = *in++) {
-	VALUE protocol;
-	if (l > inlen) {
-	    ossl_raise(eSSLError, "Invalid protocol name list");
-	}
-	protocol = rb_str_new((const char *)in, l);
-	rb_ary_push(protocols, protocol);
+    /* assume OpenSSL verifies this format */
+    /* The format is len_1|proto_1|...|len_n|proto_n */
+    while (in < in_end) {
+	l = *in++;
+	rb_ary_push(protocols, rb_str_new((const char *)in, l));
 	in += l;
-	inlen -= l;
     }
 
     selected = rb_funcall(cb, rb_intern("call"), 1, protocols);
@@ -1539,7 +1536,13 @@ ossl_ssl_write_internal(VALUE self, VALUE str, int nonblock, int no_exception)
 
     if (ssl) {
 	for (;;){
-	    nwrite = SSL_write(ssl, RSTRING_PTR(str), RSTRING_LENINT(str));
+	    int num = RSTRING_LENINT(str);
+
+	    /* SSL_write(3ssl) manpage states num == 0 is undefined */
+	    if (num == 0)
+		goto end;
+
+	    nwrite = SSL_write(ssl, RSTRING_PTR(str), num);
 	    switch(ssl_get_error(ssl, nwrite)){
 	    case SSL_ERROR_NONE:
 		goto end;

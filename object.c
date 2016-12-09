@@ -2,7 +2,7 @@
 
   object.c -
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Thu Jul 15 12:01:24 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -2953,11 +2953,14 @@ rb_Float(VALUE val)
  *     Float(arg)    -> float
  *
  *  Returns <i>arg</i> converted to a float. Numeric types are converted
- *  directly, the rest are converted using <i>arg</i>.to_f.
+ *  directly, and with exception to string and nil the rest are converted using <i>arg</i>.to_f.
+ *  Converting a <code>string</code> with invalid characters will result in a <code>ArgumentError</code>.
  *  Converting <code>nil</code> generates a <code>TypeError</code>.
  *
- *     Float(1)           #=> 1.0
- *     Float("123.456")   #=> 123.456
+ *     Float(1)                 #=> 1.0
+ *     Float("123.456")         #=> 123.456
+ *     Float("123.0_badstring") #=> ArgumentError: invalid value for Float(): "123.0_badstring"
+ *     Float(nil)               #=> TypeError: can't convert nil into Float
  */
 
 static VALUE

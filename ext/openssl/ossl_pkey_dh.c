@@ -1,5 +1,5 @@
 /*
- * $Id: ossl_pkey_dh.c 47744 2014-09-30 05:25:32Z nobu $
+ * $Id: ossl_pkey_dh.c 55935 2016-08-16 11:33:35Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -505,6 +505,8 @@ ossl_dh_compute_key(VALUE self, VALUE pub)
 
     GetPKeyDH(self, pkey);
     dh = pkey->pkey.dh;
+    if (!dh->p)
+	ossl_raise(eDHError, "incomplete DH");
     pub_key = GetBNPtr(pub);
     len = DH_size(dh);
     str = rb_str_new(0, len);

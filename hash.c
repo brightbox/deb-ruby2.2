@@ -2,7 +2,7 @@
 
   hash.c -
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Mon Nov 22 18:51:18 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -152,6 +152,10 @@ rb_any_hash(VALUE a)
     }
     else if (BUILTIN_TYPE(a) == T_SYMBOL) {
 	return RSYMBOL(a)->hashval;
+    }
+    else if (BUILTIN_TYPE(a) == T_BIGNUM) {
+	hval = rb_big_hash(a);
+	hnum = FIX2LONG(hval);
     }
     else if (BUILTIN_TYPE(a) == T_FLOAT) {
       flt:

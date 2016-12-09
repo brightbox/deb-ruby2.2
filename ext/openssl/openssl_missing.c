@@ -1,5 +1,5 @@
 /*
- * $Id: openssl_missing.c 40625 2013-05-09 12:12:17Z akr $
+ * $Id: openssl_missing.c 56727 2016-11-11 22:36:50Z usa $
  * 'OpenSSL for Ruby' project
  * Copyright (C) 2001-2002  Michal Rokos <m.rokos@sh.cvut.cz>
  * All rights reserved.
@@ -34,20 +34,6 @@ HMAC_CTX_copy(HMAC_CTX *out, HMAC_CTX *in)
 }
 #endif /* HAVE_HMAC_CTX_COPY */
 #endif /* NO_HMAC */
-
-#if !defined(HAVE_X509_STORE_SET_EX_DATA)
-int X509_STORE_set_ex_data(X509_STORE *str, int idx, void *data)
-{
-    return CRYPTO_set_ex_data(&str->ex_data, idx, data);
-}
-#endif
-
-#if !defined(HAVE_X509_STORE_GET_EX_DATA)
-void *X509_STORE_get_ex_data(X509_STORE *str, int idx)
-{
-    return CRYPTO_get_ex_data(&str->ex_data, idx);
-}
-#endif
 
 #if !defined(HAVE_EVP_MD_CTX_CREATE)
 EVP_MD_CTX *

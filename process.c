@@ -2,7 +2,7 @@
 
   process.c -
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Tue Aug 10 14:30:50 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -2012,12 +2012,24 @@ rb_check_argv(int argc, VALUE *argv)
 }
 
 static VALUE
+check_hash(VALUE obj)
+{
+    if (SPECIAL_CONST_P(obj)) return Qnil;
+    switch (BUILTIN_TYPE(obj)) {
+      case T_STRING:
+      case T_ARRAY:
+	return Qnil;
+    }
+    return rb_check_hash_type(obj);
+}
+
+static VALUE
 rb_exec_getargs(int *argc_p, VALUE **argv_p, int accept_shell, VALUE *env_ret, VALUE *opthash_ret)
 {
     VALUE hash, prog;
 
     if (0 < *argc_p) {
-        hash = rb_check_hash_type((*argv_p)[*argc_p-1]);
+        hash = check_hash((*argv_p)[*argc_p-1]);
         if (!NIL_P(hash)) {
             *opthash_ret = hash;
             (*argc_p)--;
@@ -2025,7 +2037,7 @@ rb_exec_getargs(int *argc_p, VALUE **argv_p, int accept_shell, VALUE *env_ret, V
     }
 
     if (0 < *argc_p) {
-        hash = rb_check_hash_type((*argv_p)[0]);
+        hash = check_hash((*argv_p)[0]);
         if (!NIL_P(hash)) {
             *env_ret = hash;
             (*argc_p)--;

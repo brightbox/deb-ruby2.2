@@ -2,7 +2,7 @@
 #
 # Author:: Akira Yamada <akira@ruby-lang.org>
 # License:: You can redistribute it and/or modify it under the same term as Ruby.
-# Revision:: $Id: generic.rb 48980 2014-12-24 23:50:37Z normal $
+# Revision:: $Id: generic.rb 56307 2016-09-30 15:57:06Z usa $
 #
 # See URI for general documentation
 #
@@ -426,7 +426,7 @@ module URI
 
       if parser.regexp[:USERINFO] !~ v
         raise InvalidComponentError,
-          "bad component(expected user component): #{v}"
+          "bad password component"
       end
 
       return true

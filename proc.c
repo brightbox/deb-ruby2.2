@@ -2,7 +2,7 @@
 
   proc.c - Proc, Binding, Env
 
-  $Author: nagachika $
+  $Author: usa $
   created at: Wed Jan 17 12:13:14 2007
 
   Copyright (C) 2004-2007 Koichi Sasada
@@ -1206,7 +1206,7 @@ mnew_internal(rb_method_entry_t *me, VALUE defined_class, VALUE klass,
 	}
     }
     if (def && def->type == VM_METHOD_TYPE_ZSUPER) {
-	klass = RCLASS_SUPER(defined_class);
+	klass = RCLASS_SUPER(RCLASS_ORIGIN(defined_class));
 	id = def->original_id;
 	me = rb_method_entry_without_refinements(klass, id, &defined_class);
 	goto again;

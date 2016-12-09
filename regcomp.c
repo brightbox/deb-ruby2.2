@@ -1592,13 +1592,15 @@ compile_length_tree(Node* node, regex_t* reg)
 
   case NT_ALT:
     {
-      int n;
-
-      n = r = 0;
+      int n = 0;
+      len = 0;
       do {
-	r += compile_length_tree(NCAR(node), reg);
-	n++;
+        r = compile_length_tree(NCAR(node), reg);
+        if (r < 0) return r;
+        len += r;
+        n++;
       } while (IS_NOT_NULL(node = NCDR(node)));
+      r = len;
       r += (SIZE_OP_PUSH + SIZE_OP_JUMP) * (n - 1);
     }
     break;
@@ -1874,17 +1876,16 @@ noname_disable_map(Node** plink, GroupNumRemap* map, int* counter)
 	  (*counter)++;
 	  map[en->regnum].new_val = *counter;
 	  en->regnum = *counter;
-	  r = noname_disable_map(&(en->target), map, counter);
 	}
-	else {
+	else if (en->regnum != 0) {
 	  *plink = en->target;
 	  en->target = NULL_NODE;
 	  onig_node_free(node);
 	  r = noname_disable_map(plink, map, counter);
+	  break;
 	}
       }
-      else
-	r = noname_disable_map(&(en->target), map, counter);
+      r = noname_disable_map(&(en->target), map, counter);
     }
     break;
 
