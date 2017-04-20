@@ -1,4 +1,4 @@
-# $Id: test_fileutils.rb 50485 2015-05-13 15:32:22Z nagachika $
+# $Id: test_fileutils.rb 58120 2017-03-25 18:24:28Z usa $
 
 require 'fileutils'
 require 'etc'
@@ -17,8 +17,11 @@ class TestFileUtils < Test::Unit::TestCase
       fu.instance_variable_set(:@fileutils_output, write)
       th = Thread.new { read.read }
       th2 = Thread.new {
-        yield
-        write.close
+        begin
+          yield
+        ensure
+          write.close
+        end
       }
       th_value, _ = assert_join_threads([th, th2])
       lines = th_value.lines.map {|l| l.chomp }
@@ -136,7 +139,7 @@ class TestFileUtils < Test::Unit::TestCase
 
   def setup
     @prevdir = Dir.pwd
-    @groups = Process.groups if have_file_perm?
+    @groups = [Process.gid] | Process.groups if have_file_perm?
     tmproot = TMPROOT
     mymkdir tmproot unless File.directory?(tmproot)
     Dir.chdir tmproot
@@ -207,6 +210,16 @@ class TestFileUtils < Test::Unit::TestCase
   #
   # Test Cases
   #
+
+  def test_assert_output_lines
+    assert_raise(MiniTest::Assertion) {
+      Timeout.timeout(0.1) {
+        assert_output_lines([]) {
+          raise "ok"
+        }
+      }
+    }
+  end
 
   def test_pwd
     check_singleton :pwd
@@ -880,6 +893,24 @@ class TestFileUtils < Test::Unit::TestCase
     Dir.rmdir 'tmp'
 
     mkdir_p '/'
+  end
+
+  if /mswin|mingw|cygwin/ =~ RUBY_PLATFORM
+    def test_mkdir_p_root
+      if /cygwin/ =~ RUBY_PLATFORM
+        tmpdir = `cygpath -ma .`.chomp
+      else
+        tmpdir = Dir.pwd
+      end
+      skip "No drive letter" unless /\A[a-z]:/i =~ tmpdir
+      drive = "./#{$&}"
+      assert_file_not_exist drive
+      mkdir_p "#{tmpdir}/none/dir"
+      assert_directory "none/dir"
+      assert_file_not_exist drive
+    ensure
+      Dir.rmdir(drive) if drive and File.directory?(drive)
+    end
   end
 
   def test_mkdir_p_file_perm

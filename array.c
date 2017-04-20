@@ -4985,7 +4985,7 @@ rb_ary_combination(VALUE ary, VALUE num)
 	rb_yield(rb_ary_new2(0));
     }
     else if (n == 1) {
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < RARRAY_LEN(ary); i++) {
 	    rb_yield(rb_ary_new3(1, RARRAY_AREF(ary, i)));
 	}
     }
@@ -5184,7 +5184,7 @@ rb_ary_repeated_combination(VALUE ary, VALUE num)
 	rb_yield(rb_ary_new2(0));
     }
     else if (n == 1) {
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < RARRAY_LEN(ary); i++) {
 	    rb_yield(rb_ary_new3(1, RARRAY_AREF(ary, i)));
 	}
     }
@@ -5486,7 +5486,8 @@ rb_ary_any_p(VALUE ary)
  *  This method is safe to use with mutable objects such as hashes, strings or
  *  other arrays:
  *
- *     Array.new(4) { Hash.new } #=> [{}, {}, {}, {}]
+ *     Array.new(4) { Hash.new }  #=> [{}, {}, {}, {}]
+ *     Array.new(4) {|i| i.to_s } #=> ["0", "1", "2", "3"]
  *
  *  This is also a quick way to build up multi-dimensional arrays:
  *

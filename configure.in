@@ -255,6 +255,7 @@ AS_CASE(["$build_os"],
       [xgcc-4.2|x/usr/bin/gcc-4.2], [: ${CXX=g++-4.2}],
       [xgcc|x/usr/bin/gcc],         [: ${CXX=g++}],
       [xcc|x/usr/bin/cc],           [: ${CXX=c++}],
+      [xicc],                       [: ${CXX=icpc}],
       [xclang|x/usr/bin/clang],     [: ${CXX=clang++}])
   ])
 test -z "$CC" || ac_cv_prog_CC="$CC"
@@ -794,6 +795,7 @@ if test "$GCC:${warnflags+set}:no" = yes::no; then
 	extra_warning=
     fi
     for wflag in -Wno-unused-parameter -Wno-parentheses -Wno-long-long \
+                 -diag-disable=2259 \
 		 -Wno-missing-field-initializers \
 		 -Wunused-variable \
 		 -Werror=pointer-arith \
@@ -866,6 +868,33 @@ if test "$GCC" = yes; then
       # various  headers.  Most frequent  situation is  the use  of //
       # comments.   We  bypass  ANSI   C  mode  for  them.   Otherwise
       # extension libs cannot include those headers.
+
+      # Since math.h in some mingw64 wrongly delcares frexp and modf
+      # to be pure, the variables pointed by the second arguments are
+      # considered uninitialized unexpectedly.
+      AC_CACHE_CHECK([whether frexp and modf are broken],
+	rb_cv_mingw64_broken_frexp_modf,
+	[
+	  save_CFLAGS="$CFLAGS"
+	  if test "$particular_werror_flags" = "yes"; then
+	    CFLAGS="$CFLAGS -Werror=uninitialized"
+	  else
+	    CFLAGS="$CFLAGS -Werror -Wuninitialized"
+	  fi
+	  AC_TRY_COMPILE([@%:@include <math.h>
+	    int foo(double x)
+	    {
+	      int exp;
+	      frexp(x, &exp);
+	      return exp;
+	    }], [if (foo(0.0)) return 1;],
+	    [rb_cv_mingw64_broken_frexp_modf=no],
+	    [rb_cv_mingw64_broken_frexp_modf=yes])
+	  CFLAGS="$save_CFLAGS"
+	])
+      if test "$rb_cv_mingw64_broken_frexp_modf" = yes; then
+	AC_DEFINE(RUBY_MINGW64_BROKEN_FREXP_MODF)
+      fi
     ],
     [cygwin*|darwin*|netbsd*|nacl], [
       # need lgamma_r(), finite()
@@ -921,7 +950,7 @@ if test "$GCC" = yes; then
     ])
 
     # disable fast-math
-    for oflag in -fno-fast-math; do
+    for oflag in -fno-fast-math -fp-model\ precise; do
 	RUBY_TRY_CFLAGS($oflag, [RUBY_APPEND_OPTION(optflags, $oflag)])
     done
 fi
@@ -997,6 +1026,12 @@ AS_CASE(["$target_os"],
 		    ],
 		    [macosx_10_5=yes], [macosx_10_5=no])
 		AC_MSG_RESULT($macosx_10_5)
+		AS_IF([test "${target_os@%:@darwin}" -ge 16], [
+		    ac_cv_func___syscall=no
+		    ac_cv_func_syscall=no
+		    ac_cv_header_sys_syscall_h=no
+		    ac_cv_header_syscall_h=no
+		])
 		if test $macosx_10_5 = yes; then
 		    ac_cv_func_getcontext=no
 		    ac_cv_func_setcontext=no
@@ -3544,8 +3579,8 @@ AS_CASE("$enable_shared", [yes], [
 	    LIBRUBY_RELATIVE=yes
 	fi
 	LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-install_name '${libprefix}'/$(LIBRUBY_SO)'
-	LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-current_version $(MAJOR).$(MINOR).$(TEENY)'
-	LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-compatibility_version $(ruby_version)'
+	LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-compatibility_version $(MAJOR).$(MINOR)'
+	LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-current_version $(RUBY_PROGRAM_VERSION)'
 	if test "$visibility_option" = ld; then
 	    LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-Wl,-unexported_symbol,_Init_*'
 	    LIBRUBY_DLDFLAGS="$LIBRUBY_DLDFLAGS "'-Wl,-unexported_symbol,*_threadptr_*'

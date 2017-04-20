@@ -864,6 +864,16 @@ class Rational_Test < Test::Unit::TestCase
     assert_equal(1152921470247108503, 1073741789.lcm(1073741827))
   end
 
+  def test_gcd_no_memory_leak
+    assert_no_memory_leak([], "#{<<-"begin;"}", "#{<<-"end;"}", limit: 1.2, rss: true)
+    x = (1<<121) + 1
+    y = (1<<99) + 1
+    1000.times{x.gcd(y)}
+    begin;
+      100.times {1000.times{x.gcd(y)}}
+    end;
+  end
+
   def test_supp
     assert_equal(true, 1.real?)
     assert_equal(true, 1.1.real?)
@@ -919,6 +929,12 @@ class Rational_Test < Test::Unit::TestCase
     assert_eql zero, zero ** Rational(2, 3)
     assert_raise(ZeroDivisionError, bug5713) { Rational(0, 1) ** -big }
     assert_raise(ZeroDivisionError, bug5713) { Rational(0, 1) ** Rational(-2,3) }
+  end
+
+  def test_power_overflow
+    bug = '[ruby-core:79686] [Bug #13242]: Infinity due to overflow'
+    x = EnvUtil.suppress_warning {4r**40000000}
+    assert_predicate x, :infinite?, bug
   end
 
   def test_known_bug
