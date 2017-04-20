@@ -1,3 +1,9 @@
+ruby2.2 (2.2.7-1bbox1~xenial1) xenial; urgency=low
+
+  * New upstream release, 2.2.7
+
+ -- John Leach <john@brightbox.co.uk>  Thu, 20 Apr 2017 17:18:37 +0100
+
 ruby2.2 (2.2.6-1bbox1~yakkety1) yakkety; urgency=low
 
   * New upstream release, 2.2.6
