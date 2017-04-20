@@ -462,8 +462,8 @@ rb_threadptr_unlock_all_locking_mutexes(rb_thread_t *th)
 void
 rb_thread_terminate_all(void)
 {
-    rb_thread_t *th = GET_THREAD(); /* main thread */
-    rb_vm_t *vm = th->vm;
+    rb_thread_t *volatile th = GET_THREAD(); /* main thread */
+    rb_vm_t *volatile vm = th->vm;
 
     if (vm->main_thread != th) {
 	rb_bug("rb_thread_terminate_all: called by child thread (%p, %p)",
@@ -830,7 +830,7 @@ thread_join_sleep(VALUE arg)
 
     while (target_th->status != THREAD_KILLED) {
 	if (p->forever) {
-	    sleep_forever(th, 1, 0);
+	    sleep_forever(th, TRUE, FALSE);
 	}
 	else {
 	    now = timeofday();
@@ -1117,14 +1117,21 @@ void
 rb_thread_sleep_forever(void)
 {
     thread_debug("rb_thread_sleep_forever\n");
-    sleep_forever(GET_THREAD(), 0, 1);
+    sleep_forever(GET_THREAD(), FALSE, TRUE);
 }
 
 void
 rb_thread_sleep_deadly(void)
 {
     thread_debug("rb_thread_sleep_deadly\n");
-    sleep_forever(GET_THREAD(), 1, 1);
+    sleep_forever(GET_THREAD(), TRUE, TRUE);
+}
+
+RUBY_FUNC_EXPORTED void
+rb_thread_sleep_deadly_allow_spurious_wakeup(void)
+{
+    thread_debug("rb_thread_sleep_deadly_allow_spurious_wakeup\n");
+    sleep_forever(GET_THREAD(), TRUE, FALSE);
 }
 
 static double
@@ -2046,6 +2053,8 @@ rb_threadptr_ready(rb_thread_t *th)
     rb_threadptr_interrupt(th);
 }
 
+void rb_threadptr_setup_exception(rb_thread_t *th, VALUE mesg, VALUE cause);
+
 static VALUE
 rb_threadptr_raise(rb_thread_t *th, int argc, VALUE *argv)
 {
@@ -2061,6 +2070,14 @@ rb_threadptr_raise(rb_thread_t *th, int argc, VALUE *argv)
     else {
 	exc = rb_make_exception(argc, argv);
     }
+
+    /* making an exception object can switch thread,
+       so we need to check thread deadness again */
+    if (rb_threadptr_dead(th)) {
+	return Qnil;
+    }
+
+    rb_threadptr_setup_exception(GET_THREAD(), exc, Qundef);
     rb_threadptr_pending_interrupt_enque(th, exc);
     rb_threadptr_interrupt(th);
     return Qnil;
@@ -2123,19 +2140,29 @@ rb_threadptr_reset_raised(rb_thread_t *th)
     return 1;
 }
 
-void
-rb_thread_fd_close(int fd)
+int
+rb_notify_fd_close(int fd)
 {
     rb_vm_t *vm = GET_THREAD()->vm;
     rb_thread_t *th = 0;
+    int busy;
 
+    busy = 0;
     list_for_each(&vm->living_threads, th, vmlt_node) {
 	if (th->waiting_fd == fd) {
 	    VALUE err = th->vm->special_exceptions[ruby_error_closed_stream];
 	    rb_threadptr_pending_interrupt_enque(th, err);
 	    rb_threadptr_interrupt(th);
+	    busy = 1;
 	}
     }
+    return busy;
+}
+
+void
+rb_thread_fd_close(int fd)
+{
+    while (rb_notify_fd_close(fd));
 }
 
 /*
@@ -2447,8 +2474,8 @@ rb_thread_s_main(VALUE klass)
  *
  *  The default is +false+.
  *
- *  When set to +true+, all threads will abort (the process will
- *  <code>exit(0)</code>) if an exception is raised in any thread.
+ *  When set to +true+, if any thread is aborted by an exception, the
+ *  raised exception will be re-raised in the main thread.
  *
  *  Can also be specified by the global $DEBUG flag or command line option
  *  +-d+.
@@ -2470,7 +2497,8 @@ rb_thread_s_abort_exc(void)
  *  call-seq:
  *     Thread.abort_on_exception= boolean   -> true or false
  *
- *  When set to +true+, all threads will abort if an exception is raised.
+ *  When set to +true+, if any thread is aborted by an exception, the
+ *  raised exception will be re-raised in the main thread.
  *  Returns the new state.
  *
  *     Thread.abort_on_exception = true
@@ -2531,10 +2559,8 @@ rb_thread_abort_exc(VALUE thread)
  *  call-seq:
  *     thr.abort_on_exception= boolean   -> true or false
  *
- *  When set to +true+, all threads (including the main program) will abort if
- *  an exception is raised in this +thr+.
- *
- *  The process will effectively <code>exit(0)</code>.
+ *  When set to +true+, if this +thr+ is aborted by an exception, the
+ *  raised exception will be re-raised in the main thread.
  *
  *  See also #abort_on_exception.
  *
@@ -4494,7 +4520,7 @@ rb_mutex_abandon_all(rb_mutex_t *mutexes)
 static VALUE
 rb_mutex_sleep_forever(VALUE time)
 {
-    sleep_forever(GET_THREAD(), 1, 0); /* permit spurious check */
+    rb_thread_sleep_deadly_allow_spurious_wakeup();
     return Qnil;
 }
 
