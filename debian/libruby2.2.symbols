@@ -247,6 +247,7 @@ libruby-2.2.so.2.2 libruby2.2 #MINVER#
  rb_big_divrem_normal@Base 2.2.0
  rb_big_eq@Base 2.2.0
  rb_big_eql@Base 2.2.0
+ rb_big_hash@Base 2.2.7
  rb_big_idiv@Base 2.2.0
  rb_big_lshift@Base 2.2.0
  rb_big_minus@Base 2.2.0
@@ -1284,6 +1285,7 @@ libruby-2.2.so.2.2 libruby2.2 #MINVER#
  rb_thread_schedule@Base 2.2.0
  rb_thread_sleep@Base 2.2.0
  rb_thread_sleep_deadly@Base 2.2.0
+ rb_thread_sleep_deadly_allow_spurious_wakeup@Base 2.2.7
  rb_thread_sleep_forever@Base 2.2.0
  rb_thread_stop@Base 2.2.0
  rb_thread_wait_fd@Base 2.2.0
@@ -1397,6 +1399,7 @@ libruby-2.2.so.2.2 libruby2.2 #MINVER#
  ruby_release_date@Base 2.2.0
  ruby_run_node@Base 2.2.0
  ruby_safe_level_4_warning@Base 2.2.0
+ ruby_scan_digits@Base 2.2.7
  ruby_scan_hex@Base 2.2.0
  ruby_scan_oct@Base 2.2.0
  ruby_script@Base 2.2.0
