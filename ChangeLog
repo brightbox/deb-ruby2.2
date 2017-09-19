@@ -1,3 +1,50 @@
+Thu Sep 14 20:44:26 2017  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* ext/json: bump to version 1.8.1.1. [Backport #13853]
+
+Thu Sep 14 20:39:39 2017  Kazuki Yamaguchi <k@rhe.jp>
+
+	asn1: fix out-of-bounds read in decoding constructed objects
+
+	* OpenSSL::ASN1.{decode,decode_all,traverse}: have a bug of
+	  out-of-bounds read. int_ossl_asn1_decode0_cons() does not give the
+	  correct available length to ossl_asn1_decode() when decoding the
+	  inner components of a constructed object. This can cause
+	  out-of-bounds read if a crafted input given.
+
+	Reference: https://hackerone.com/reports/170316
+	https://github.com/ruby/openssl/commit/1648afef33c1d97fb203c82291b8a61269e85d3b
+
+Thu Sep 14 20:36:54 2017  Yusuke Endoh  <mame@ruby-lang.org>
+
+	lib/webrick/log.rb: sanitize any type of logs
+
+	It had failed to sanitize some type of exception messages.  Reported and
+	patched by Yusuke Endoh (mame) at https://hackerone.com/reports/223363
+
+Thu Sep 14 20:33:52 2017  Nobuyoshi Nakada  <nobu@ruby-lang.org>
+
+	Fix space flag when Inf/NaN and width==3
+
+	* sprintf.c (rb_str_format): while "% 2f" and "% 4f" result in " Inf"
+	  and " Inf" respectively, "% 3f" results in "Inf" (no space).
+
+	Refactor "%f" % Inf/NaN
+
+	* sprintf.c (rb_str_format): as for non-finite float, calculate the
+	  exact needed size with the space flag.
+
+Sun Sep 10 10:10:05 2017  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* lib/rubygems: fix several vulnerabilities in RubyGems; bump to version
+	  2.4.5.3. [Backport #13842]
+
+Sat Sep  9 21:08:24 2017  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
+
+	* ext/psych/yaml: update libyaml to 0.1.7.
+
+	* ext/psych/psych.gemspec: bump version to 2.0.8.1.
+
 Tue Mar 28 15:39:26 2017  Nobuyoshi Nakada  <nobu@ruby-lang.org>
 
 	configure.in: syscall is deprecated on macOS
