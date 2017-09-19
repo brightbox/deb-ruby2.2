@@ -1,3 +1,9 @@
+ruby2.2 (2.2.8-1bbox1~xenial1) xenial; urgency=medium
+
+  * New upstream release, 2.2.8
+
+ -- John Leach <john@johnleach.co.uk>  Tue, 19 Sep 2017 11:11:18 +0100
+
 ruby2.2 (2.2.7-1bbox1~xenial1) xenial; urgency=low
 
   * New upstream release, 2.2.7
