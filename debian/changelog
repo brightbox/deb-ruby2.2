@@ -1,3 +1,9 @@
+ruby2.2 (2.2.8-1bbox2~xenial1) xenial; urgency=low
+
+  * Fix building on gcc7
+
+ -- John Leach <john@brightbox.co.uk>  Mon, 13 Nov 2017 13:05:10 +0000
+
 ruby2.2 (2.2.8-1bbox1~xenial1) xenial; urgency=medium
 
   * New upstream release, 2.2.8
