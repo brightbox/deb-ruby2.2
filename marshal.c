@@ -1000,7 +1000,7 @@ marshal_dump(int argc, VALUE *argv)
     VALUE obj, port, a1, a2;
     int limit = -1;
     struct dump_arg *arg;
-    volatile VALUE wrapper; /* used to avoid memory leak in case of exception */
+    VALUE wrapper; /* used to avoid memory leak in case of exception */
 
     port = Qnil;
     rb_scan_args(argc, argv, "12", &obj, &a1, &a2);
@@ -1041,8 +1041,8 @@ marshal_dump(int argc, VALUE *argv)
 	rb_io_write(arg->dest, arg->str);
 	rb_str_resize(arg->str, 0);
     }
-    free_dump_arg(arg);
-    rb_gc_force_recycle(wrapper);
+    clear_dump_arg(arg);
+    RB_GC_GUARD(wrapper);
 
     return port;
 }
@@ -2022,7 +2022,7 @@ marshal_load(int argc, VALUE *argv)
     VALUE port, proc;
     int major, minor, infection = 0;
     VALUE v;
-    volatile VALUE wrapper; /* used to avoid memory leak in case of exception */
+    VALUE wrapper; /* used to avoid memory leak in case of exception */
     struct load_arg *arg;
 
     rb_scan_args(argc, argv, "11", &port, &proc);
@@ -2069,8 +2069,8 @@ marshal_load(int argc, VALUE *argv)
 
     if (!NIL_P(proc)) arg->proc = proc;
     v = r_object(arg);
-    free_load_arg(arg);
-    rb_gc_force_recycle(wrapper);
+    clear_load_arg(arg);
+    RB_GC_GUARD(wrapper);
 
     return v;
 }
