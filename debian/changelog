@@ -1,3 +1,9 @@
+ruby2.2 (2.2.10-1bbox2~bionic1) bionic; urgency=low
+
+  * Explicitly use libssl1.0 on Bionic
+
+ -- John Leach <john@brightbox.co.uk>  Thu, 03 Jan 2019 16:17:16 +0100
+
 ruby2.2 (2.2.10-1bbox1~xenial1) xenial; urgency=medium
 
   * New upstream release, 2.2.10.
